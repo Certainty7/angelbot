@@ -1,0 +1,9 @@
+{
+  "case": "reddit_prefixed",
+  "url": "https://vxreddit.com/r/pics/comments/abc123/gallery_fixture/",
+  "responses": {},
+  "expect": {
+    "slides": [],
+    "fallback": "https://rxddit.com/r/pics/comments/abc123/gallery_fixture/"
+  }
+}

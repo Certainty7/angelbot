@@ -1,0 +1,743 @@
+{
+  "note": "Captured from the live tree by importing every cog's install() against a stub tree (no gateway, no DB) on 2026-11-14. Eager tree only: the music cog is loaded lazily. | 2026-11-15: /data added (member data access and erasure).",
+  "source_commit": "2bfddfa",
+  "discord_py": "2.7.1",
+  "global_commands": 65,
+  "slash": 62,
+  "context_menu": 3,
+  "commands": [
+    {
+      "name": "add_role",
+      "description": "منح رتبة لعضو",
+      "module": "cogs.admin",
+      "type": "Command",
+      "default_permissions": [
+        "manage_roles"
+      ],
+      "options": [
+        "member",
+        "role"
+      ]
+    },
+    {
+      "name": "admin_note",
+      "description": "حفظ ملاحظة إدارية خاصة (رتبة إدارية + قناة إدارية فقط)",
+      "module": "cogs.memory_rules",
+      "type": "Command",
+      "default_permissions": [],
+      "options": [
+        "topic",
+        "content"
+      ]
+    },
+    {
+      "name": "afk",
+      "description": "تفعيل وضع الغياب التلقائي (AFK)",
+      "module": "cogs.community",
+      "type": "Command",
+      "default_permissions": [],
+      "options": [
+        "reason"
+      ]
+    },
+    {
+      "name": "angel",
+      "description": "فتح مركز تحكم أنجل التفاعلي (Control Center)",
+      "module": "cogs.flagship",
+      "type": "Command",
+      "default_permissions": [],
+      "options": []
+    },
+    {
+      "name": "announce",
+      "description": "نشر إعلان منسق في قناة",
+      "module": "cogs.admin",
+      "type": "Command",
+      "default_permissions": [
+        "manage_guild"
+      ],
+      "options": [
+        "channel",
+        "title",
+        "message",
+        "ping_everyone"
+      ]
+    },
+    {
+      "name": "auto_reply",
+      "description": "إدارة الردود التلقائية النصية في السيرفر",
+      "module": "cogs.community",
+      "type": "Command",
+      "default_permissions": [
+        "manage_guild"
+      ],
+      "options": [
+        "action",
+        "trigger",
+        "response"
+      ]
+    },
+    {
+      "name": "autonomy",
+      "description": "تفعيل/إيقاف تفاعل أنجل التلقائي وبدء الأحاديث من نفسها (للمالكة)",
+      "module": "cogs.control",
+      "type": "Command",
+      "default_permissions": [],
+      "options": [
+        "mode"
+      ]
+    },
+    {
+      "name": "autorole",
+      "description": "تحديد رتبة تُمنح تلقائياً لكل عضو جديد ينضم للسيرفر",
+      "module": "cogs.productivity",
+      "type": "Command",
+      "default_permissions": [
+        "manage_roles"
+      ],
+      "options": [
+        "role"
+      ]
+    },
+    {
+      "name": "avatar",
+      "description": "عرض الصورة الشخصية لعضو",
+      "module": "cogs.community",
+      "type": "Command",
+      "default_permissions": [],
+      "options": [
+        "member"
+      ]
+    },
+    {
+      "name": "ban",
+      "description": "حظر عضو من السيرفر",
+      "module": "cogs.admin",
+      "type": "Command",
+      "default_permissions": [
+        "ban_members"
+      ],
+      "options": [
+        "member",
+        "reason",
+        "delete_days"
+      ]
+    },
+    {
+      "name": "budget",
+      "description": "استهلاك أنجل من ميزانية النماذج اليوم (للإدارة فقط)",
+      "module": "cogs.memory_rules",
+      "type": "Command",
+      "default_permissions": [
+        "administrator"
+      ],
+      "options": []
+    },
+    {
+      "name": "chat",
+      "description": "التحدث مع أنجل (مع إمكانية إرفاق صورة أو GIF)",
+      "module": "cogs.ai_chat",
+      "type": "Command",
+      "default_permissions": [],
+      "options": [
+        "message",
+        "image"
+      ]
+    },
+    {
+      "name": "cleanup",
+      "description": "تنظيف تخزين البوت من الملفات المؤقتة والقمامة وضغط قاعدة البيانات",
+      "module": "cogs.media_tools",
+      "type": "Command",
+      "default_permissions": [
+        "manage_guild"
+      ],
+      "options": []
+    },
+    {
+      "name": "clear_history",
+      "description": "مسح سجل المحادثة السابقة",
+      "module": "cogs.memory_rules",
+      "type": "Command",
+      "default_permissions": [],
+      "options": []
+    },
+    {
+      "name": "clear_warnings",
+      "description": "مسح إنذارات عضو",
+      "module": "cogs.admin",
+      "type": "Command",
+      "default_permissions": [
+        "moderate_members"
+      ],
+      "options": [
+        "member"
+      ]
+    },
+    {
+      "name": "custom_action",
+      "description": "تخصيص كلمة أو عبارة لتنفيذ إجراء إداري تلقائي",
+      "module": "cogs.owner",
+      "type": "Command",
+      "default_permissions": [
+        "administrator"
+      ],
+      "options": [
+        "mode",
+        "phrase",
+        "action_type",
+        "value",
+        "custom_reply"
+      ]
+    },
+    {
+      "name": "data",
+      "description": "بياناتك عند أنجل: اعرض ما يُخزَّن عنك أو احذفه بالكامل",
+      "module": "cogs.memory_rules",
+      "type": "Command",
+      "default_permissions": [],
+      "options": [
+        "action",
+        "confirm"
+      ]
+    },
+    {
+      "name": "diagnostics",
+      "description": "فحص شامل لصحة النظام والاتصال والنماذج",
+      "module": "cogs.flagship",
+      "type": "Command",
+      "default_permissions": [
+        "administrator"
+      ],
+      "options": []
+    },
+    {
+      "name": "dm_logs",
+      "description": "سجل الرسائل الخاصة الواردة",
+      "module": "cogs.owner",
+      "type": "Command",
+      "default_permissions": [
+        "administrator"
+      ],
+      "options": [
+        "limit"
+      ]
+    },
+    {
+      "name": "dm_send",
+      "description": "إرسال رسالة خاصة عبر البوت",
+      "module": "cogs.owner",
+      "type": "Command",
+      "default_permissions": [
+        "administrator"
+      ],
+      "options": [
+        "message",
+        "user",
+        "user_id"
+      ]
+    },
+    {
+      "name": "editsnipe",
+      "description": "كشف آخر رسالة تم تعديلها في القناة",
+      "module": "cogs.community",
+      "type": "Command",
+      "default_permissions": [],
+      "options": []
+    },
+    {
+      "name": "fix",
+      "description": "عرض فيديو أو ألبوم صور TikTok أو Instagram أو X أو Reddit مباشرة في المحادثة",
+      "module": "cogs.media_tools",
+      "type": "Command",
+      "default_permissions": [],
+      "options": [
+        "url"
+      ]
+    },
+    {
+      "name": "gif",
+      "description": "إرسال صورة أنمي متحركة (بوسة، حضن، غرور، ضحك، إلخ)",
+      "module": "cogs.fun_gif",
+      "type": "Command",
+      "default_permissions": [],
+      "options": [
+        "action",
+        "target"
+      ]
+    },
+    {
+      "name": "giveaway",
+      "description": "بدء سحب تفاعلي في القناة",
+      "module": "cogs.community",
+      "type": "Command",
+      "default_permissions": [
+        "manage_guild"
+      ],
+      "options": [
+        "minutes",
+        "winners",
+        "prize"
+      ]
+    },
+    {
+      "name": "guard",
+      "description": "إدارة نظام الحماية الذكية ومكافحة السبام (Angel Guard)",
+      "module": "cogs.flagship",
+      "type": "Command",
+      "default_permissions": [
+        "manage_guild"
+      ],
+      "options": [
+        "mode"
+      ]
+    },
+    {
+      "name": "harem",
+      "description": "إدارة قائمة الحريم",
+      "module": "cogs.owner",
+      "type": "Command",
+      "default_permissions": [
+        "administrator"
+      ],
+      "options": [
+        "action",
+        "member",
+        "user_id",
+        "title"
+      ]
+    },
+    {
+      "name": "help",
+      "description": "عرض قائمة الأوامر المتاحة",
+      "module": "cogs.control",
+      "type": "Command",
+      "default_permissions": [],
+      "options": []
+    },
+    {
+      "name": "imagine",
+      "description": "تصميم أو رسم صورة فنية عبر استوديو أنجل",
+      "module": "cogs.ai_chat",
+      "type": "Command",
+      "default_permissions": [],
+      "options": [
+        "prompt",
+        "style"
+      ]
+    },
+    {
+      "name": "kick",
+      "description": "طرد عضو من السيرفر",
+      "module": "cogs.admin",
+      "type": "Command",
+      "default_permissions": [
+        "kick_members"
+      ],
+      "options": [
+        "member",
+        "reason"
+      ]
+    },
+    {
+      "name": "knowledge",
+      "description": "إدارة قاعدة معرفة السيرفر (القوانين، الأسئلة الشائعة، الأدلة)",
+      "module": "cogs.flagship",
+      "type": "Command",
+      "default_permissions": [
+        "manage_guild"
+      ],
+      "options": [
+        "action",
+        "topic",
+        "content",
+        "entry_id"
+      ]
+    },
+    {
+      "name": "leaderboard",
+      "description": "عرض قائمة أعلى الأعضاء تفاعلاً في السيرفر",
+      "module": "cogs.xp_profile",
+      "type": "Command",
+      "default_permissions": [],
+      "options": []
+    },
+    {
+      "name": "lock",
+      "description": "قفل القناة",
+      "module": "cogs.admin",
+      "type": "Command",
+      "default_permissions": [
+        "manage_channels"
+      ],
+      "options": [
+        "channel",
+        "reason"
+      ]
+    },
+    {
+      "name": "lore",
+      "description": "نبذة عن شخصية أنجل",
+      "module": "cogs.fun_gif",
+      "type": "Command",
+      "default_permissions": [],
+      "options": []
+    },
+    {
+      "name": "memory",
+      "description": "خزنة الذاكرة: عرض أو تثبيت ملاحظة دائمة أو نسيان معلومة",
+      "module": "cogs.memory_rules",
+      "type": "Command",
+      "default_permissions": [],
+      "options": [
+        "action",
+        "text",
+        "style"
+      ]
+    },
+    {
+      "name": "mood",
+      "description": "تعديل مزاج أنجل الحالي (للمالكة فقط)",
+      "module": "cogs.memory_rules",
+      "type": "Command",
+      "default_permissions": [],
+      "options": [
+        "value"
+      ]
+    },
+    {
+      "name": "ping",
+      "description": "فحص سرعة الاستجابة",
+      "module": "cogs.community",
+      "type": "Command",
+      "default_permissions": [],
+      "options": []
+    },
+    {
+      "name": "poll",
+      "description": "إنشاء تصويت في القناة",
+      "module": "cogs.community",
+      "type": "Command",
+      "default_permissions": [],
+      "options": [
+        "question",
+        "option1",
+        "option2",
+        "option3",
+        "option4"
+      ]
+    },
+    {
+      "name": "pulse",
+      "description": "عرض لوحة نبض السيرفر ومؤشرات النشاط",
+      "module": "cogs.flagship",
+      "type": "Command",
+      "default_permissions": [
+        "manage_guild"
+      ],
+      "options": []
+    },
+    {
+      "name": "purge",
+      "description": "مسح عدد من الرسائل في القناة",
+      "module": "cogs.admin",
+      "type": "Command",
+      "default_permissions": [
+        "manage_messages"
+      ],
+      "options": [
+        "amount",
+        "member"
+      ]
+    },
+    {
+      "name": "rank",
+      "description": "عرض مستواك وترتيبك ونقاط السمعة في السيرفر",
+      "module": "cogs.xp_profile",
+      "type": "Command",
+      "default_permissions": [],
+      "options": [
+        "member"
+      ]
+    },
+    {
+      "name": "remove_role",
+      "description": "سحب رتبة من عضو",
+      "module": "cogs.admin",
+      "type": "Command",
+      "default_permissions": [
+        "manage_roles"
+      ],
+      "options": [
+        "member",
+        "role"
+      ]
+    },
+    {
+      "name": "rep",
+      "description": "منح نقطة سمعة وتقدير لعضو في السيرفر",
+      "module": "cogs.flagship",
+      "type": "Command",
+      "default_permissions": [],
+      "options": [
+        "member"
+      ]
+    },
+    {
+      "name": "rules",
+      "description": "اسألي أنجل عن قوانين السيرفر وتجيبك من الفهرس",
+      "module": "cogs.memory_rules",
+      "type": "Command",
+      "default_permissions": [],
+      "options": [
+        "question"
+      ]
+    },
+    {
+      "name": "serverinfo",
+      "description": "عرض معلومات السيرفر",
+      "module": "cogs.community",
+      "type": "Command",
+      "default_permissions": [],
+      "options": []
+    },
+    {
+      "name": "set_modlog",
+      "description": "تحديد قناة سجل الإشراف",
+      "module": "cogs.admin",
+      "type": "Command",
+      "default_permissions": [
+        "administrator"
+      ],
+      "options": [
+        "channel"
+      ]
+    },
+    {
+      "name": "silence",
+      "description": "منع أنجل من الكلام في قناة أو السيرفر كله (للمالكة فقط)",
+      "module": "cogs.control",
+      "type": "Command",
+      "default_permissions": [],
+      "options": [
+        "mode",
+        "channel"
+      ]
+    },
+    {
+      "name": "slowmode",
+      "description": "ضبط الوضع البطيء للقناة",
+      "module": "cogs.admin",
+      "type": "Command",
+      "default_permissions": [
+        "manage_channels"
+      ],
+      "options": [
+        "seconds"
+      ]
+    },
+    {
+      "name": "snipe",
+      "description": "كشف آخر رسالة حُذفت في القناة",
+      "module": "cogs.community",
+      "type": "Command",
+      "default_permissions": [],
+      "options": []
+    },
+    {
+      "name": "sovereign",
+      "description": "إعدادات التحكم الخاصة",
+      "module": "cogs.owner",
+      "type": "Command",
+      "default_permissions": [
+        "administrator"
+      ],
+      "options": [
+        "action",
+        "target_member",
+        "role",
+        "text"
+      ]
+    },
+    {
+      "name": "sticky",
+      "description": "تثبيت رسالة ذكية تبقى دائماً في أسفل القناة",
+      "module": "cogs.productivity",
+      "type": "Command",
+      "default_permissions": [
+        "manage_messages"
+      ],
+      "options": [
+        "mode",
+        "message"
+      ]
+    },
+    {
+      "name": "summarize_channel",
+      "description": "قراءة وتلخيص محادثات القناة بدقة (حتى 500 رسالة)",
+      "module": "cogs.ai_chat",
+      "type": "Command",
+      "default_permissions": [],
+      "options": [
+        "limit",
+        "question"
+      ]
+    },
+    {
+      "name": "sync",
+      "description": "مزامنة وتحديث الأوامر",
+      "module": "cogs.admin",
+      "type": "Command",
+      "default_permissions": [
+        "administrator"
+      ],
+      "options": []
+    },
+    {
+      "name": "ticket_panel",
+      "description": "نشر لوحة فتح التذاكر الخاصة",
+      "module": "cogs.community",
+      "type": "Command",
+      "default_permissions": [
+        "manage_channels"
+      ],
+      "options": [
+        "title",
+        "description"
+      ]
+    },
+    {
+      "name": "timeout",
+      "description": "كتم عضو مؤقتاً",
+      "module": "cogs.admin",
+      "type": "Command",
+      "default_permissions": [
+        "moderate_members"
+      ],
+      "options": [
+        "member",
+        "minutes",
+        "reason"
+      ]
+    },
+    {
+      "name": "translate",
+      "description": "ترجمة أي نص إلى أي لغة",
+      "module": "cogs.ai_chat",
+      "type": "Command",
+      "default_permissions": [],
+      "options": [
+        "text",
+        "target_language"
+      ]
+    },
+    {
+      "name": "unban",
+      "description": "فك الحظر عن مستخدم عبر معرفه",
+      "module": "cogs.admin",
+      "type": "Command",
+      "default_permissions": [
+        "ban_members"
+      ],
+      "options": [
+        "user_id",
+        "reason"
+      ]
+    },
+    {
+      "name": "unlock",
+      "description": "فتح القناة",
+      "module": "cogs.admin",
+      "type": "Command",
+      "default_permissions": [
+        "manage_channels"
+      ],
+      "options": [
+        "channel"
+      ]
+    },
+    {
+      "name": "untimeout",
+      "description": "إلغاء الكتم عن عضو",
+      "module": "cogs.admin",
+      "type": "Command",
+      "default_permissions": [
+        "moderate_members"
+      ],
+      "options": [
+        "member"
+      ]
+    },
+    {
+      "name": "userinfo",
+      "description": "عرض بطاقة معلومات عضو",
+      "module": "cogs.community",
+      "type": "Command",
+      "default_permissions": [],
+      "options": [
+        "member"
+      ]
+    },
+    {
+      "name": "warn",
+      "description": "توجيه إنذار لعضو",
+      "module": "cogs.admin",
+      "type": "Command",
+      "default_permissions": [
+        "moderate_members"
+      ],
+      "options": [
+        "member",
+        "reason"
+      ]
+    },
+    {
+      "name": "warnings",
+      "description": "عرض إنذارات عضو",
+      "module": "cogs.admin",
+      "type": "Command",
+      "default_permissions": [
+        "moderate_members"
+      ],
+      "options": [
+        "member"
+      ]
+    },
+    {
+      "name": "whisper",
+      "description": "إرسال رسالة مباشرة عبر البوت في المحادثة الحالية",
+      "module": "cogs.owner",
+      "type": "Command",
+      "default_permissions": [
+        "administrator"
+      ],
+      "options": [
+        "message"
+      ]
+    },
+    {
+      "name": "اقتراح رد ومهام",
+      "description": null,
+      "module": "cogs.context_menus",
+      "type": "ContextMenu",
+      "default_permissions": [],
+      "options": []
+    },
+    {
+      "name": "ترجمة وتحليل",
+      "description": null,
+      "module": "cogs.context_menus",
+      "type": "ContextMenu",
+      "default_permissions": [],
+      "options": []
+    },
+    {
+      "name": "تلخيص الرسالة",
+      "description": null,
+      "module": "cogs.context_menus",
+      "type": "ContextMenu",
+      "default_permissions": [],
+      "options": []
+    }
+  ]
+}

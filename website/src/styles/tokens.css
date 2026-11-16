@@ -1,0 +1,358 @@
+/* ============================================================================
+   ANGEL — Design Tokens (SINGLE SOURCE OF TRUTH)
+   Direction: PEARL LIGHT (light) · ROSE NIGHT (dark)
+   Authored by Certina. Spec: docs/DESIGN_SYSTEM.md. Assets: src/assets/brand/.
+
+   Components never hardcode a colour, size, duration or easing: they read tokens.
+   If a value is missing, ask — do not approximate.
+
+   THREE RULES THAT PREVENT THE USUAL BUGS
+   1. Never transition `color`, `background-color`, `border-color` or `fill`.
+      The palette flips between themes; a transition restarts on every
+      recalculation and Chrome can leave inherited colours on the old palette.
+      Palette changes are instant. Animate transform / opacity / filter only.
+   2. Never apply letter-spacing to Arabic — it cuts the cursive joins.
+      Tracking tokens are Latin-only.
+   3. Logical properties only: margin-inline-*, padding-inline-*, inset-inline-*.
+      `left`/`right` are bugs on a site whose primary language is RTL.
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* ---------------------------------------------------------------- palette
+     WCAG 2.1 ratios measured on this palette: see DESIGN_SYSTEM.md §3.        */
+  --pearl-000: #FDFBFA;   /* pearl white — page ground            L* 98.7 */
+  --pearl-050: #FAF6F3;   /* raised ground                        L* 97.1 */
+  --ivory-100: #F5EEE7;   /* warm ivory — cards, quotes           L* 94.5 */
+  --ivory-150: #F0E7DF;   /* ivory, one step deeper */
+  --blush-200: #F1DFDC;   /* blush — tinted bands, chips          L* 90.2 */
+  --quartz-300: #E4C2C6;  /* rose quartz — decorative rules       L* 81.4 */
+  --quartz-400: #D3A0A8;  /* rose quartz deep — decorative only   L* 70.7 */
+  --rose-600: #8A2E45;    /* deep rose — accent ink, CTA          L* 33.5 */
+  --rose-700: #72243A;    /* deep rose dark — pressed, gradient   L* 27.1 */
+  --ink-900: #221A1B;     /* charcoal-rose ink                    L* 10.2 */
+  --ink-700: #4A3C3E;     /* secondary text                       L* 26.8 */
+  --ink-500: #6E5C5F;     /* muted text, meta                     L* 40.9 */
+  --line-control: #96727A;/* functional borders — 3.28:1 min on every light ground */
+
+  /* ------------------------------------------------------------- surfaces */
+  --surface-page: var(--pearl-000);
+  --surface-raised: var(--pearl-050);
+  --surface-card: var(--ivory-100);
+  --surface-inset: var(--ivory-150);
+  --surface-tint: var(--blush-200);
+  --surface-accent: var(--rose-600);
+  --surface-accent-press: var(--rose-700);
+  --surface-veil: rgba(253, 251, 250, .86);
+
+  /* ----------------------------------------------------------------- text */
+  --text-primary: var(--ink-900);
+  --text-secondary: var(--ink-700);
+  --text-muted: var(--ink-500);
+  --text-accent: var(--rose-600);
+  --text-on-accent: var(--pearl-000);
+
+  /* --------------------------------------------------------------- borders
+     hair/soft are decorative (WCAG 1.4.11 exempt). `control` is the border of
+     anything operable and stays >= 3:1 on every light ground.                */
+  --border-hair-color: rgba(138, 46, 69, .14);
+  --border-soft-color: rgba(138, 46, 69, .22);
+  --border-control-color: var(--line-control);
+  --border-hair: 1px solid var(--border-hair-color);
+  --border-soft: 1px solid var(--border-soft-color);
+  --border-control: 1px solid var(--border-control-color);
+
+  /* ------------------------------------------------------------- gradients
+     "Roseglass" = light refracted through a thin rose film. All of them are
+     low-contrast on purpose; nothing here should read as a colour block.     */
+  --grad-pearl: linear-gradient(178deg, #FDFBFA 0%, #FAF6F3 58%, #F5EEE7 100%);
+  --grad-roseglass: linear-gradient(142deg, #F5EEE7 0%, #F1DFDC 44%, #E4C2C6 100%);
+  --grad-seal: linear-gradient(160deg, #8A2E45 0%, #72243A 100%);
+  --grad-sheen: linear-gradient(100deg,
+                  rgba(255, 255, 255, 0) 0%,
+                  rgba(255, 255, 255, .78) 50%,
+                  rgba(255, 255, 255, 0) 100%);
+  --grad-hairline: linear-gradient(to inline-end,
+                    rgba(138, 46, 69, .30) 0%,
+                    rgba(138, 46, 69, .06) 62%,
+                    rgba(138, 46, 69, 0) 100%);
+  --grad-bloom: radial-gradient(circle at 34% 28%,
+                  rgba(255, 255, 255, .95) 0%,
+                  rgba(241, 223, 220, .85) 46%,
+                  rgba(228, 194, 198, .62) 100%);
+
+  /* -------------------------------------------------------------- shadows
+     Warm-tinted, never neutral black: a grey shadow on ivory reads as dirt.  */
+  --shadow-1: 0 1px 2px rgba(58, 32, 38, .05), 0 1px 1px rgba(58, 32, 38, .04);
+  --shadow-2: 0 2px 4px rgba(58, 32, 38, .05), 0 8px 20px -12px rgba(58, 32, 38, .16);
+  --shadow-3: 0 4px 10px rgba(58, 32, 38, .06), 0 24px 48px -28px rgba(58, 32, 38, .22);
+  --shadow-inset-top: inset 0 1px 0 rgba(255, 255, 255, .72);
+  --shadow-accent: 0 10px 30px -14px rgba(138, 46, 69, .45);
+
+  /* ---------------------------------------------------------------- radii */
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-pill: 999px;
+
+  /* --------------------------------------------------------------- spacing
+     4px base; the suffix is the multiple of the base step, not a pixel size.  */
+  --space-1: .25rem;   /*   4 */
+  --space-2: .5rem;    /*   8 */
+  --space-3: .75rem;   /*  12 */
+  --space-4: 1rem;     /*  16 */
+  --space-5: 1.25rem;  /*  20 */
+  --space-6: 1.5rem;   /*  24 */
+  --space-8: 2rem;     /*  32 */
+  --space-10: 2.5rem;  /*  40 */
+  --space-12: 3rem;    /*  48 */
+  --space-16: 4rem;    /*  64 */
+  --space-20: 5rem;    /*  80 */
+  --space-24: 6rem;    /*  96 */
+  --space-32: 8rem;    /* 128 */
+  --space-40: 10rem;   /* 160 */
+
+  /* ----------------------------------------------------------- typography */
+  --font-ar-display: "Amiri", "Noto Naskh Arabic", serif;
+  --font-ar-text: "Plex Arabic", "Noto Sans Arabic", system-ui, sans-serif;
+  --font-lat-display: "Instrument Serif", "Times New Roman", serif;
+  --font-lat-text: "Plex Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "Plex Mono", ui-monospace, "DejaVu Sans Mono", monospace;
+
+  /* Fluid scale: lower bound at 360px, upper bound at 1280px+. */
+  --fs-display-1: clamp(3.25rem, 1.1rem + 6.4vw, 6.5rem);   /*  52 → 104 */
+  --fs-display-2: clamp(2.5rem, 1.15rem + 4.1vw, 4.5rem);   /*  40 →  72 */
+  --fs-h1: clamp(2.125rem, 1.25rem + 2.5vw, 3.25rem);       /*  34 →  52 */
+  --fs-h2: clamp(1.75rem, 1.3rem + 1.4vw, 2.5rem);          /*  28 →  40 */
+  --fs-h3: clamp(1.375rem, 1.2rem + .6vw, 1.75rem);         /*  22 →  28 */
+  --fs-h4: clamp(1.125rem, 1.05rem + .3vw, 1.3125rem);      /*  18 →  21 */
+  --fs-body-lg: clamp(1.0625rem, 1rem + .22vw, 1.1875rem);  /*  17 →  19 */
+  --fs-body: 1.0625rem;                                     /*  17 */
+  --fs-body-sm: .9375rem;                                   /*  15 */
+  --fs-caption: .8125rem;                                   /*  13 */
+  --fs-micro: .6875rem;                                     /*  11 */
+
+  /* Arabic optical rules: at the same px, Naskh reads larger than Latin, so
+     Arabic display takes 0.94 of the Latin step, and Arabic body runs looser
+     so harakat clear the line below. Never below 1.15 for display.           */
+  --ar-display-scale: .94;
+  --lh-display: 1.12;
+  --lh-display-ar: 1.28;
+  --lh-heading: 1.28;
+  --lh-heading-ar: 1.45;
+  --lh-body: 1.62;
+  --lh-body-ar: 1.78;
+  --measure: 68ch;
+  --measure-ar: 60ch;
+
+  --track-display: -.018em;  /* Latin only */
+  --track-label: .16em;      /* Latin only */
+  --track-micro: .2em;       /* Latin only */
+
+  /* ---------------------------------------------------------------- motion
+     Light behaves like light: it arrives, it does not bounce. Translate <=24px,
+     opacity, blur(6px)→0, scale .985→1. Nothing else.                        */
+  --dur-instant: 90ms;
+  --dur-fast: 140ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+  --dur-slower: 520ms;
+  --dur-reveal: 800ms;
+  --dur-breathe: 1200ms;
+
+  --ease-out: cubic-bezier(.22, 1, .36, 1);
+  --ease-in-out: cubic-bezier(.65, 0, .35, 1);
+  --ease-soft: cubic-bezier(.4, 0, .2, 1);
+  --ease-spring: cubic-bezier(.34, 1.4, .64, 1);  /* chips/badges only */
+  --ease-linear: linear;
+  --stagger: 60ms;
+
+  /* ---------------------------------------------------------------- layout */
+  --container: 78rem;        /* 1248 — content max      */
+  --container-wide: 86rem;   /* 1376 — full-bleed bands */
+  --container-narrow: 46rem; /* 736 — prose pages       */
+  --gutter: clamp(1.25rem, .55rem + 2.4vw, 4.5rem);
+  --grid-gap: clamp(1rem, .5rem + 1.2vw, 1.5rem);
+  --header-h: 72px;
+
+  --z-base: 0;
+  --z-sticky: 100;
+  --z-header: 200;
+  --z-overlay: 300;
+  --z-modal: 400;
+  --z-toast: 500;
+
+  /* ------------------------------------------------------------ focus ring
+     Two-tone, so it survives on the ground *and* on a filled CTA.           */
+  --focus-ring: 2px solid var(--rose-600);
+  --focus-ring-inner: 2px solid var(--surface-page);
+  --focus-offset: 2px;
+}
+
+/* ============================================================================
+   ROSE NIGHT — the dark variant.
+   Composed independently, not inverted: the ground is a rose-black charcoal,
+   elevation is luminance plus a rose halo instead of a drop shadow, and the
+   accent is lifted — the light theme's deep rose disappears at this luminance.
+   Set by `data-theme="rose-night"` on <html> before first paint (head script).
+   `data-theme="dark"` is accepted as an alias for the same palette.
+   ========================================================================== */
+[data-theme="rose-night"],
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --pearl-000: #14100F;   /* night ground — charcoal, rose undertone   L* 5.0 */
+  --pearl-050: #1C1617;   /* raised                                    L* 8.0 */
+  --ivory-100: #241C1E;   /* rose-black card                           L* 11.3 */
+  --ivory-150: #2A2023;   /* inset */
+  --blush-200: #33262A;   /* a tinted band in the dark is rose-black, not pink */
+  --quartz-300: #4A383C;
+  --quartz-400: #6B5157;
+  --rose-600: #E9A9B6;    /* lifted rose — accent ink, CTA fill        L* 75.5 */
+  --rose-700: #F3CFD6;    /* accent hover                              L* 86.3 */
+  --ink-900: #F6EEEC;     /* warm pearl text                           L* 94.7 */
+  --ink-700: #DCCCCA;     /* secondary                                 L* 83.3 */
+  --ink-500: #B7A2A1;     /* muted                                     L* 68.4 */
+  --line-control: #92747A;
+
+  --surface-veil: rgba(20, 16, 15, .82);
+  --text-on-accent: #3A1620;          /* 8.22:1 on the lifted rose */
+
+  --border-hair-color: rgba(243, 207, 214, .14);
+  --border-soft-color: rgba(243, 207, 214, .22);
+
+  --grad-pearl: linear-gradient(178deg, #1C1617 0%, #171213 62%, #14100F 100%);
+  --grad-roseglass: linear-gradient(142deg, #241C1E 0%, #2E2326 46%, #3A2A2E 100%);
+  --grad-seal: linear-gradient(160deg, #E9A9B6 0%, #D08C9C 100%);
+  --grad-sheen: linear-gradient(100deg,
+                  rgba(243, 207, 214, 0) 0%,
+                  rgba(243, 207, 214, .18) 50%,
+                  rgba(243, 207, 214, 0) 100%);
+  --grad-hairline: linear-gradient(to inline-end,
+                    rgba(243, 207, 214, .32) 0%,
+                    rgba(243, 207, 214, .07) 62%,
+                    rgba(243, 207, 214, 0) 100%);
+  --grad-bloom: radial-gradient(circle at 34% 28%,
+                  rgba(243, 207, 214, .30) 0%,
+                  rgba(233, 169, 182, .16) 46%,
+                  rgba(20, 16, 15, 0) 78%);
+
+  /* elevation in the dark: a surface rises by getting lighter, plus a halo */
+  --shadow-1: 0 1px 0 rgba(243, 207, 214, .04) inset;
+  --shadow-2: 0 1px 0 rgba(243, 207, 214, .05) inset, 0 10px 28px -18px rgba(0, 0, 0, .9);
+  --shadow-3: 0 1px 0 rgba(243, 207, 214, .06) inset, 0 28px 60px -32px rgba(0, 0, 0, .95);
+  --shadow-inset-top: inset 0 1px 0 rgba(243, 207, 214, .07);
+  --shadow-accent: 0 0 34px -10px rgba(233, 169, 182, .38);
+
+  --focus-ring: 2px solid #F3CFD6;
+  --focus-ring-inner: 2px solid #14100F;
+}
+
+/* ============================================================================
+   Compatibility layer — short aliases.
+   The tokens above are canonical and documented. These aliases exist so a
+   component written against an earlier, shorter naming scheme keeps working
+   unchanged; they cost nothing and they all resolve to the palette above.
+   New code should use the canonical names.
+   ========================================================================== */
+:root {
+  --bg: var(--surface-page);
+  --bg-veil: var(--surface-veil);
+  --surface: var(--surface-card);
+  --surface-solid: var(--surface-card);
+  --surface-sunken: var(--surface-inset);
+  --line: var(--border-hair-color);
+  --line-soft: var(--border-hair-color);
+  --line-strong: var(--border-control-color);
+
+  --text: var(--text-primary);
+  --text-2: var(--text-secondary);
+  --text-3: var(--text-muted);
+  --text-inverse: var(--pearl-000);
+
+  --accent: var(--rose-600);
+  --accent-hover: var(--rose-700);
+  --accent-quiet: var(--blush-200);
+  --on-accent: var(--text-on-accent);
+  --focus: var(--rose-600);
+  --ok: #3F7D62;
+
+  --grad-paper: var(--grad-pearl);
+  --grad-stage: var(--grad-bloom);
+  --grad-glass: var(--grad-roseglass);
+  --sheen: var(--grad-sheen);
+
+  --sh-1: var(--shadow-1);
+  --sh-2: var(--shadow-2);
+  --sh-3: var(--shadow-3);
+  --sh-inset: var(--shadow-inset-top);
+  --ring: 0 0 0 3px rgba(138, 46, 69, .26);
+
+  --r-xs: var(--radius-xs);
+  --r-sm: var(--radius-sm);
+  --r-md: var(--radius-md);
+  --r-lg: var(--radius-lg);
+  --r-xl: var(--radius-xl);
+  --r-pill: var(--radius-pill);
+
+  --s-1: var(--space-1);
+  --s-2: var(--space-2);
+  --s-3: var(--space-3);
+  --s-4: var(--space-4);
+  --s-5: var(--space-6);
+  --s-6: var(--space-8);
+  --s-7: var(--space-10);
+  --s-8: var(--space-12);
+  --s-9: var(--space-16);
+  --s-10: var(--space-24);
+  --s-11: var(--space-32);
+
+  --font-display: var(--font-ar-display);
+  --font-display-lat: var(--font-lat-display);
+  --font-ui: var(--font-ar-text);
+
+  --fs-display: var(--fs-display-1);
+  --fs-lede: var(--fs-body-lg);
+  --fs-sm: var(--fs-body-sm);
+  --fs-xs: var(--fs-caption);
+  --fw-semi: 600;
+  --ls-micro: var(--track-label);
+  --ls-tight: var(--track-display);
+
+  --d-1: var(--dur-fast);
+  --d-2: var(--dur-base);
+  --d-3: var(--dur-slow);
+  --d-4: var(--dur-slower);
+  --d-5: var(--dur-reveal);
+  --d-breath: 9000ms;
+  --rise: 14px;
+
+  --z-nav: var(--z-header);
+}
+
+[data-theme="rose-night"],
+[data-theme="dark"] {
+  --ok: #6FB295;
+  --ring: 0 0 0 3px rgba(233, 169, 182, .30);
+}
+
+/* ============================================================================
+   Reduced motion — the site must still look composed, not merely frozen.
+   Hard stop, not a shorter duration.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-instant: 0ms;
+    --dur-fast: 0ms;
+    --dur-base: 0ms;
+    --dur-slow: 0ms;
+    --dur-slower: 0ms;
+    --dur-reveal: 0ms;
+    --dur-breathe: 0ms;
+    --stagger: 0ms;
+    --rise: 0px;
+  }
+}

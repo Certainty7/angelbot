@@ -1,0 +1,479 @@
+/* ============================================================================
+   ANGEL — hero reference implementation: "The Aperture"
+   Implements docs/HERO_COMPOSITION.md to the letter. Tokens: src/styles/tokens.css.
+   Owner: Certina. Ported into src/components/Hero.astro unchanged.
+
+   Order: ground → rings → bloom → specular → mark → sheen → text.
+   ========================================================================== */
+
+/* ---------------------------------------------------------------- the shell */
+.hero {
+  position: relative;
+  background: var(--grad-pearl);
+  overflow: clip;
+}
+/* one corner wash: the only second gradient on the page */
+.hero::before {
+  content: "";
+  position: absolute;
+  inset-block-end: -6%;
+  inset-inline-end: -8%;
+  inline-size: 58vw;
+  block-size: 46vw;
+  max-inline-size: 760px;
+  max-block-size: 520px;
+  background: radial-gradient(
+    760px 520px at 6% 106%,
+    rgba(228, 194, 198, 0.45),
+    rgba(228, 194, 198, 0) 62%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+[data-theme="rose-night"] .hero::before,
+[data-theme="dark"] .hero::before {
+  background: radial-gradient(
+    760px 520px at 6% 106%,
+    rgba(233, 169, 182, 0.16),
+    rgba(20, 16, 15, 0) 62%
+  );
+}
+
+.hero__inner {
+  position: relative;
+  z-index: 1;
+  padding-block: clamp(64px, 9vw, 112px) clamp(72px, 10vw, 128px);
+}
+
+.folio {
+  block-size: 1px;
+  border: 0;
+  margin: 0;
+  background: var(--grad-hairline);
+}
+.folio--top {
+  margin-block-end: var(--space-6);
+}
+.folio--bottom {
+  margin-block-start: var(--space-6);
+}
+
+.hero__grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--grid-gap);
+  align-items: center;
+}
+
+/* ------------------------------------------------------------- text column */
+.hero__col {
+  grid-column: span 7;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-inline-size: 620px;
+}
+.hero__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-family: var(--font-ar-text);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  color: var(--rose-600);
+}
+.hero__eyebrow::before {
+  content: "";
+  inline-size: 18px;
+  block-size: 1px;
+  background: currentColor;
+  opacity: 0.6;
+}
+
+.hero__title {
+  margin-block-start: var(--space-5);
+  font-family: var(--font-ar-display);
+  font-weight: 700;
+  /* Display 2, not Display 1: measured, the approved headline is 854 px wide at
+     97.8 px inside a 620 px column (3 lines). At Display 2 it is 591 px — two
+     lines with 29 px of slack, which is what HERO_COMPOSITION §2 requires. */
+  font-size: calc(var(--fs-display-2) * var(--ar-display-scale));
+  /* 1.28 (the spec's --lh-display-ar) is Latin thinking: Amiri carries tanween
+     and shadda above the line, so two display lines at 1.28 collide. Measured
+     ink needs 1.45 — the Arabic heading leading in the same token file. */
+  line-height: var(--lh-heading-ar);
+  color: var(--ink-900);
+  text-wrap: balance;
+}
+.hero__title .line {
+  display: block;
+}
+
+.hero__rule {
+  inline-size: 72px;
+  block-size: 1px;
+  border: 0;
+  margin: var(--space-6) 0 0;
+  background: var(--grad-hairline);
+}
+.hero__lede {
+  margin-block-start: var(--space-6);
+  max-inline-size: 46ch;
+  font-size: var(--fs-body-lg);
+  line-height: var(--lh-body-ar);
+  color: var(--ink-700);
+}
+.hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-block-start: var(--space-8);
+}
+.hero__note {
+  margin-block-start: var(--space-3);
+  font-size: var(--fs-caption);
+  line-height: 1.6;
+  color: var(--ink-500);
+}
+
+/* --------------------------------------------------------- the aperture
+   Radially symmetric, so RTL and LTR share one object; only the grid column
+   changes. Ring insets are % of the box, keeping the 46 : 92 ratio of the 520
+   reference at every size in the breakpoint table. */
+.aperture {
+  --ap-ring-1: rgba(138, 46, 69, 0.2);
+  --ap-ring-2: rgba(138, 46, 69, 0.14);
+  --ap-ring-3: rgba(138, 46, 69, 0.3);
+  position: relative;
+  grid-column: span 5;
+  inline-size: 100%;
+  max-inline-size: 520px;
+  aspect-ratio: 1;
+  margin-inline: auto;
+  isolation: isolate;
+  contain: paint;
+}
+[data-theme="rose-night"] .aperture,
+[data-theme="dark"] .aperture {
+  --ap-ring-1: rgba(243, 207, 214, 0.26);
+  --ap-ring-2: rgba(243, 207, 214, 0.18);
+  --ap-ring-3: rgba(243, 207, 214, 0.34);
+}
+
+.aperture__ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid var(--ap-ring-1);
+}
+.aperture__ring--1 {
+  inset: 0;
+}
+.aperture__ring--2 {
+  inset: 8.85%;
+  border-color: var(--ap-ring-2);
+}
+.aperture__ring--3 {
+  inset: 17.69%;
+  border-color: var(--ap-ring-3);
+}
+
+.aperture__bloom,
+.aperture__specular {
+  position: absolute;
+  inset: 17.69%;
+  border-radius: 50%;
+}
+.aperture__bloom {
+  background: var(--grad-bloom);
+}
+.aperture__specular {
+  background: radial-gradient(
+    circle at 66% 18%,
+    rgba(255, 255, 255, 0.95),
+    rgba(255, 255, 255, 0) 34%
+  );
+}
+[data-theme="rose-night"] .aperture__specular,
+[data-theme="dark"] .aperture__specular {
+  background: radial-gradient(
+    circle at 66% 18%,
+    rgba(255, 248, 246, 0.5),
+    rgba(255, 248, 246, 0) 36%
+  );
+}
+
+/* the mark holds the aperture's optical centre, never offset by direction */
+.aperture__mark {
+  /* `inset: 0; margin: auto` centres without transform maths, so the mark is
+     geometrically centred in RTL and LTR alike (inset-inline-start: 50% would
+     put it half a mark off-centre in RTL). */
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  inline-size: 28.85%;
+  block-size: 28.85%;
+  /* optical, not geometric: the A is base-heavy, so it is lifted 2.4% of its own
+     height after being centred with auto margins. */
+  translate: 0 -2.4%;
+  color: var(--ink-900);
+}
+.aperture__mark .pearl {
+  fill: var(--rose-600);
+}
+
+.aperture__sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--grad-sheen);
+  mix-blend-mode: screen;
+  opacity: 0.9;
+  pointer-events: none;
+  translate: -120% 0;
+}
+
+/* ------------------------------------------------------------- entrance
+   Pure CSS. The settled state is the default; animation only decorates it. */
+@keyframes ap-scale-in {
+  from {
+    opacity: 0;
+    scale: 0.985;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+@keyframes ap-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes ap-mark-in {
+  from {
+    opacity: 0;
+    scale: 0.96;
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+    filter: blur(0);
+  }
+}
+@keyframes ap-text-in {
+  from {
+    opacity: 0;
+    translate: 0 14px;
+  }
+  to {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+@keyframes ap-sheen-pass {
+  from {
+    translate: -120% 0;
+  }
+  to {
+    translate: 120% 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .aperture__ring {
+    animation: ap-scale-in var(--dur-slower) var(--ease-out) both;
+  }
+  .aperture__ring--1 {
+    animation-delay: 0ms;
+  }
+  .aperture__ring--2 {
+    animation-delay: 120ms;
+  }
+  .aperture__ring--3 {
+    animation-delay: 240ms;
+  }
+  .aperture__bloom,
+  .aperture__specular {
+    animation: ap-fade-in var(--dur-slower) var(--ease-out) 120ms both;
+  }
+  .aperture__mark {
+    animation: ap-mark-in var(--dur-reveal) var(--ease-out) 240ms both;
+  }
+  .hero__eyebrow {
+    animation: ap-text-in var(--dur-slower) var(--ease-out) 320ms both;
+  }
+  .hero__title .line:nth-child(1) {
+    animation: ap-text-in var(--dur-slower) var(--ease-out) 400ms both;
+  }
+  .hero__title .line:nth-child(2) {
+    animation: ap-text-in var(--dur-slower) var(--ease-out) 480ms both;
+  }
+  .hero__lede {
+    animation: ap-text-in var(--dur-slower) var(--ease-out) 560ms both;
+  }
+  .hero__rule {
+    animation: ap-fade-in var(--dur-slower) var(--ease-out) 560ms both;
+  }
+  .hero__actions,
+  .hero__note {
+    animation: ap-text-in var(--dur-slower) var(--ease-out) 640ms both;
+  }
+  .aperture__sheen {
+    animation: ap-sheen-pass var(--dur-breathe) var(--ease-linear) 1600ms both;
+  }
+}
+
+/* Reduced motion: identical settled composition, no sweep, nothing hidden. */
+@media (prefers-reduced-motion: reduce) {
+  .aperture__ring,
+  .aperture__bloom,
+  .aperture__specular,
+  .aperture__mark,
+  .hero__eyebrow,
+  .hero__title .line,
+  .hero__lede,
+  .hero__rule,
+  .hero__actions,
+  .hero__note {
+    animation: none !important;
+    opacity: 1;
+    scale: 1;
+    translate: none;
+    filter: none;
+  }
+  .aperture__sheen {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------ breakpoints */
+@media (max-width: 1023px) {
+  .hero__col,
+  .aperture {
+    grid-column: 1 / -1;
+  }
+  .aperture {
+    order: -1;
+    max-inline-size: 360px;
+    margin-block-end: 40px;
+  }
+  .hero__col {
+    max-inline-size: 46rem;
+  }
+}
+@media (max-width: 639px) {
+  .aperture {
+    max-inline-size: 240px;
+  }
+}
+@media (min-width: 1024px) and (max-width: 1279px) {
+  /* 5 of 12 columns at this width is ~381 px, which leaves only the 24 px grid
+     gap between the ring and the text. The spec asks for 48: hold 28 px on the
+     text side, which costs the ring 28 px and buys the gutter. */
+  .aperture {
+    max-inline-size: min(440px, calc(100% - 28px));
+    margin-inline-start: 28px;
+  }
+}
+
+/* ------------------------------------------------------------------ header
+   Slim and sticky; shares the hero's ground. Not part of the hero spec — kept
+   minimal so the aperture stays the only large object on the first screen. */
+.site-head {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: var(--z-header);
+  background: color-mix(in oklab, var(--surface-page) 82%, transparent);
+  backdrop-filter: blur(12px) saturate(1.1);
+  border-block-end: 1px solid transparent;
+  transition: border-color var(--dur-slow) var(--ease-out);
+}
+.site-head.is-stuck {
+  border-block-end-color: var(--border-hair-color);
+}
+.site-head__inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  min-block-size: var(--header-h);
+}
+.lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  text-decoration: none;
+  color: var(--text-primary);
+  flex: none;
+}
+.lockup:hover {
+  color: var(--text-primary);
+}
+.lockup img {
+  block-size: 32px;
+  inline-size: auto;
+}
+.site-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  margin-inline-start: auto;
+}
+.site-nav a {
+  font-size: var(--fs-body-sm);
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+.site-nav a[aria-current="page"] {
+  color: var(--text-primary);
+}
+.head-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  inline-size: 44px;
+  block-size: 44px;
+  border-radius: var(--radius-pill);
+  border: var(--border-control);
+  color: var(--text-secondary);
+}
+.icon-btn:hover {
+  color: var(--text-accent);
+}
+.icon-btn svg {
+  inline-size: 18px;
+  block-size: 18px;
+}
+.theme-toggle .icon-sun {
+  display: none;
+}
+[data-theme="rose-night"] .theme-toggle .icon-sun,
+[data-theme="dark"] .theme-toggle .icon-sun {
+  display: block;
+}
+[data-theme="rose-night"] .theme-toggle .icon-moon,
+[data-theme="dark"] .theme-toggle .icon-moon {
+  display: none;
+}
+.lang {
+  font-family: var(--font-lat-text);
+  font-size: var(--fs-caption);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  inline-size: auto;
+  padding-inline: var(--space-4);
+}
+@media (max-width: 860px) {
+  .site-nav {
+    display: none;
+  }
+}

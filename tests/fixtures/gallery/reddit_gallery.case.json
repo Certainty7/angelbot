@@ -1,0 +1,9 @@
+{
+  "case": "reddit_gallery",
+  "url": "https://www.reddit.com/r/pics/comments/abc123/gallery_fixture/",
+  "responses": {},
+  "expect": {
+    "slides": [],
+    "fallback": "https://rxddit.com/r/pics/comments/abc123/gallery_fixture/"
+  }
+}

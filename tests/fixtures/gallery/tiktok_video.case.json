@@ -1,0 +1,18 @@
+{
+  "case": "tiktok_video",
+  "url": "https://www.tiktok.com/@gallery.creator/video/7300000000000000001",
+  "responses": {
+    "https://www.tikwm.com/api/?url=https%3A//www.tiktok.com/%40gallery.creator/video/7300000000000000001&hd=0": {
+      "file": "tiktok_video.tikwm.json"
+    }
+  },
+  "expect": {
+    "slides": [
+      {
+        "name": "video.mp4",
+        "url": "https://cdn.fixture.invalid/tiktok/clip.mp4"
+      }
+    ],
+    "fallback": null
+  }
+}

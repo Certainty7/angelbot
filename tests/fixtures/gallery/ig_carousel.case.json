@@ -1,0 +1,34 @@
+{
+  "case": "ig_carousel",
+  "url": "https://www.instagram.com/p/CxGalleryCarousel1/",
+  "responses": {
+    "https://www.instagram.com/p/CxGalleryCarousel1/embed/captioned/": {
+      "file": "ig_carousel.embed.html"
+    }
+  },
+  "expect": {
+    "slides": [
+      {
+        "name": "ig_1.jpg",
+        "url": "https://cdn.fixture.invalid/ig/carousel_1_1080.jpg?stp=dst-jpg_e35"
+      },
+      {
+        "name": "ig_2.jpg",
+        "url": "https://cdn.fixture.invalid/ig/carousel_2_1080.jpg?stp=dst-jpg_e35"
+      },
+      {
+        "name": "ig_3.mp4",
+        "url": "https://cdn.fixture.invalid/ig/carousel_3.mp4"
+      },
+      {
+        "name": "ig_4.jpg",
+        "url": "https://cdn.fixture.invalid/ig/carousel_4_1080.jpg?stp=dst-jpg_e35"
+      },
+      {
+        "name": "ig_5.jpg",
+        "url": "https://cdn.fixture.invalid/ig/carousel_5_1080.jpg?stp=dst-jpg_e35"
+      }
+    ],
+    "fallback": null
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "case": "ig_shortfall_warn",
+  "url": "https://www.instagram.com/p/CxShortfallWarn8/",
+  "note": "Same degenerate mirror with no second source at all (no embed, and the re-quote hands back the same URLs). The loss cannot be repaired, so it must be logged: exactly one gallery-shortfall line with the discovered and delivered counts.",
+  "responses": {
+    "https://snapsave.app/action.php?lang=en": {
+      "file": "ig_shortfall.snapsave.html"
+    },
+    "https://snapsave.io/api/ajaxSearch": {
+      "file": "ig_shortfall.snapsave.html"
+    },
+    "https://saveig.app/api/ajaxSearch": {
+      "file": "ig_shortfall.snapsave.html"
+    }
+  },
+  "extra_routes": [
+    {
+      "url": "https://cdn.fixture.invalid/ig/mirror_2.mp4",
+      "name": "ig_2.mp4",
+      "same_as": "https://cdn.fixture.invalid/ig/mirror_1.mp4"
+    },
+    {
+      "url": "https://cdn.fixture.invalid/ig/mirror_4.jpg",
+      "name": "ig_4.jpg",
+      "same_as": "https://cdn.fixture.invalid/ig/mirror_3.jpg"
+    },
+    {
+      "url": "https://cdn.fixture.invalid/ig/mirror_5.jpg",
+      "name": "ig_5.jpg",
+      "same_as": "https://cdn.fixture.invalid/ig/mirror_3.jpg"
+    },
+    {
+      "url": "https://cdn.fixture.invalid/ig/mirror_6.jpg",
+      "name": "ig_6.jpg",
+      "same_as": "https://cdn.fixture.invalid/ig/mirror_3.jpg"
+    },
+    {
+      "url": "https://cdn.fixture.invalid/ig/mirror_7.mp4",
+      "name": "ig_7.mp4",
+      "same_as": "https://cdn.fixture.invalid/ig/mirror_1.mp4"
+    },
+    {
+      "url": "https://cdn.fixture.invalid/ig/mirror_8.mp4",
+      "name": "ig_8.mp4",
+      "same_as": "https://cdn.fixture.invalid/ig/mirror_1.mp4"
+    }
+  ],
+  "expect": {
+    "slides": [
+      {
+        "name": "ig_1.mp4",
+        "url": "https://cdn.fixture.invalid/ig/mirror_1.mp4"
+      },
+      {
+        "name": "ig_3.jpg",
+        "url": "https://cdn.fixture.invalid/ig/mirror_3.jpg"
+      }
+    ],
+    "fallback": null,
+    "log": "gallery-shortfall platform=instagram discovered=8 delivered=2"
+  }
+}

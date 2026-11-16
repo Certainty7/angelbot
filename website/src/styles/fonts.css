@@ -1,0 +1,83 @@
+/* Self-hosted fonts. Licensing and provenance: public/fonts/NOTICE.md and OFL.txt.
+   Every family here is referenced by a token in tokens.css; nothing is fetched from a third party,
+   so the deployed Content-Security-Policy needs no font-src exception beyond 'self'. */
+
+/* Arabic body — IBM Plex Sans Arabic (tokens: --font-ar-text) */
+@font-face {
+  font-family: "Plex Arabic";
+  src: url("/fonts/plex-ar-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Plex Arabic";
+  src: url("/fonts/plex-ar-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Plex Arabic";
+  src: url("/fonts/plex-ar-600.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Arabic display — Amiri (tokens: --font-ar-display) */
+@font-face {
+  font-family: "Amiri";
+  src: url("/fonts/amiri-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Amiri";
+  src: url("/fonts/amiri-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Latin body — IBM Plex Sans (tokens: --font-lat-text) */
+@font-face {
+  font-family: "Plex Sans";
+  src: url("/fonts/plex-lat-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Plex Sans";
+  src: url("/fonts/plex-lat-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Latin display — Instrument Serif (tokens: --font-lat-display) */
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("/fonts/iserif-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Monospace — Plex Mono, used for commands and identifiers (tokens: --font-mono) */
+@font-face {
+  font-family: "Plex Mono";
+  src: url("/fonts/plex-mono-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Plex Mono";
+  src: url("/fonts/plex-mono-500.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}

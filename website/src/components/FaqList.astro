@@ -1,0 +1,24 @@
+---
+import type { Loc, Lang } from '../i18n/ui';
+import { inline } from '../lib/inline';
+
+interface Props {
+  items: { q: Loc; a: Loc }[];
+  lang: Lang;
+}
+
+const { items, lang } = Astro.props;
+---
+<div class="faq">
+  {items.map((item) => (
+    <details class="faq__item">
+      <summary class="faq__summary">
+        <span class="faq__q">{item.q[lang]}</span>
+        <span class="faq__icon" aria-hidden="true"></span>
+      </summary>
+      <div class="faq__a">
+        <p set:html={inline(item.a[lang])} />
+      </div>
+    </details>
+  ))}
+</div>

@@ -1,0 +1,26 @@
+{
+  "name": "angel-site",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Static Arabic-first site for the Angel Discord bot",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "typecheck": "astro check",
+    "test:e2e": "NODE_PATH=node_modules playwright test"
+  },
+  "dependencies": {
+    "@astrojs/sitemap": "3.7.5",
+    "astro": "7.4.12"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.12",
+    "@playwright/test": "1.65.1",
+    "typescript": "^6.0.0"
+  },
+  "engines": {
+    "node": ">=22.23.4"
+  }
+}

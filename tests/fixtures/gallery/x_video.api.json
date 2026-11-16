@@ -1,0 +1,41 @@
+{
+  "code": 200,
+  "message": "OK",
+  "tweet": {
+    "url": "https://x.com/gallery_fixture/status/1700000000000000003",
+    "id": "1700000000000000003",
+    "text": "One video, two renditions",
+    "author": {
+      "screen_name": "gallery_fixture",
+      "name": "Gallery Fixture"
+    },
+    "media": {
+      "all": [
+        {
+          "type": "video",
+          "id": "1700000000000000201",
+          "url": "https://video.twimg.com/fixture_thumb.jpg",
+          "variants": [
+            {
+              "url": "https://video.twimg.com/fixture_480.mp4",
+              "content_type": "video/mp4",
+              "bitrate": 832000
+            },
+            {
+              "url": "https://video.twimg.com/fixture_720.mp4",
+              "content_type": "video/mp4",
+              "bitrate": 2176000
+            }
+          ]
+        }
+      ],
+      "videos": [
+        {
+          "type": "video",
+          "id": "1700000000000000201",
+          "url": "https://video.twimg.com/fixture_thumb.jpg"
+        }
+      ]
+    }
+  }
+}

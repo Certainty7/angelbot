@@ -1,0 +1,89 @@
+{
+  "case": "ig_shortfall_retry",
+  "url": "https://www.instagram.com/p/CxShortfallRetry8/",
+  "note": "8 discovered slides, the mirror answers every video slot with one placeholder and every image slot with another (the real d.rapidcdn.app failure). The embed wave has the 8 real URLs, so the repair wave must fetch only the 6 lost indices from it and still deliver 8/8 in order.",
+  "responses": {
+    "https://snapsave.app/action.php?lang=en": {
+      "file": "ig_shortfall.snapsave.html"
+    },
+    "https://snapsave.io/api/ajaxSearch": {
+      "file": "ig_shortfall.snapsave.html"
+    },
+    "https://saveig.app/api/ajaxSearch": {
+      "file": "ig_shortfall.snapsave.html"
+    },
+    "https://www.instagram.com/p/CxShortfallRetry8/embed/captioned/": {
+      "file": "ig_shortfall_retry.embed.html"
+    }
+  },
+  "extra_routes": [
+    {
+      "url": "https://cdn.fixture.invalid/ig/mirror_2.mp4",
+      "name": "ig_2.mp4",
+      "same_as": "https://cdn.fixture.invalid/ig/mirror_1.mp4"
+    },
+    {
+      "url": "https://cdn.fixture.invalid/ig/mirror_4.jpg",
+      "name": "ig_4.jpg",
+      "same_as": "https://cdn.fixture.invalid/ig/mirror_3.jpg"
+    },
+    {
+      "url": "https://cdn.fixture.invalid/ig/mirror_5.jpg",
+      "name": "ig_5.jpg",
+      "same_as": "https://cdn.fixture.invalid/ig/mirror_3.jpg"
+    },
+    {
+      "url": "https://cdn.fixture.invalid/ig/mirror_6.jpg",
+      "name": "ig_6.jpg",
+      "same_as": "https://cdn.fixture.invalid/ig/mirror_3.jpg"
+    },
+    {
+      "url": "https://cdn.fixture.invalid/ig/mirror_7.mp4",
+      "name": "ig_7.mp4",
+      "same_as": "https://cdn.fixture.invalid/ig/mirror_1.mp4"
+    },
+    {
+      "url": "https://cdn.fixture.invalid/ig/mirror_8.mp4",
+      "name": "ig_8.mp4",
+      "same_as": "https://cdn.fixture.invalid/ig/mirror_1.mp4"
+    }
+  ],
+  "expect": {
+    "slides": [
+      {
+        "name": "ig_1.mp4",
+        "url": "https://cdn.fixture.invalid/ig/mirror_1.mp4"
+      },
+      {
+        "name": "ig_2.mp4",
+        "url": "https://cdn.fixture.invalid/ig/real_2.mp4"
+      },
+      {
+        "name": "ig_3.jpg",
+        "url": "https://cdn.fixture.invalid/ig/mirror_3.jpg"
+      },
+      {
+        "name": "ig_4.jpg",
+        "url": "https://cdn.fixture.invalid/ig/real_4_1080.jpg?stp=dst-jpg_e35"
+      },
+      {
+        "name": "ig_5.jpg",
+        "url": "https://cdn.fixture.invalid/ig/real_5_1080.jpg?stp=dst-jpg_e35"
+      },
+      {
+        "name": "ig_6.jpg",
+        "url": "https://cdn.fixture.invalid/ig/real_6_1080.jpg?stp=dst-jpg_e35"
+      },
+      {
+        "name": "ig_7.mp4",
+        "url": "https://cdn.fixture.invalid/ig/real_7.mp4"
+      },
+      {
+        "name": "ig_8.mp4",
+        "url": "https://cdn.fixture.invalid/ig/real_8.mp4"
+      }
+    ],
+    "fallback": null,
+    "no_log": "gallery-shortfall"
+  }
+}

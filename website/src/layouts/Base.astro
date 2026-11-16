@@ -1,0 +1,114 @@
+---
+import '../styles/fonts.css';
+import '../styles/tokens.css';
+import '../styles/base.css';
+import '../styles/site.css';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import { site, ui, type Lang } from '../i18n/ui';
+
+interface Props {
+  lang: Lang;
+  title: string;
+  description: string;
+  slug: string;
+  noindex?: boolean;
+  canonicalPath?: string;
+  /** Where the language switch goes when this page has no equivalent in the other locale. */
+  switchTo?: string;
+}
+
+const { lang, title, description, slug, noindex = false, canonicalPath, switchTo } = Astro.props;
+const dir = lang === 'ar' ? 'rtl' : 'ltr';
+const other: Lang = lang === 'ar' ? 'en' : 'ar';
+const path = canonicalPath ?? (lang === 'en' ? (slug ? `/en/${slug}/` : '/en/') : (slug ? `/${slug}/` : '/'));
+const canonical = new URL(path, site.origin).href;
+// `switchTo` also settles hreflang: a page with no true counterpart (the 404s) must not advertise a
+// URL the build never emits.
+const alternate = new URL(
+  switchTo ?? (other === 'en' ? (slug ? `/en/${slug}/` : '/en/') : (slug ? `/${slug}/` : '/')),
+  site.origin,
+).href;
+// x-default must name one path the build actually serves, and the same one on both
+// locales. An explicit canonicalPath (e.g. /404) would otherwise yield /404/, which
+// Pages 308-redirects, and /en/404/ on the English page, which splits the cluster.
+const xDefaultPath = canonicalPath
+  ? canonicalPath.replace(/^\/en\//, '/').replace(/\/$/, '') || '/'
+  : slug ? `/${slug}/` : '/';
+const defaultHref = new URL(xDefaultPath, site.origin).href;
+const ogImage = new URL('/og-image.png', site.origin).href;
+const ogAlt = lang === 'ar' ? 'بطاقة أنجل: علامة اللؤلؤة داخل فتحة دائرية' : 'Angel share card: the pearl mark inside a circular aperture';
+---
+<!doctype html>
+<html lang={lang} dir={dir} data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- The static host does not send response headers, so the policy travels in the document. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; form-action 'none'; base-uri 'none'; object-src 'none'"
+    />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    {noindex && <meta name="robots" content="noindex, follow" />}
+
+    <link rel="alternate" hreflang="ar" href={lang === 'ar' ? canonical : alternate} />
+    <link rel="alternate" hreflang="en" href={lang === 'en' ? canonical : alternate} />
+    <link rel="alternate" hreflang="x-default" href={defaultHref} />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Angel" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={ogAlt} />
+    <meta property="og:locale" content={lang === 'ar' ? 'ar_AR' : 'en_US'} />
+    <meta property="og:locale:alternate" content={lang === 'ar' ? 'en_US' : 'ar_AR'} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={ogImage} />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/favicon-180.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="theme-color" content="#FDFBFA" data-theme-color />
+    <meta name="color-scheme" content="light dark" />
+
+    {/* Preload only the faces the first screen paints with, per locale. */}
+    {lang === 'ar' ? (
+      <>
+        <link rel="preload" href="/fonts/amiri-700.woff2" as="font" type="font/woff2" crossorigin />
+        <link rel="preload" href="/fonts/plex-ar-400.woff2" as="font" type="font/woff2" crossorigin />
+      </>
+    ) : (
+      <>
+        <link rel="preload" href="/fonts/iserif-400.woff2" as="font" type="font/woff2" crossorigin />
+        <link rel="preload" href="/fonts/plex-lat-400.woff2" as="font" type="font/woff2" crossorigin />
+      </>
+    )}
+
+    {/* Theme before first paint: localStorage → system preference → light. No flash.
+        External so the CSP stays `script-src 'self'` (see public/_headers). */}
+    <script is:inline src="/theme-init.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">{ui.skip[lang]}</a>
+    <Header lang={lang} slug={slug} switchTo={switchTo} />
+    <main id="main" tabindex="-1">
+      <slot />
+    </main>
+    <Footer lang={lang} />
+    <script>
+      import { initSite } from '../scripts/site';
+      initSite();
+    </script>
+  </body>
+</html>

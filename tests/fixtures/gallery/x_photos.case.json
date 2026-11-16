@@ -1,0 +1,26 @@
+{
+  "case": "x_photos",
+  "url": "https://x.com/gallery_fixture/status/1700000000000000002?s=20",
+  "responses": {
+    "https://api.fxtwitter.com/gallery_fixture/status/1700000000000000002": {
+      "file": "x_photos.api.json"
+    }
+  },
+  "expect": {
+    "slides": [
+      {
+        "url": "https://pbs.twimg.com/media/fixture_a.jpg?name=orig",
+        "name": "x_1.jpg"
+      },
+      {
+        "url": "https://pbs.twimg.com/media/fixture_b.jpg?name=orig",
+        "name": "x_2.jpg"
+      },
+      {
+        "url": "https://pbs.twimg.com/media/fixture_c.jpg?name=orig",
+        "name": "x_3.jpg"
+      }
+    ],
+    "fallback": null
+  }
+}

@@ -1,0 +1,138 @@
+{
+  "application_id": "1559932443102941284",
+  "application_name": "Angel",
+  "verified": {
+    "method": "GET https://discord.com/api/v10/oauth2/applications/@me with the live bot token, 2026-11-14",
+    "application_name_matches": true,
+    "public_bot": true,
+    "require_code_grant": false
+  },
+  "notes": [
+    "Every permission below is required by a code path that runs as the bot itself.",
+    "administrator appears in the source only as a gate on who may use a command (app_commands.default_permissions), never as something the bot needs; it is deliberately absent here.",
+    "manage_guild and other member-facing gates in the same decorators do not require a bot permission: Discord checks them against the invoking member.",
+    "No permission is added for a feature that is switched off; music ships behind MUSIC_ENABLED and is included because the implementation is live."
+  ],
+  "bot_permissions": [
+    {
+      "permission": "view_channel",
+      "why": "Read the channel it replies in",
+      "evidence": [
+        "cogs/community.py:217"
+      ]
+    },
+    {
+      "permission": "send_messages",
+      "why": "Post replies, embeds and panels",
+      "evidence": [
+        "cogs/community.py:217"
+      ]
+    },
+    {
+      "permission": "embed_links",
+      "why": "Rich embeds are the primary reply format",
+      "evidence": [
+        "cogs/admin.py:36"
+      ]
+    },
+    {
+      "permission": "attach_files",
+      "why": "GIF, image and media replies attach files",
+      "evidence": [
+        "cogs/fun_gif.py:85",
+        "cogs/ai_chat.py:54"
+      ]
+    },
+    {
+      "permission": "add_reactions",
+      "why": "Poll and giveaway options are reactions",
+      "evidence": [
+        "cogs/community.py:120"
+      ]
+    },
+    {
+      "permission": "read_message_history",
+      "why": "Summaries and rule indexing page channel history",
+      "evidence": [
+        "angel/summarize.py:18",
+        "angel/rules.py:17"
+      ]
+    },
+    {
+      "permission": "manage_messages",
+      "why": "/purge and message deletion in the control paths",
+      "evidence": [
+        "cogs/admin.py:127",
+        "cogs/owner.py:319"
+      ]
+    },
+    {
+      "permission": "manage_roles",
+      "why": "Grant, revoke and create roles (autorole, reaction roles)",
+      "evidence": [
+        "cogs/admin.py:221",
+        "cogs/owner.py:275"
+      ]
+    },
+    {
+      "permission": "manage_channels",
+      "why": "Slowmode, lock/unlock and channel creation",
+      "evidence": [
+        "cogs/admin.py:206",
+        "cogs/admin.py:185",
+        "angel/nl_router.py:335"
+      ]
+    },
+    {
+      "permission": "manage_nicknames",
+      "why": "Nickname changes requested by members",
+      "evidence": [
+        "angel/nl_router.py:358",
+        "angel/nl_router.py:1485"
+      ]
+    },
+    {
+      "permission": "kick_members",
+      "why": "/kick",
+      "evidence": [
+        "cogs/admin.py:33"
+      ]
+    },
+    {
+      "permission": "ban_members",
+      "why": "/ban and /softban",
+      "evidence": [
+        "cogs/admin.py:59"
+      ]
+    },
+    {
+      "permission": "moderate_members",
+      "why": "Timeouts (/timeout, /untimeout)",
+      "evidence": [
+        "cogs/admin.py:100",
+        "cogs/admin.py:110"
+      ]
+    },
+    {
+      "permission": "mention_everyone",
+      "why": "/announce with ping_everyone",
+      "evidence": [
+        "cogs/admin.py:255"
+      ]
+    },
+    {
+      "permission": "connect",
+      "why": "Join a voice channel for music",
+      "evidence": [
+        "angel/voice_engine.py:166"
+      ]
+    },
+    {
+      "permission": "speak",
+      "why": "Play the resolved track",
+      "evidence": [
+        "angel/voice_engine.py:286"
+      ]
+    }
+  ]
+}

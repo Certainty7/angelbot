@@ -1,0 +1,2018 @@
+{
+  "schema": 1,
+  "generator": "tools/website-data-generator/generate.py",
+  "source_files": 14,
+  "totals": {
+    "all": 69,
+    "slash": 66,
+    "context_menu": 3,
+    "categories": 13,
+    "per_category": {
+      "admin": 17,
+      "ai_chat": 4,
+      "community": 11,
+      "context_menus": 3,
+      "control": 3,
+      "flagship": 6,
+      "fun_gif": 2,
+      "media_tools": 2,
+      "memory_rules": 7,
+      "music": 4,
+      "owner": 6,
+      "productivity": 2,
+      "xp_profile": 2
+    },
+    "eager": 65,
+    "lazy": 4,
+    "loaded_modules": 13
+  },
+  "missing_english_descriptions": [],
+  "commands": [
+    {
+      "name": "add_role",
+      "kind": "slash",
+      "category": "admin",
+      "category_en": "Administration",
+      "category_ar": "الإدارة",
+      "description_ar": "منح عضو role محدداً في السيرفر",
+      "description_discord": "منح رتبة لعضو",
+      "config_scope": "guild",
+      "caller_gate": [
+        "manage_roles"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "member",
+          "type": "discord.Member",
+          "description": "العضو",
+          "required": true,
+          "choices": []
+        },
+        {
+          "name": "role",
+          "type": "discord.Role",
+          "description": "الرتبة",
+          "required": true,
+          "choices": []
+        }
+      ],
+      "description_en": "Grant a role to a member",
+      "bot_permissions": [
+        "manage_roles"
+      ]
+    },
+    {
+      "name": "announce",
+      "kind": "slash",
+      "category": "admin",
+      "category_en": "Administration",
+      "category_ar": "الإدارة",
+      "description_ar": "نشر إعلان منسق في قناة محددة",
+      "description_discord": "نشر إعلان منسق في قناة",
+      "config_scope": "guild",
+      "caller_gate": [
+        "manage_guild"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "channel",
+          "type": "discord.TextChannel",
+          "description": "القناة",
+          "required": true,
+          "choices": []
+        },
+        {
+          "name": "title",
+          "type": "str",
+          "description": "العنوان",
+          "required": true,
+          "choices": []
+        },
+        {
+          "name": "message",
+          "type": "str",
+          "description": "النص",
+          "required": true,
+          "choices": []
+        },
+        {
+          "name": "ping_everyone",
+          "type": "bool",
+          "description": "منشن للجميع؟",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Post a formatted announcement in a channel",
+      "bot_permissions": []
+    },
+    {
+      "name": "ban",
+      "kind": "slash",
+      "category": "admin",
+      "category_en": "Administration",
+      "category_ar": "الإدارة",
+      "description_ar": "حظر عضو من السيرفر وحذف رسائله الأخيرة عند الحاجة",
+      "description_discord": "حظر عضو من السيرفر",
+      "config_scope": "guild",
+      "caller_gate": [
+        "ban_members"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "member",
+          "type": "discord.Member",
+          "description": "العضو",
+          "required": true,
+          "choices": []
+        },
+        {
+          "name": "reason",
+          "type": "str",
+          "description": "السبب",
+          "required": false,
+          "choices": []
+        },
+        {
+          "name": "delete_days",
+          "type": "app_commands.Range[int, 0, 7]",
+          "description": "حذف رسائله (0-7 أيام)",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Ban a member from the server",
+      "bot_permissions": [
+        "ban_members"
+      ]
+    },
+    {
+      "name": "clear_warnings",
+      "kind": "slash",
+      "category": "admin",
+      "category_en": "Administration",
+      "category_ar": "الإدارة",
+      "description_ar": "محو جميع إنذارات عضو",
+      "description_discord": "مسح إنذارات عضو",
+      "config_scope": "guild",
+      "caller_gate": [
+        "moderate_members"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "member",
+          "type": "discord.Member",
+          "description": "العضو",
+          "required": true,
+          "choices": []
+        }
+      ],
+      "description_en": "Clear a member's warnings",
+      "bot_permissions": [
+        "moderate_members"
+      ]
+    },
+    {
+      "name": "kick",
+      "kind": "slash",
+      "category": "admin",
+      "category_en": "Administration",
+      "category_ar": "الإدارة",
+      "description_ar": "طرد عضو من السيرفر مع تسجيل السبب",
+      "description_discord": "طرد عضو من السيرفر",
+      "config_scope": "guild",
+      "caller_gate": [
+        "kick_members"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "member",
+          "type": "discord.Member",
+          "description": "العضو",
+          "required": true,
+          "choices": []
+        },
+        {
+          "name": "reason",
+          "type": "str",
+          "description": "السبب",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Kick a member from the server",
+      "bot_permissions": [
+        "kick_members"
+      ]
+    },
+    {
+      "name": "lock",
+      "kind": "slash",
+      "category": "admin",
+      "category_en": "Administration",
+      "category_ar": "الإدارة",
+      "description_ar": "قفل القناة ومنع الأعضاء من الكتابة فيها",
+      "description_discord": "قفل القناة",
+      "config_scope": "guild",
+      "caller_gate": [
+        "manage_channels"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "channel",
+          "type": "Optional[discord.TextChannel]",
+          "description": "القناة",
+          "required": false,
+          "choices": []
+        },
+        {
+          "name": "reason",
+          "type": "str",
+          "description": "السبب",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Lock the channel so members cannot post",
+      "bot_permissions": [
+        "manage_channels"
+      ]
+    },
+    {
+      "name": "purge",
+      "kind": "slash",
+      "category": "admin",
+      "category_en": "Administration",
+      "category_ar": "الإدارة",
+      "description_ar": "حذف عدد محدد من الرسائل في القناة",
+      "description_discord": "مسح عدد من الرسائل في القناة",
+      "config_scope": "guild",
+      "caller_gate": [
+        "manage_messages"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "amount",
+          "type": "app_commands.Range[int, 1, 100]",
+          "description": "العدد (1-100)",
+          "required": true,
+          "choices": []
+        },
+        {
+          "name": "member",
+          "type": "Optional[discord.Member]",
+          "description": "تحديد عضو (اختياري)",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Delete a number of messages in the channel",
+      "bot_permissions": [
+        "manage_messages"
+      ]
+    },
+    {
+      "name": "remove_role",
+      "kind": "slash",
+      "category": "admin",
+      "category_en": "Administration",
+      "category_ar": "الإدارة",
+      "description_ar": "سحب role محدد من عضو",
+      "description_discord": "سحب رتبة من عضو",
+      "config_scope": "guild",
+      "caller_gate": [
+        "manage_roles"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "member",
+          "type": "discord.Member",
+          "description": "العضو",
+          "required": true,
+          "choices": []
+        },
+        {
+          "name": "role",
+          "type": "discord.Role",
+          "description": "الرتبة",
+          "required": true,
+          "choices": []
+        }
+      ],
+      "description_en": "Remove a role from a member",
+      "bot_permissions": [
+        "manage_roles"
+      ]
+    },
+    {
+      "name": "set_modlog",
+      "kind": "slash",
+      "category": "admin",
+      "category_en": "Administration",
+      "category_ar": "الإدارة",
+      "description_ar": "تحديد قناة سجل الإشراف",
+      "description_discord": "تحديد قناة سجل الإشراف",
+      "config_scope": "guild",
+      "caller_gate": [
+        "administrator"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "channel",
+          "type": "Optional[discord.TextChannel]",
+          "description": "القناة",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Set the moderation log channel",
+      "bot_permissions": []
+    },
+    {
+      "name": "slowmode",
+      "kind": "slash",
+      "category": "admin",
+      "category_en": "Administration",
+      "category_ar": "الإدارة",
+      "description_ar": "ضبط الوضع البطيء للقناة بعدد ثوانٍ محدد",
+      "description_discord": "ضبط الوضع البطيء للقناة",
+      "config_scope": "guild",
+      "caller_gate": [
+        "manage_channels"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "seconds",
+          "type": "app_commands.Range[int, 0, 21600]",
+          "description": "الثواني (0 للإلغاء)",
+          "required": true,
+          "choices": []
+        }
+      ],
+      "description_en": "Set the channel slowmode interval",
+      "bot_permissions": [
+        "manage_channels"
+      ]
+    },
+    {
+      "name": "sync",
+      "kind": "slash",
+      "category": "admin",
+      "category_en": "Administration",
+      "category_ar": "الإدارة",
+      "description_ar": "مزامنة شجرة الأوامر مع Discord وتحديثها، للمالكة فقط",
+      "description_discord": "مزامنة وتحديث الأوامر",
+      "config_scope": "guild",
+      "caller_gate": [
+        "administrator"
+      ],
+      "owner_only": true,
+      "options": [],
+      "description_en": "Synchronise and refresh the command tree",
+      "bot_permissions": []
+    },
+    {
+      "name": "timeout",
+      "kind": "slash",
+      "category": "admin",
+      "category_en": "Administration",
+      "category_ar": "الإدارة",
+      "description_ar": "كتم عضو مؤقتاً لمدة تحددها بالدقائق",
+      "description_discord": "كتم عضو مؤقتاً",
+      "config_scope": "guild",
+      "caller_gate": [
+        "moderate_members"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "member",
+          "type": "discord.Member",
+          "description": "العضو",
+          "required": true,
+          "choices": []
+        },
+        {
+          "name": "minutes",
+          "type": "app_commands.Range[int, 1, 40320]",
+          "description": "الدقائق",
+          "required": true,
+          "choices": []
+        },
+        {
+          "name": "reason",
+          "type": "str",
+          "description": "السبب",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Time out a member temporarily",
+      "bot_permissions": [
+        "moderate_members"
+      ]
+    },
+    {
+      "name": "unban",
+      "kind": "slash",
+      "category": "admin",
+      "category_en": "Administration",
+      "category_ar": "الإدارة",
+      "description_ar": "فك الحظر عن مستخدم برقم معرّفه",
+      "description_discord": "فك الحظر عن مستخدم عبر معرفه",
+      "config_scope": "guild",
+      "caller_gate": [
+        "ban_members"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "user_id",
+          "type": "str",
+          "description": "معرف المستخدم ID",
+          "required": true,
+          "choices": []
+        },
+        {
+          "name": "reason",
+          "type": "str",
+          "description": "السبب",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Unban a user by their ID",
+      "bot_permissions": [
+        "ban_members"
+      ]
+    },
+    {
+      "name": "unlock",
+      "kind": "slash",
+      "category": "admin",
+      "category_en": "Administration",
+      "category_ar": "الإدارة",
+      "description_ar": "فتح القناة والسماح للأعضاء بالكتابة فيها",
+      "description_discord": "فتح القناة",
+      "config_scope": "guild",
+      "caller_gate": [
+        "manage_channels"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "channel",
+          "type": "Optional[discord.TextChannel]",
+          "description": "القناة",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Unlock the channel",
+      "bot_permissions": [
+        "manage_channels"
+      ]
+    },
+    {
+      "name": "untimeout",
+      "kind": "slash",
+      "category": "admin",
+      "category_en": "Administration",
+      "category_ar": "الإدارة",
+      "description_ar": "رفع الكتم المؤقت عن عضو",
+      "description_discord": "إلغاء الكتم عن عضو",
+      "config_scope": "guild",
+      "caller_gate": [
+        "moderate_members"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "member",
+          "type": "discord.Member",
+          "description": "العضو",
+          "required": true,
+          "choices": []
+        }
+      ],
+      "description_en": "Remove the timeout from a member",
+      "bot_permissions": [
+        "moderate_members"
+      ]
+    },
+    {
+      "name": "warn",
+      "kind": "slash",
+      "category": "admin",
+      "category_en": "Administration",
+      "category_ar": "الإدارة",
+      "description_ar": "توجيه إنذار لعضو مع تسجيل السبب",
+      "description_discord": "توجيه إنذار لعضو",
+      "config_scope": "guild",
+      "caller_gate": [
+        "moderate_members"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "member",
+          "type": "discord.Member",
+          "description": "العضو",
+          "required": true,
+          "choices": []
+        },
+        {
+          "name": "reason",
+          "type": "str",
+          "description": "السبب",
+          "required": true,
+          "choices": []
+        }
+      ],
+      "description_en": "Issue a warning to a member",
+      "bot_permissions": [
+        "moderate_members"
+      ]
+    },
+    {
+      "name": "warnings",
+      "kind": "slash",
+      "category": "admin",
+      "category_en": "Administration",
+      "category_ar": "الإدارة",
+      "description_ar": "عرض إنذارات عضو وسجلها",
+      "description_discord": "عرض إنذارات عضو",
+      "config_scope": "guild",
+      "caller_gate": [
+        "moderate_members"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "member",
+          "type": "discord.Member",
+          "description": "العضو",
+          "required": true,
+          "choices": []
+        }
+      ],
+      "description_en": "Show a member's warnings",
+      "bot_permissions": [
+        "moderate_members"
+      ]
+    },
+    {
+      "name": "chat",
+      "kind": "slash",
+      "category": "ai_chat",
+      "category_en": "AI & Chat",
+      "category_ar": "الذكاء والمحادثة",
+      "description_ar": "محادثة أنجل مع إرفاق صورة أو ملف GIF عند الحاجة",
+      "description_discord": "التحدث مع أنجل (مع إمكانية إرفاق صورة أو GIF)",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "message",
+          "type": "str",
+          "description": "رسالتك",
+          "required": true,
+          "choices": []
+        },
+        {
+          "name": "image",
+          "type": "Optional[discord.Attachment]",
+          "description": "صورة أو GIF (اختياري)",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Talk to Angel, optionally with an image or GIF attached",
+      "bot_permissions": []
+    },
+    {
+      "name": "imagine",
+      "kind": "slash",
+      "category": "ai_chat",
+      "category_en": "AI & Chat",
+      "category_ar": "الذكاء والمحادثة",
+      "description_ar": "توليد عمل فني عبر استوديو أنجل",
+      "description_discord": "تصميم أو رسم صورة فنية عبر استوديو أنجل",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "prompt",
+          "type": "str",
+          "description": "وصف الصورة المطلوبة",
+          "required": true,
+          "choices": []
+        },
+        {
+          "name": "style",
+          "type": "str",
+          "description": "الأسلوب الفني",
+          "required": false,
+          "choices": [
+            "✨ أنمي فائق (Anime Masterpiece)",
+            "🌙 سينمائي واقعي (Cinematic)",
+            "🔮 فانتازيا (Fantasy)"
+          ]
+        }
+      ],
+      "description_en": "Generate an artwork through Angel Studio",
+      "bot_permissions": []
+    },
+    {
+      "name": "summarize_channel",
+      "kind": "slash",
+      "category": "ai_chat",
+      "category_en": "AI & Chat",
+      "category_ar": "الذكاء والمحادثة",
+      "description_ar": "قراءة آخر رسائل القناة وتلخيصها في نقاط",
+      "description_discord": "قراءة وتلخيص محادثات القناة بدقة (حتى 500 رسالة)",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "limit",
+          "type": "app_commands.Range[int, 10, 500]",
+          "description": "عدد الرسائل (10 إلى 500)",
+          "required": false,
+          "choices": []
+        },
+        {
+          "name": "question",
+          "type": "Optional[str]",
+          "description": "سؤال محدد عن المحادثة (اختياري)",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Read and summarise the recent channel conversation",
+      "bot_permissions": []
+    },
+    {
+      "name": "translate",
+      "kind": "slash",
+      "category": "ai_chat",
+      "category_en": "AI & Chat",
+      "category_ar": "الذكاء والمحادثة",
+      "description_ar": "ترجمة نص إلى اللغة التي تحددها",
+      "description_discord": "ترجمة أي نص إلى أي لغة",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "text",
+          "type": "str",
+          "description": "النص المراد ترجمته",
+          "required": true,
+          "choices": []
+        },
+        {
+          "name": "target_language",
+          "type": "str",
+          "description": "اللغة المطلوبة",
+          "required": true,
+          "choices": []
+        }
+      ],
+      "description_en": "Translate any text into another language",
+      "bot_permissions": []
+    },
+    {
+      "name": "afk",
+      "kind": "slash",
+      "category": "community",
+      "category_en": "Community",
+      "category_ar": "المجتمع",
+      "description_ar": "تفعيل وضع الغياب التلقائي مع ذكر السبب",
+      "description_discord": "تفعيل وضع الغياب التلقائي (AFK)",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "reason",
+          "type": "str",
+          "description": "سبب الغياب",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Turn on automatic away mode",
+      "bot_permissions": []
+    },
+    {
+      "name": "auto_reply",
+      "kind": "slash",
+      "category": "community",
+      "category_en": "Community",
+      "category_ar": "المجتمع",
+      "description_ar": "إدارة الردود النصية التلقائية في السيرفر",
+      "description_discord": "إدارة الردود التلقائية النصية في السيرفر",
+      "config_scope": "guild",
+      "caller_gate": [
+        "manage_guild"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "action",
+          "type": "str",
+          "description": "العملية",
+          "required": true,
+          "choices": [
+            "إضافة (Add)",
+            "حذف (Remove)",
+            "عرض القائمة (List)"
+          ]
+        },
+        {
+          "name": "trigger",
+          "type": "Optional[str]",
+          "description": "الكلمة",
+          "required": false,
+          "choices": []
+        },
+        {
+          "name": "response",
+          "type": "Optional[str]",
+          "description": "الرد",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Manage the server's text auto-replies",
+      "bot_permissions": []
+    },
+    {
+      "name": "avatar",
+      "kind": "slash",
+      "category": "community",
+      "category_en": "Community",
+      "category_ar": "المجتمع",
+      "description_ar": "عرض الصورة الشخصية لعضو",
+      "description_discord": "عرض الصورة الشخصية لعضو",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "member",
+          "type": "Optional[discord.User]",
+          "description": "اختر العضو",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Show a member's avatar",
+      "bot_permissions": []
+    },
+    {
+      "name": "editsnipe",
+      "kind": "slash",
+      "category": "community",
+      "category_en": "Community",
+      "category_ar": "المجتمع",
+      "description_ar": "كشف آخر رسالة جرى تعديلها في القناة",
+      "description_discord": "كشف آخر رسالة تم تعديلها في القناة",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [],
+      "description_en": "Reveal the last edited message in the channel",
+      "bot_permissions": []
+    },
+    {
+      "name": "giveaway",
+      "kind": "slash",
+      "category": "community",
+      "category_en": "Community",
+      "category_ar": "المجتمع",
+      "description_ar": "بدء سحب تفاعلي في القناة بجائزة ومدة محددتين",
+      "description_discord": "بدء سحب تفاعلي في القناة",
+      "config_scope": "guild",
+      "caller_gate": [
+        "manage_guild"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "minutes",
+          "type": "app_commands.Range[int, 1, 10080]",
+          "description": "المدة بالدقائق",
+          "required": true,
+          "choices": []
+        },
+        {
+          "name": "winners",
+          "type": "app_commands.Range[int, 1, 10]",
+          "description": "عدد الفائزين",
+          "required": true,
+          "choices": []
+        },
+        {
+          "name": "prize",
+          "type": "str",
+          "description": "الجائزة",
+          "required": true,
+          "choices": []
+        }
+      ],
+      "description_en": "Start an interactive giveaway in the channel",
+      "bot_permissions": []
+    },
+    {
+      "name": "ping",
+      "kind": "slash",
+      "category": "community",
+      "category_en": "Community",
+      "category_ar": "المجتمع",
+      "description_ar": "قياس زمن استجابة اتصال Discord بالبوت",
+      "description_discord": "فحص سرعة الاستجابة",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [],
+      "description_en": "Check gateway latency",
+      "bot_permissions": []
+    },
+    {
+      "name": "poll",
+      "kind": "slash",
+      "category": "community",
+      "category_en": "Community",
+      "category_ar": "المجتمع",
+      "description_ar": "إنشاء تصويت في القناة من سؤال وخيارات",
+      "description_discord": "إنشاء تصويت في القناة",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "question",
+          "type": "str",
+          "description": "السؤال",
+          "required": true,
+          "choices": []
+        },
+        {
+          "name": "option1",
+          "type": "str",
+          "description": "الخيار 1",
+          "required": true,
+          "choices": []
+        },
+        {
+          "name": "option2",
+          "type": "str",
+          "description": "الخيار 2",
+          "required": true,
+          "choices": []
+        },
+        {
+          "name": "option3",
+          "type": "Optional[str]",
+          "description": "الخيار 3",
+          "required": false,
+          "choices": []
+        },
+        {
+          "name": "option4",
+          "type": "Optional[str]",
+          "description": "الخيار 4",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Create a poll in the channel",
+      "bot_permissions": []
+    },
+    {
+      "name": "serverinfo",
+      "kind": "slash",
+      "category": "community",
+      "category_en": "Community",
+      "category_ar": "المجتمع",
+      "description_ar": "عرض معلومات السيرفر وإحصاءاته",
+      "description_discord": "عرض معلومات السيرفر",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [],
+      "description_en": "Show server information",
+      "bot_permissions": []
+    },
+    {
+      "name": "snipe",
+      "kind": "slash",
+      "category": "community",
+      "category_en": "Community",
+      "category_ar": "المجتمع",
+      "description_ar": "كشف آخر رسالة جرى حذفها في القناة",
+      "description_discord": "كشف آخر رسالة حُذفت في القناة",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [],
+      "description_en": "Reveal the last deleted message in the channel",
+      "bot_permissions": []
+    },
+    {
+      "name": "ticket_panel",
+      "kind": "slash",
+      "category": "community",
+      "category_en": "Community",
+      "category_ar": "المجتمع",
+      "description_ar": "نشر لوحة تذاكر الدعم في القناة، للمشرفين فقط",
+      "description_discord": "نشر لوحة فتح التذاكر الخاصة",
+      "config_scope": "guild",
+      "caller_gate": [
+        "manage_channels"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "title",
+          "type": "str",
+          "description": "العنوان",
+          "required": false,
+          "choices": []
+        },
+        {
+          "name": "description",
+          "type": "str",
+          "description": "الوصف",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Publish the private ticket panel",
+      "bot_permissions": [
+        "manage_channels"
+      ]
+    },
+    {
+      "name": "userinfo",
+      "kind": "slash",
+      "category": "community",
+      "category_en": "Community",
+      "category_ar": "المجتمع",
+      "description_ar": "عرض بطاقة معلومات عضو في السيرفر",
+      "description_discord": "عرض بطاقة معلومات عضو",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "member",
+          "type": "Optional[discord.Member]",
+          "description": "اختر العضو",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Show a member information card",
+      "bot_permissions": []
+    },
+    {
+      "name": "اقتراح رد ومهام",
+      "kind": "context_menu",
+      "category": "context_menus",
+      "category_en": "Context Menus",
+      "category_ar": "قوائم السياق",
+      "description_ar": "اقتراح رد مناسب ومهام متابعة للرسالة المحددة",
+      "description_discord": null,
+      "config_scope": "message",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [],
+      "description_en": "Suggest a reply and follow-up tasks for a message",
+      "bot_permissions": []
+    },
+    {
+      "name": "ترجمة وتحليل",
+      "kind": "context_menu",
+      "category": "context_menus",
+      "category_en": "Context Menus",
+      "category_ar": "قوائم السياق",
+      "description_ar": "ترجمة الرسالة المحددة وشرح المقصود منها",
+      "description_discord": null,
+      "config_scope": "message",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [],
+      "description_en": "Translate a message and explain its meaning",
+      "bot_permissions": []
+    },
+    {
+      "name": "تلخيص الرسالة",
+      "kind": "context_menu",
+      "category": "context_menus",
+      "category_en": "Context Menus",
+      "category_ar": "قوائم السياق",
+      "description_ar": "تلخيص الرسالة المحددة إلى نقاط مركزة",
+      "description_discord": null,
+      "config_scope": "message",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [],
+      "description_en": "Summarise a message into key points",
+      "bot_permissions": []
+    },
+    {
+      "name": "autonomy",
+      "kind": "slash",
+      "category": "control",
+      "category_en": "Controls",
+      "category_ar": "التحكم",
+      "description_ar": "تفعيل استقلالية أنجل أو إيقافها وعرض حالتها، للمالكة فقط",
+      "description_discord": "تفعيل/إيقاف تفاعل أنجل التلقائي وبدء الأحاديث من نفسها (للمالكة)",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": true,
+      "options": [
+        {
+          "name": "mode",
+          "type": "Optional[app_commands.Choice[str]]",
+          "description": null,
+          "required": false,
+          "choices": [
+            "✅ تشغيل",
+            "⛔ إيقاف",
+            "📊 الحالة"
+          ]
+        }
+      ],
+      "description_en": "Enable or disable Angel's autonomous engagement",
+      "bot_permissions": []
+    },
+    {
+      "name": "help",
+      "kind": "slash",
+      "category": "control",
+      "category_en": "Controls",
+      "category_ar": "التحكم",
+      "description_ar": "عرض قائمة الأوامر المتاحة",
+      "description_discord": "عرض قائمة الأوامر المتاحة",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [],
+      "description_en": "Show the available commands",
+      "bot_permissions": []
+    },
+    {
+      "name": "silence",
+      "kind": "slash",
+      "category": "control",
+      "category_en": "Controls",
+      "category_ar": "التحكم",
+      "description_ar": "كتم أنجل في قناة محددة أو في السيرفر كله، للمالكة فقط",
+      "description_discord": "منع أنجل من الكلام في قناة أو السيرفر كله (للمالكة فقط)",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": true,
+      "options": [
+        {
+          "name": "mode",
+          "type": "app_commands.Choice[str]",
+          "description": "on = صامتة، off = تتكلم",
+          "required": true,
+          "choices": [
+            "🔇 on — اسكتي",
+            "🔊 off — تكلمي"
+          ]
+        },
+        {
+          "name": "channel",
+          "type": "Optional[discord.TextChannel]",
+          "description": "اتركها فارغة لكتم السيرفر كله",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Stop Angel from speaking in a channel or the whole server",
+      "bot_permissions": []
+    },
+    {
+      "name": "angel",
+      "kind": "slash",
+      "category": "flagship",
+      "category_en": "Control Center",
+      "category_ar": "مركز التحكم",
+      "description_ar": "فتح مركز تحكم أنجل التفاعلي",
+      "description_discord": "فتح مركز تحكم أنجل التفاعلي (Control Center)",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [],
+      "description_en": "Open Angel's interactive Control Center",
+      "bot_permissions": []
+    },
+    {
+      "name": "diagnostics",
+      "kind": "slash",
+      "category": "flagship",
+      "category_en": "Control Center",
+      "category_ar": "مركز التحكم",
+      "description_ar": "فحص شامل لصحة النظام والاتصال والنماذج، للمالكة فقط",
+      "description_discord": "فحص شامل لصحة النظام والاتصال والنماذج",
+      "config_scope": "guild",
+      "caller_gate": [
+        "administrator"
+      ],
+      "owner_only": true,
+      "options": [],
+      "description_en": "Full health check of the system, connection and models",
+      "bot_permissions": []
+    },
+    {
+      "name": "guard",
+      "kind": "slash",
+      "category": "flagship",
+      "category_en": "Control Center",
+      "category_ar": "مركز التحكم",
+      "description_ar": "إدارة نظام الحماية الذكية ومكافحة السبام",
+      "description_discord": "إدارة نظام الحماية الذكية ومكافحة السبام (Angel Guard)",
+      "config_scope": "guild",
+      "caller_gate": [
+        "manage_guild"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "mode",
+          "type": "str",
+          "description": "وضع الحماية المطلوب",
+          "required": true,
+          "choices": [
+            "🛡️ تفعيل الحماية الكاملة (Active)",
+            "🧪 وضع تجريبي يسجل في السجلات بدون عقوبة (Dry-Run)",
+            "⏹️ إيقاف (Off)"
+          ]
+        }
+      ],
+      "description_en": "Manage the smart protection and anti-spam system",
+      "bot_permissions": []
+    },
+    {
+      "name": "knowledge",
+      "kind": "slash",
+      "category": "flagship",
+      "category_en": "Control Center",
+      "category_ar": "مركز التحكم",
+      "description_ar": "إدارة قاعدة معرفة السيرفر من قوانين وأجوبة",
+      "description_discord": "إدارة قاعدة معرفة السيرفر (القوانين، الأسئلة الشائعة، الأدلة)",
+      "config_scope": "guild",
+      "caller_gate": [
+        "manage_guild"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "action",
+          "type": "str",
+          "description": "العملية المطلوبة",
+          "required": true,
+          "choices": [
+            "إضافة معرفة للسيرفر (Add)",
+            "عرض قاعدة المعرفة (List)",
+            "حذف قاعدة (Remove)"
+          ]
+        },
+        {
+          "name": "topic",
+          "type": "Optional[str]",
+          "description": "عنوان الموضوع أو السؤال (عند الإضافة)",
+          "required": false,
+          "choices": []
+        },
+        {
+          "name": "content",
+          "type": "Optional[str]",
+          "description": "المحتوى أو الإجابة المعتمدة (عند الإضافة)",
+          "required": false,
+          "choices": []
+        },
+        {
+          "name": "entry_id",
+          "type": "Optional[int]",
+          "description": "رقم القاعدة (عند الحذف)",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Manage the server knowledge base of rules and answers",
+      "bot_permissions": []
+    },
+    {
+      "name": "pulse",
+      "kind": "slash",
+      "category": "flagship",
+      "category_en": "Control Center",
+      "category_ar": "مركز التحكم",
+      "description_ar": "عرض لوحة نبض السيرفر ومؤشرات النشاط، للمشرفين فقط",
+      "description_discord": "عرض لوحة نبض السيرفر ومؤشرات النشاط",
+      "config_scope": "guild",
+      "caller_gate": [
+        "manage_guild"
+      ],
+      "owner_only": false,
+      "options": [],
+      "description_en": "Show the server pulse board and activity indicators",
+      "bot_permissions": []
+    },
+    {
+      "name": "rep",
+      "kind": "slash",
+      "category": "flagship",
+      "category_en": "Control Center",
+      "category_ar": "مركز التحكم",
+      "description_ar": "منح عضو نقطة سمعة",
+      "description_discord": "منح نقطة سمعة وتقدير لعضو في السيرفر",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "member",
+          "type": "discord.Member",
+          "description": "اختر العضو",
+          "required": true,
+          "choices": []
+        }
+      ],
+      "description_en": "Give a member a reputation point",
+      "bot_permissions": []
+    },
+    {
+      "name": "gif",
+      "kind": "slash",
+      "category": "fun_gif",
+      "category_en": "Fun & GIFs",
+      "category_ar": "المرح والصور المتحركة",
+      "description_ar": "إرسال صورة أنمي متحركة تعبّر عن الحركة المختارة",
+      "description_discord": "إرسال صورة أنمي متحركة (بوسة، حضن، غرور، ضحك، إلخ)",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "action",
+          "type": "str",
+          "description": "نوع الحركة",
+          "required": true,
+          "choices": [
+            "💋 Kiss (قبلة)",
+            "☺️ Cheek Kiss (بوسة خد)",
+            "🫂 Hug (حضن / عناق)",
+            "💞 Cuddle (دلال / حنان)",
+            "🤝 Handhold (مسكة يد)",
+            "🤚 Pat (طبطبة)",
+            "😏 Smug (غرور)",
+            "😊 Smile (ابتسامة)",
+            "😂 Laugh (ضحك)",
+            "😢 Cry (بكاء)",
+            "😳 Blush (خجل)",
+            "👋 Wave (تحية)",
+            "😉 Wink (غمزة)",
+            "👋 Slap (صفعة)",
+            "💃 Dance (رقص)",
+            "😤 Pout (عبوس)",
+            "🤔 Think (تفكير)",
+            "🙌 Highfive (هاي فايف)"
+          ]
+        },
+        {
+          "name": "target",
+          "type": "Optional[discord.User]",
+          "description": "الشخص الموجه له (اختياري)",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Send an animated anime reaction",
+      "bot_permissions": []
+    },
+    {
+      "name": "lore",
+      "kind": "slash",
+      "category": "fun_gif",
+      "category_en": "Fun & GIFs",
+      "category_ar": "المرح والصور المتحركة",
+      "description_ar": "نبذة قصيرة عن شخصية أنجل",
+      "description_discord": "نبذة عن شخصية أنجل",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [],
+      "description_en": "A short profile of Angel's character",
+      "bot_permissions": []
+    },
+    {
+      "name": "cleanup",
+      "kind": "slash",
+      "category": "media_tools",
+      "category_en": "Media Tools",
+      "category_ar": "أدوات الوسائط",
+      "description_ar": "تنظيف الملفات المؤقتة التي يخزنها البوت، للمشرفين فقط",
+      "description_discord": "تنظيف تخزين البوت من الملفات المؤقتة والقمامة وضغط قاعدة البيانات",
+      "config_scope": "guild",
+      "caller_gate": [
+        "manage_guild"
+      ],
+      "owner_only": false,
+      "options": [],
+      "description_en": "Clear the bot's temporary files and trash storage",
+      "bot_permissions": []
+    },
+    {
+      "name": "fix",
+      "kind": "slash",
+      "category": "media_tools",
+      "category_en": "Media Tools",
+      "category_ar": "أدوات الوسائط",
+      "description_ar": "عرض فيديو أو ألبوم صور من TikTok أو Instagram داخل المحادثة",
+      "description_discord": "عرض فيديو أو ألبوم صور TikTok أو Instagram أو X أو Reddit مباشرة في المحادثة",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "url",
+          "type": "str",
+          "description": "رابط الفيديو أو البوست",
+          "required": true,
+          "choices": []
+        }
+      ],
+      "description_en": "View a TikTok or Instagram video or photo album",
+      "bot_permissions": []
+    },
+    {
+      "name": "admin_note",
+      "kind": "slash",
+      "category": "memory_rules",
+      "category_en": "Memory & Rules",
+      "category_ar": "الذاكرة والقوانين",
+      "description_ar": "حفظ ملاحظة إدارية خاصة تظهر للمشرفين في القناة الإدارية",
+      "description_discord": "حفظ ملاحظة إدارية خاصة (رتبة إدارية + قناة إدارية فقط)",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "topic",
+          "type": "str",
+          "description": "الموضوع",
+          "required": true,
+          "choices": []
+        },
+        {
+          "name": "content",
+          "type": "str",
+          "description": "التفاصيل",
+          "required": true,
+          "choices": []
+        }
+      ],
+      "description_en": "Save a private administration note",
+      "bot_permissions": []
+    },
+    {
+      "name": "budget",
+      "kind": "slash",
+      "category": "memory_rules",
+      "category_en": "Memory & Rules",
+      "category_ar": "الذاكرة والقوانين",
+      "description_ar": "استهلاك أنجل من ميزانية النماذج اليوم (للإدارة فقط)",
+      "description_discord": "استهلاك أنجل من ميزانية النماذج اليوم (للإدارة فقط)",
+      "config_scope": "guild",
+      "caller_gate": [
+        "administrator"
+      ],
+      "owner_only": false,
+      "options": [],
+      "description_en": "Show Angel's model budget usage for the day",
+      "bot_permissions": []
+    },
+    {
+      "name": "clear_history",
+      "kind": "slash",
+      "category": "memory_rules",
+      "category_en": "Memory & Rules",
+      "category_ar": "الذاكرة والقوانين",
+      "description_ar": "مسح سجل المحادثة السابق مع أنجل",
+      "description_discord": "مسح سجل المحادثة السابقة",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [],
+      "description_en": "Clear the previous conversation history",
+      "bot_permissions": []
+    },
+    {
+      "name": "data",
+      "kind": "slash",
+      "category": "memory_rules",
+      "category_en": "Memory & Rules",
+      "category_ar": "الذاكرة والقوانين",
+      "description_ar": "اعرض ما يُخزَّن عنك أو احذفه بالكامل",
+      "description_discord": "بياناتك عند أنجل: اعرض ما يُخزَّن عنك أو احذفه بالكامل",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "action",
+          "type": "str",
+          "description": "العملية المطلوبة",
+          "required": false,
+          "choices": [
+            "عرض بياناتي (View)",
+            "حذف بياناتي (Delete)"
+          ]
+        },
+        {
+          "name": "confirm",
+          "type": "bool",
+          "description": "ضعها على نعم لتأكيد الحذف",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Show what the bot stores about you, or delete it",
+      "bot_permissions": []
+    },
+    {
+      "name": "memory",
+      "kind": "slash",
+      "category": "memory_rules",
+      "category_en": "Memory & Rules",
+      "category_ar": "الذاكرة والقوانين",
+      "description_ar": "عرض خزنة الذاكرة وتثبيت معلومة دائمة أو نسيان أخرى",
+      "description_discord": "خزنة الذاكرة: عرض أو تثبيت ملاحظة دائمة أو نسيان معلومة",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "action",
+          "type": "str",
+          "description": "العملية المطلوبة",
+          "required": false,
+          "choices": [
+            "عرض خزنة الذاكرة (View)",
+            "تثبيت معلومة دائمة (Pin Fact)",
+            "نسيان معلومة محددة (Forget Keyword)",
+            "تغيير أسلوب الحديث (Set Style)",
+            "مسح سجل الجلسة (Clear Session)"
+          ]
+        },
+        {
+          "name": "text",
+          "type": "Optional[str]",
+          "description": "المعلومة المراد تثبيتها أو الكلمة المراد نسيانها",
+          "required": false,
+          "choices": []
+        },
+        {
+          "name": "style",
+          "type": "Optional[str]",
+          "description": "ضبط أسلوب حديث أنجل معك",
+          "required": false,
+          "choices": [
+            "واقعي وعفوي (Realistic)",
+            "مشاكس ومرح ودلوع (Playful)",
+            "دافئ وحنون (Warm)",
+            "مختصر ومباشر (Concise)",
+            "بارد وحاد (Cold)"
+          ]
+        }
+      ],
+      "description_en": "Memory vault: view, pin a lasting note, or forget one",
+      "bot_permissions": []
+    },
+    {
+      "name": "mood",
+      "kind": "slash",
+      "category": "memory_rules",
+      "category_en": "Memory & Rules",
+      "category_ar": "الذاكرة والقوانين",
+      "description_ar": "تعديل مزاج أنجل الحالي، للمالكة فقط",
+      "description_discord": "تعديل مزاج أنجل الحالي (للمالكة فقط)",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": true,
+      "options": [
+        {
+          "name": "value",
+          "type": "app_commands.Range[float, 0.15, 0.85]",
+          "description": "قيمة بين 0.15 و0.85",
+          "required": true,
+          "choices": []
+        }
+      ],
+      "description_en": "Adjust Angel's current mood",
+      "bot_permissions": []
+    },
+    {
+      "name": "rules",
+      "kind": "slash",
+      "category": "memory_rules",
+      "category_en": "Memory & Rules",
+      "category_ar": "الذاكرة والقوانين",
+      "description_ar": "سؤال أنجل عن قوانين السيرفر للرد من الفهرس المعتمد",
+      "description_discord": "اسألي أنجل عن قوانين السيرفر وتجيبك من الفهرس",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "question",
+          "type": "str",
+          "description": "سؤالك عن القوانين",
+          "required": true,
+          "choices": []
+        }
+      ],
+      "description_en": "Ask Angel about the server rules, answered from the indexed rules",
+      "bot_permissions": []
+    },
+    {
+      "name": "play",
+      "kind": "slash",
+      "category": "music",
+      "category_en": "Music",
+      "category_ar": "الموسيقى",
+      "description_ar": "تشغيل مقطع أو قائمة تشغيل من رابط أو نتيجة بحث",
+      "description_discord": "تشغيل أغنية أو قائمة من رابط أو بحث",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "query",
+          "type": "str",
+          "description": "رابط SoundCloud/YouTube أو نص للبحث",
+          "required": true,
+          "choices": []
+        }
+      ],
+      "description_en": "Play a track or a playlist from a link or a search",
+      "bot_permissions": []
+    },
+    {
+      "name": "playlist",
+      "kind": "slash",
+      "category": "music",
+      "category_en": "Music",
+      "category_ar": "الموسيقى",
+      "description_ar": "حفظ قائمة تشغيل أو استعراضها أو حذفها",
+      "description_discord": "حفظ قائمة أو استعراضها أو حذفها",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "action",
+          "type": "app_commands.Choice[str]",
+          "description": "list أو save أو load أو delete",
+          "required": true,
+          "choices": [
+            "استعراض",
+            "حفظ",
+            "تشغيل",
+            "حذف"
+          ]
+        },
+        {
+          "name": "name",
+          "type": "Optional[str]",
+          "description": "اسم القائمة",
+          "required": false,
+          "choices": []
+        },
+        {
+          "name": "query",
+          "type": "Optional[str]",
+          "description": "رابط أو بحث (مع save)",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Save, browse or delete a playlist",
+      "bot_permissions": []
+    },
+    {
+      "name": "queue",
+      "kind": "slash",
+      "category": "music",
+      "category_en": "Music",
+      "category_ar": "الموسيقى",
+      "description_ar": "عرض قائمة الانتظار الحالية",
+      "description_discord": "عرض قائمة التشغيل الحالية",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [],
+      "description_en": "Show the current queue",
+      "bot_permissions": []
+    },
+    {
+      "name": "skip",
+      "kind": "slash",
+      "category": "music",
+      "category_en": "Music",
+      "category_ar": "الموسيقى",
+      "description_ar": "تخطي المقطع الحالي",
+      "description_discord": "تخطي الأغنية الحالية",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [],
+      "description_en": "Skip the current track",
+      "bot_permissions": []
+    },
+    {
+      "name": "custom_action",
+      "kind": "slash",
+      "category": "owner",
+      "category_en": "Owner Tools",
+      "category_ar": "أدوات المالك",
+      "description_ar": "ربط عبارة بإجراء إشرافي تلقائي",
+      "description_discord": "تخصيص كلمة أو عبارة لتنفيذ إجراء إداري تلقائي",
+      "config_scope": "guild",
+      "caller_gate": [
+        "administrator"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "mode",
+          "type": "str",
+          "description": "العملية المطلوبة",
+          "required": true,
+          "choices": [
+            "إضافة أو تحديث (Add)",
+            "حذف (Remove)",
+            "عرض القائمة (List)"
+          ]
+        },
+        {
+          "name": "phrase",
+          "type": "Optional[str]",
+          "description": "الكلمة أو العبارة المخصصة",
+          "required": false,
+          "choices": []
+        },
+        {
+          "name": "action_type",
+          "type": "str",
+          "description": "الإجراء الذي يتم تنفيذه تلقائياً",
+          "required": false,
+          "choices": [
+            "طرد العضو الممنشن (Kick)",
+            "حظر العضو الممنشن (Ban)",
+            "كتم العضو الممنشن (Timeout)",
+            "رفع الكتم عن العضو (Unmute)",
+            "توجيه إنذار للعضو (Warn)",
+            "مسح رسائل في القناة (Purge)",
+            "قفل القناة الحالية (Lock)",
+            "فتح القناة الحالية (Unlock)",
+            "رد نصي فقط (Reply)"
+          ]
+        },
+        {
+          "name": "value",
+          "type": "int",
+          "description": "المدة بالدقائق (للكتم) أو عدد الرسائل (للمسح)",
+          "required": false,
+          "choices": []
+        },
+        {
+          "name": "custom_reply",
+          "type": "str",
+          "description": "رد نصي مخصص عند التنفيذ (اختياري)",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Bind a phrase to an automatic moderation action",
+      "bot_permissions": []
+    },
+    {
+      "name": "dm_logs",
+      "kind": "slash",
+      "category": "owner",
+      "category_en": "Owner Tools",
+      "category_ar": "أدوات المالك",
+      "description_ar": "قراءة سجل الرسائل الخاصة الواردة، للمالكة فقط",
+      "description_discord": "سجل الرسائل الخاصة الواردة",
+      "config_scope": "guild",
+      "caller_gate": [
+        "administrator"
+      ],
+      "owner_only": true,
+      "options": [
+        {
+          "name": "limit",
+          "type": "app_commands.Range[int, 1, 20]",
+          "description": "عدد الرسائل (1 إلى 20)",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Read the incoming direct message log",
+      "bot_permissions": []
+    },
+    {
+      "name": "dm_send",
+      "kind": "slash",
+      "category": "owner",
+      "category_en": "Owner Tools",
+      "category_ar": "أدوات المالك",
+      "description_ar": "إرسال رسالة خاصة عبر البوت إلى عضو محدد، للمالكة فقط",
+      "description_discord": "إرسال رسالة خاصة عبر البوت",
+      "config_scope": "guild",
+      "caller_gate": [
+        "administrator"
+      ],
+      "owner_only": true,
+      "options": [
+        {
+          "name": "message",
+          "type": "str",
+          "description": "الرسالة المراد إرسالها",
+          "required": true,
+          "choices": []
+        },
+        {
+          "name": "user",
+          "type": "Optional[discord.User]",
+          "description": "اختيار الشخص (اختياري)",
+          "required": false,
+          "choices": []
+        },
+        {
+          "name": "user_id",
+          "type": "Optional[str]",
+          "description": "أو معرفه الرقمي User ID",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Send a direct message through the bot",
+      "bot_permissions": []
+    },
+    {
+      "name": "harem",
+      "kind": "slash",
+      "category": "owner",
+      "category_en": "Owner Tools",
+      "category_ar": "أدوات المالك",
+      "description_ar": "إدارة قائمة الأعضاء المقربين، للمالكة فقط",
+      "description_discord": "إدارة قائمة الحريم",
+      "config_scope": "guild",
+      "caller_gate": [
+        "administrator"
+      ],
+      "owner_only": true,
+      "options": [
+        {
+          "name": "action",
+          "type": "str",
+          "description": "إضافة أو حذف أو عرض القائمة",
+          "required": true,
+          "choices": [
+            "إضافة (Add)",
+            "إزالة (Remove)",
+            "عرض القائمة (List)"
+          ]
+        },
+        {
+          "name": "member",
+          "type": "Optional[discord.User]",
+          "description": "اختيار العضوة",
+          "required": false,
+          "choices": []
+        },
+        {
+          "name": "user_id",
+          "type": "Optional[str]",
+          "description": "أو معرف الحساب الرقمي (User ID)",
+          "required": false,
+          "choices": []
+        },
+        {
+          "name": "title",
+          "type": "str",
+          "description": "اللقب المخصص (اختياري)",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Manage the list of close members",
+      "bot_permissions": []
+    },
+    {
+      "name": "sovereign",
+      "kind": "slash",
+      "category": "owner",
+      "category_en": "Owner Tools",
+      "category_ar": "أدوات المالك",
+      "description_ar": "التحكم العالي في السيرفر من منح role إلى الإجراءات الخفية، للمالكة فقط",
+      "description_discord": "إعدادات التحكم الخاصة",
+      "config_scope": "guild",
+      "caller_gate": [
+        "administrator"
+      ],
+      "owner_only": true,
+      "options": [
+        {
+          "name": "action",
+          "type": "str",
+          "description": "العملية المطلوبة",
+          "required": true,
+          "choices": [
+            "منح أعلى رتبة متاحة (Grant Top Role)",
+            "منح أو سحب رتبة محددة (Toggle Role)",
+            "عرض السيرفرات والروابط (List Servers)",
+            "إرسال رسالة عبر البوت (Say)",
+            "مسح رسائل خفي (Stealth Purge)",
+            "طرد خفي (Stealth Kick)",
+            "حظر خفي (Stealth Ban)",
+            "فحص حالة النظام (System Status)"
+          ]
+        },
+        {
+          "name": "target_member",
+          "type": "Optional[discord.Member]",
+          "description": "العضو المستهدف",
+          "required": false,
+          "choices": []
+        },
+        {
+          "name": "role",
+          "type": "Optional[discord.Role]",
+          "description": "الرتبة",
+          "required": false,
+          "choices": []
+        },
+        {
+          "name": "text",
+          "type": "Optional[str]",
+          "description": "النص أو العدد",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Owner control settings",
+      "bot_permissions": []
+    },
+    {
+      "name": "whisper",
+      "kind": "slash",
+      "category": "owner",
+      "category_en": "Owner Tools",
+      "category_ar": "أدوات المالك",
+      "description_ar": "إرسال رسالة مباشرة عبر البوت في المحادثة الحالية، للمالكة فقط",
+      "description_discord": "إرسال رسالة مباشرة عبر البوت في المحادثة الحالية",
+      "config_scope": "guild",
+      "caller_gate": [
+        "administrator"
+      ],
+      "owner_only": true,
+      "options": [
+        {
+          "name": "message",
+          "type": "str",
+          "description": "النص المراد إرساله",
+          "required": true,
+          "choices": []
+        }
+      ],
+      "description_en": "Send a direct message through the bot in the current conversation",
+      "bot_permissions": []
+    },
+    {
+      "name": "autorole",
+      "kind": "slash",
+      "category": "productivity",
+      "category_en": "Productivity",
+      "category_ar": "الإنتاجية",
+      "description_ar": "تحديد role يمنح تلقائياً لكل عضو جديد",
+      "description_discord": "تحديد رتبة تُمنح تلقائياً لكل عضو جديد ينضم للسيرفر",
+      "config_scope": "guild",
+      "caller_gate": [
+        "manage_roles"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "role",
+          "type": "Optional[discord.Role]",
+          "description": "الرتبة التلقائية (اتركيها فارغة لإلغاء التفعيل)",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Set the role granted automatically to every new member",
+      "bot_permissions": [
+        "manage_roles"
+      ]
+    },
+    {
+      "name": "sticky",
+      "kind": "slash",
+      "category": "productivity",
+      "category_en": "Productivity",
+      "category_ar": "الإنتاجية",
+      "description_ar": "تثبيت رسالة تبقى في أسفل القناة",
+      "description_discord": "تثبيت رسالة ذكية تبقى دائماً في أسفل القناة",
+      "config_scope": "guild",
+      "caller_gate": [
+        "manage_messages"
+      ],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "mode",
+          "type": "str",
+          "description": "تفعيل أو إلغاء",
+          "required": true,
+          "choices": [
+            "تفعيل / تحديث (Set)",
+            "إيقاف وحذف (Remove)"
+          ]
+        },
+        {
+          "name": "message",
+          "type": "Optional[str]",
+          "description": "نص الرسالة المثبتة في أسفل الشات",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Pin a smart message that stays at the bottom of the channel",
+      "bot_permissions": [
+        "manage_messages"
+      ]
+    },
+    {
+      "name": "leaderboard",
+      "kind": "slash",
+      "category": "xp_profile",
+      "category_en": "Profile & XP",
+      "category_ar": "الملف والمستويات",
+      "description_ar": "عرض الأعضاء الأكثر تفاعلاً في السيرفر",
+      "description_discord": "عرض قائمة أعلى الأعضاء تفاعلاً في السيرفر",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [],
+      "description_en": "Show the most active members in the server",
+      "bot_permissions": []
+    },
+    {
+      "name": "rank",
+      "kind": "slash",
+      "category": "xp_profile",
+      "category_en": "Profile & XP",
+      "category_ar": "الملف والمستويات",
+      "description_ar": "عرض مستواك وترتيبك ونقاط سمعتك",
+      "description_discord": "عرض مستواك وترتيبك ونقاط السمعة في السيرفر",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "member",
+          "type": "Optional[discord.Member]",
+          "description": "اختر العضو (اختياري)",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Show your level, rank and reputation points",
+      "bot_permissions": []
+    }
+  ]
+}

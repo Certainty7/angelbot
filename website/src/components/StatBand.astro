@@ -1,0 +1,29 @@
+---
+import { ui, type Lang } from '../i18n/ui';
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+
+const items = [
+  { value: 69, label: lang === 'ar' ? 'أمرًا مسجّلًا' : 'registered commands' },
+  { value: 13, label: lang === 'ar' ? 'فئة أوامر' : 'command categories' },
+  { value: 14, label: lang === 'ar' ? 'منصة وسائط' : 'media platforms' },
+  { value: 0, label: lang === 'ar' ? 'أداة تتبّع' : 'trackers' },
+];
+---
+
+<section class="stat-band" aria-label={lang === 'ar' ? 'أرقام مقيسة' : 'Measured numbers'} data-reveal>
+  <dl class="stat-band__grid">
+    {items.map((item) => (
+      <div class="stat-band__item">
+        <dt class="stat-band__label">{item.label}</dt>
+        <dd class="stat-band__value" data-count={item.value}>
+          {item.value}
+        </dd>
+      </div>
+    ))}
+  </dl>
+</section>

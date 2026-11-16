@@ -1,0 +1,100 @@
+{
+  "application_id": "1559932443102941284",
+  "application_name": "Angel",
+  "scope": [
+    "bot",
+    "applications.commands"
+  ],
+  "permission_names": [
+    "view_channel",
+    "send_messages",
+    "embed_links",
+    "attach_files",
+    "add_reactions",
+    "read_message_history",
+    "manage_messages",
+    "manage_roles",
+    "manage_channels",
+    "manage_nicknames",
+    "kick_members",
+    "ban_members",
+    "moderate_members",
+    "mention_everyone",
+    "connect",
+    "speak"
+  ],
+  "permissions_value": 1099917683798,
+  "invite_url": "https://discord.com/oauth2/authorize?client_id=1559932443102941284&permissions=1099917683798&scope=bot%20applications.commands",
+  "permissions": [
+    {
+      "permission": "view_channel",
+      "why": "Read the channel it replies in"
+    },
+    {
+      "permission": "send_messages",
+      "why": "Post replies, embeds and panels"
+    },
+    {
+      "permission": "embed_links",
+      "why": "Rich embeds are the primary reply format"
+    },
+    {
+      "permission": "attach_files",
+      "why": "GIF, image and media replies attach files"
+    },
+    {
+      "permission": "add_reactions",
+      "why": "Poll and giveaway options are reactions"
+    },
+    {
+      "permission": "read_message_history",
+      "why": "Summaries and rule indexing page channel history"
+    },
+    {
+      "permission": "manage_messages",
+      "why": "/purge and message deletion in the control paths"
+    },
+    {
+      "permission": "manage_roles",
+      "why": "Grant, revoke and create roles (autorole, reaction roles)"
+    },
+    {
+      "permission": "manage_channels",
+      "why": "Slowmode, lock/unlock and channel creation"
+    },
+    {
+      "permission": "manage_nicknames",
+      "why": "Nickname changes requested by members"
+    },
+    {
+      "permission": "kick_members",
+      "why": "/kick"
+    },
+    {
+      "permission": "ban_members",
+      "why": "/ban and /softban"
+    },
+    {
+      "permission": "moderate_members",
+      "why": "Timeouts (/timeout, /untimeout)"
+    },
+    {
+      "permission": "mention_everyone",
+      "why": "/announce with ping_everyone"
+    },
+    {
+      "permission": "connect",
+      "why": "Join a voice channel for music"
+    },
+    {
+      "permission": "speak",
+      "why": "Play the resolved track"
+    }
+  ],
+  "notes": [
+    "Every permission below is required by a code path that runs as the bot itself.",
+    "administrator appears in the source only as a gate on who may use a command (app_commands.default_permissions), never as something the bot needs; it is deliberately absent here.",
+    "manage_guild and other member-facing gates in the same decorators do not require a bot permission: Discord checks them against the invoking member.",
+    "No permission is added for a feature that is switched off; music ships behind MUSIC_ENABLED and is included because the implementation is live."
+  ]
+}

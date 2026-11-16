@@ -1,0 +1,18 @@
+---
+import Base from '../../layouts/Base.astro';
+import { href, ui } from '../../i18n/ui';
+---
+<Base lang="en" title="Page not found — Angel" description="The requested page does not exist on the Angel website." slug="404" noindex canonicalPath="/en/404/" switchTo="/404">
+  <section class="not-found container">
+    <p class="not-found__code">404</p>
+    <h1 class="not-found__title">This page does not exist.</h1>
+    <p class="not-found__body">
+      The link you opened is gone or never existed. From here you can go back to the start or read the commands.
+    </p>
+    <div class="not-found__actions">
+      <a class="btn btn--primary" href={href('en')}>{ui.home.en}</a>
+      <a class="btn btn--secondary" href={href('en', 'commands')}>{ui.browse.en}</a>
+      <a class="btn btn--secondary" href={href('ar')} lang="ar" hreflang="ar">العربية</a>
+    </div>
+  </section>
+</Base>

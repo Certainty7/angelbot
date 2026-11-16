@@ -1,0 +1,18 @@
+---
+import type { PageDef } from '../i18n/content';
+import type { Lang } from '../i18n/ui';
+
+interface Props {
+  page: PageDef;
+  lang: Lang;
+}
+
+const { page, lang } = Astro.props;
+---
+<header class="page-head">
+  <div class="container page-head__inner">
+    <p class={`eyebrow${lang === 'ar' ? ' eyebrow--ar' : ''}`}>{page.eyebrow[lang]}</p>
+    <h1 class="page-head__title">{page.h1[lang]}</h1>
+    <p class="page-head__lede">{page.description[lang]}</p>
+  </div>
+</header>

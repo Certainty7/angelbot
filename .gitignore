@@ -1,0 +1,29 @@
+.env
+venv/
+__pycache__/
+*.db
+*.db-shm
+*.db-wal
+backups/
+*.pyc
+tools/metrics.log
+cookies.txt
+stage/
+.env.bak.*
+.env.batch
+
+# website toolchain (build output is never committed; Cloudflare Pages builds it)
+node_modules/
+website/node_modules/
+website/dist/
+website/.astro/
+website/playwright-report/
+website/test-results/
+tests/website/test-results/
+tests/website/playwright-report/
+docs/QA/lighthouse/*.html
+
+# crash dumps and local bundles never belong in the repo
+core
+core.*
+*.bundle

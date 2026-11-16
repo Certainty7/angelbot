@@ -1,0 +1,18 @@
+{
+  "case": "x_video",
+  "url": "https://twitter.com/gallery_fixture/status/1700000000000000003",
+  "responses": {
+    "https://api.fxtwitter.com/gallery_fixture/status/1700000000000000003": {
+      "file": "x_video.api.json"
+    }
+  },
+  "expect": {
+    "slides": [
+      {
+        "url": "https://video.twimg.com/fixture_720.mp4",
+        "name": "video.mp4"
+      }
+    ],
+    "fallback": null
+  }
+}

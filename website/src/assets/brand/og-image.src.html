@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>Angel — social share card (source)</title>
+<!--
+  Source for og-image.png (1200x630). Re-render with:
+    chrome --headless=new --no-sandbox --disable-gpu --hide-scrollbars \
+      --window-size=1200,630 --screenshot=og-image.png og-image.src.html
+  Fonts are the self-hosted subset beside this file (../fonts/). This HTML is a
+  build artifact source, not a page the site ships.
+-->
+<style>
+  @font-face { font-family: "Amiri"; font-weight: 700; font-display: block;
+    src: url("../fonts/amiri-700.woff2") format("woff2"); }
+  @font-face { font-family: "Cormorant Garamond"; font-weight: 600; font-display: block;
+    src: url("../fonts/cormorant-garamond-600.woff2") format("woff2"); }
+  @font-face { font-family: "Plex Arabic"; font-weight: 400; font-display: block;
+    src: url("../fonts/plex-sans-arabic-400.woff2") format("woff2"); }
+  @font-face { font-family: "Plex Arabic"; font-weight: 600; font-display: block;
+    src: url("../fonts/plex-sans-arabic-600.woff2") format("woff2"); }
+  @font-face { font-family: "Plex Sans"; font-weight: 400; font-display: block;
+    src: url("../fonts/plex-sans-400.woff2") format("woff2"); }
+
+  :root {
+    --pearl: #FDFBFA;
+    --ivory: #F5EEE7;
+    --blush: #F1DFDC;
+    --quartz: #E4C2C6;
+    --rose: #8A2E45;
+    --ink: #221A1B;
+    --ink-2: #4A3C3E;
+    --ink-3: #6E5C5F;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    background:
+      radial-gradient(760px 520px at 6% 106%, rgba(228, 194, 198, .58) 0%, rgba(241, 223, 220, 0) 62%),
+      radial-gradient(520px 420px at 96% -12%, rgba(241, 223, 220, .55) 0%, rgba(241, 223, 220, 0) 60%),
+      linear-gradient(178deg, #FDFBFA 0%, #FAF6F3 58%, #F7F1EA 100%);
+    font-family: "Plex Arabic", system-ui, sans-serif;
+    color: var(--ink);
+    position: relative;
+  }
+
+  /* inset hairline frame — the only "chrome" on the card */
+  .frame {
+    position: absolute; inset: 26px;
+    border: 1px solid rgba(138, 46, 69, .16);
+    border-radius: 10px;
+  }
+  .frame::after {
+    content: ""; position: absolute; inset: 7px;
+    border: 1px solid rgba(138, 46, 69, .07);
+    border-radius: 5px;
+  }
+
+  /* ---- left: the aperture ---------------------------------------------- */
+  .lens { position: absolute; left: 74px; top: 50%; transform: translateY(-50%);
+          width: 430px; height: 430px; }
+  .lens span {
+    position: absolute; border-radius: 50%;
+    border: 1px solid rgba(138, 46, 69, .18);
+  }
+  .lens .r1 { inset: 0; }
+  .lens .r2 { inset: 46px; border-color: rgba(138, 46, 69, .12); }
+  .lens .r3 { inset: 92px; border-color: rgba(138, 46, 69, .30); }
+  .lens .bloom {
+    position: absolute; inset: 92px; border-radius: 50%;
+    background: radial-gradient(circle at 34% 28%,
+                rgba(255, 255, 255, .95) 0%, rgba(241, 223, 220, .85) 46%,
+                rgba(228, 194, 198, .62) 100%);
+    border: none;
+  }
+  .lens .specular {
+    position: absolute; inset: 92px; border-radius: 50%;
+    background: radial-gradient(circle at 66% 18%,
+                rgba(255, 255, 255, .95) 0%, rgba(255, 255, 255, 0) 34%);
+    border: none;
+  }
+  .lens img.mark { position: absolute; width: 150px; height: 150px;
+                   left: 140px; top: 140px; }
+
+  /* ---- right: the signature block -------------------------------------- */
+  .col { position: absolute; right: 96px; top: 118px; width: 636px; text-align: right; }
+
+  .word-ar {
+    font-family: "Amiri", serif; font-weight: 700;
+    font-size: 148px; line-height: 1.02; color: var(--ink);
+    margin-inline-start: -6px;   /* optical: tuck the alef */
+  }
+  .word-en {
+    font-family: "Cormorant Garamond", serif; font-weight: 600;
+    font-size: 25px; letter-spacing: .42em; text-transform: uppercase;
+    color: var(--rose); margin-top: 24px;
+    padding-inline-start: .42em; /* compensate trailing tracking */
+  }
+  .rule { width: calc(100% - 128px); height: 1px; margin: 24px 0 22px;
+          background: linear-gradient(to left, rgba(138,46,69,.34), rgba(138,46,69,0)); }
+
+  .lede { font-weight: 400; font-size: 31px; line-height: 1.62; color: var(--ink-2); }
+  .lede b { font-weight: 600; color: var(--ink); }
+
+  .foot {
+    position: absolute; right: 96px; bottom: 62px;
+    display: flex; align-items: center; gap: 14px;
+    font-family: "Plex Sans", sans-serif; font-size: 12px;
+    letter-spacing: .17em; text-transform: uppercase; color: var(--ink-3);
+  }
+  .foot i { display: block; width: 44px; height: 1px; background: rgba(138,46,69,.34); font-style: normal; }
+</style>
+</head>
+<body>
+  <div class="frame"></div>
+
+  <div class="lens" aria-hidden="true">
+    <span class="r1"></span><span class="r2"></span>
+    <span class="bloom"></span><span class="specular"></span>
+    <span class="r3"></span>
+    <img class="mark" src="angel-mark.svg" alt="">
+  </div>
+
+  <div class="col">
+    <div class="word-ar">أنجل</div>
+    <div class="word-en">Angel</div>
+    <div class="rule"></div>
+    <p class="lede"><b>بوت ديسكورد عربي</b> لسيرفرات المجتمع<br>
+       أرشيفٌ قابل للبحث، وإشرافٌ لا يُنفَّذ إلا بتأكيد.</p>
+  </div>
+
+  <div class="foot"><i></i><span>angel.aetherisnode.cloud</span></div>
+</body>
+</html>

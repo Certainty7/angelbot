@@ -1,0 +1,9 @@
+{
+  "case": "x_mobile",
+  "url": "https://mobile.twitter.com/gallery_fixture/status/1700000000000000002",
+  "responses": {},
+  "expect": {
+    "slides": [],
+    "fallback": "https://fxtwitter.com/gallery_fixture/status/1700000000000000002"
+  }
+}

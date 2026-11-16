@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "entries": [
+    {
+      "date": "2026-11-15",
+      "subject": "Bilingual Arabic/English website with a command explorer and a privacy page"
+    },
+    {
+      "date": "2026-11-15",
+      "subject": "Privacy controls: /data shows and deletes what the bot stores about you"
+    },
+    {
+      "date": "2026-11-14",
+      "subject": "Media resolver for TikTok, Instagram, X and Reddit links"
+    },
+    {
+      "date": "2026-11-13",
+      "subject": "Guarded moderation: permission re-checks and confirmation for model-proposed actions"
+    },
+    {
+      "date": "2026-11-12",
+      "subject": "Memory: /memory pin, /memory forget and a searchable server archive"
+    },
+    {
+      "date": "2026-11-11",
+      "subject": "Music playback: /play, /skip, /queue and /playlist"
+    }
+  ]
+}

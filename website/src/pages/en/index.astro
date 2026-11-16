@@ -1,0 +1,14 @@
+---
+import Base from '../../layouts/Base.astro';
+import Hero from '../../components/Hero.astro';
+import Blocks from '../../components/Blocks.astro';
+import StatBand from '../../components/StatBand.astro';
+import { home } from '../../i18n/content';
+---
+<Base lang="en" title={home.title.en} description={home.description.en} slug="">
+  <Hero lang="en" />
+  <StatBand lang="en" />
+  <div class="container page-body">
+    <Blocks blocks={home.blocks} lang="en" />
+  </div>
+</Base>

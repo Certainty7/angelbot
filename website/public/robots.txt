@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://angel.aetherisnode.cloud/sitemap-index.xml

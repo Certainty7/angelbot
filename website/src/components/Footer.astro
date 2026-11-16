@@ -1,0 +1,60 @@
+---
+import { nav, ui, href, site, type Lang } from '../i18n/ui';
+import invite from '../data/invite.json';
+import markMono from '../assets/brand/angel-mark-mono.svg?raw';
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+const year = new Date().getFullYear();
+const product = nav.slice(0, 4);
+const trust = nav.slice(4);
+---
+<footer class="site-footer">
+  <div class="container">
+    <div class="site-footer__grid">
+      <div class="site-footer__brand">
+        <span class="site-footer__mark" aria-hidden="true" set:html={markMono} />
+        <p class="site-footer__name">{site.name[lang]}</p>
+        <p class="site-footer__tagline">{site.tagline[lang]}</p>
+        <a class="btn btn--primary btn--sm" href={invite.invite_url}>{ui.inviteShort[lang]}</a>
+      </div>
+
+      <nav class="site-footer__col" aria-label={ui.footerProduct[lang]}>
+        <h2 class="site-footer__heading">{ui.footerProduct[lang]}</h2>
+        <ul role="list">
+          {product.map((item) => (
+            <li><a href={href(lang, item.slug)}>{item.label[lang]}</a></li>
+          ))}
+        </ul>
+      </nav>
+
+      <nav class="site-footer__col" aria-label={ui.footerTrust[lang]}>
+        <h2 class="site-footer__heading">{ui.footerTrust[lang]}</h2>
+        <ul role="list">
+          {trust.map((item) => (
+            <li><a href={href(lang, item.slug)}>{item.label[lang]}</a></li>
+          ))}
+          <li><a href={href(lang, 'privacy')}>{ui.footerPrivacy[lang]}</a></li>
+          <li><a href={href(lang, 'changelog')}>{ui.footerChangelog[lang]}</a></li>
+        </ul>
+      </nav>
+
+      <div class="site-footer__col">
+        <h2 class="site-footer__heading">{ui.footerRepo[lang]}</h2>
+        <ul role="list">
+          <li><a href={site.repository} rel="noopener">Certainty7/angelbot</a></li>
+          <li><a href={invite.invite_url}>{ui.inviteShort[lang]}</a></li>
+          <li><a href={href(lang === 'ar' ? 'en' : 'ar')} lang={lang === 'ar' ? 'en' : 'ar'} hreflang={lang === 'ar' ? 'en' : 'ar'}>{ui.language[lang]}</a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="site-footer__bottom">
+      <p>© {year} {ui.copyright[lang]}</p>
+      <p>{ui.footerNote[lang]}</p>
+    </div>
+  </div>
+</footer>

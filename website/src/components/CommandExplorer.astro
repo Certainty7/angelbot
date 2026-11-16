@@ -1,0 +1,116 @@
+---
+import commands from '../data/commands.json';
+import { ui, type Lang } from '../i18n/ui';
+import CommandRow from './CommandRow.astro';
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+const perCategory = commands.totals.per_category as Record<string, number>;
+
+// Category order follows the first command that uses it, so the filter row is stable.
+const categories = [
+  ...new Map(
+    commands.commands.map((command) => [
+      command.category,
+      { key: command.category, ar: command.category_ar, en: command.category_en, count: perCategory[command.category] ?? 0 },
+    ]),
+  ).values(),
+];
+
+const total = commands.totals.all;
+const categoryCount = categories.length;
+const ownerCommands = commands.commands.filter((command) => command.owner_only);
+const publicCommands = commands.commands.filter((command) => !command.owner_only);
+// The owner count is part of the headline sentence, not a footnote: a catalogue that hides ten
+// registered commands repeats the drift this generator exists to prevent.
+const heading =
+  lang === 'ar'
+    ? `${total} أمرًا في ${categoryCount} فئة — منها ${ownerCommands.length} لأدوات المالكة`
+    : `${total} commands in ${categoryCount} categories — including ${ownerCommands.length} owner tools`;
+const meta =
+  lang === 'ar'
+    ? `${commands.totals.slash} أمر سلاش · ${commands.totals.context_menu} قوائم سياق`
+    : `${commands.totals.slash} slash · ${commands.totals.context_menu} context menus`;
+
+const searchBlob = (command: (typeof commands.commands)[number]): string =>
+  [
+    command.name,
+    command.description_ar,
+    command.description_en,
+    command.category_ar,
+    command.category_en,
+    command.kind,
+    ...command.bot_permissions,
+    ...command.options.map((option) => `${option.name} ${option.description ?? ''}`),
+  ]
+    .filter(Boolean)
+    .join(' ');
+---
+<div class="explorer" data-explorer data-label-copy={ui.copy[lang]} data-label-copied={ui.copied[lang]}>
+  <h2 class="block-heading" id="catalogue">
+    <span class="block-heading__text">{heading}</span>
+  </h2>
+  <p class="explorer__meta">{meta}</p>
+
+  <div class="explorer__controls">
+    <div class="field">
+      <label class="field__label" for="cmd-search">{ui.search[lang]}</label>
+      <div class="field__box">
+        <svg class="field__icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+          <circle cx="11" cy="11" r="6.5" />
+          <path d="m16 16 4.5 4.5" />
+        </svg>
+        <input
+          id="cmd-search"
+          type="search"
+          placeholder={ui.searchPlaceholder[lang]}
+          autocomplete="off"
+          spellcheck="false"
+          data-command-search
+        />
+      </div>
+    </div>
+    <p class="explorer__count" role="status" aria-live="polite">
+      <span data-visible>{total}</span> / {total}
+    </p>
+  </div>
+
+  <div class="explorer__filters" role="group" aria-label={ui.filterLabel[lang]}>
+    <button type="button" class="chip" data-cat="" aria-pressed="true">
+      {ui.all[lang]} <span class="num">{total}</span>
+    </button>
+    {categories.map((category) => (
+      <button type="button" class="chip" data-cat={category.key} aria-pressed="false">
+        {category[lang]} <span class="num">{category.count}</span>
+      </button>
+    ))}
+    <button type="button" class="chip" data-cat="__owner__" aria-pressed="false">
+      {ui.ownerSection[lang]} <span class="num">{ownerCommands.length}</span>
+    </button>
+  </div>
+
+  <ul class="cmd-list" role="list">
+    {publicCommands.map((command) => <CommandRow command={command} lang={lang} />)}
+  </ul>
+
+  <details class="owner-group" data-owner-group>
+    <summary class="owner-group__summary">
+      <span class="owner-group__title">{ui.ownerSection[lang]}</span>
+      <span class="num">{ownerCommands.length}</span>
+    </summary>
+    <p class="owner-group__body">{ui.ownerSectionNote[lang]}</p>
+    <ul class="cmd-list" role="list">
+      {ownerCommands.map((command) => <CommandRow command={command} lang={lang} showPermissions={false} />)}
+    </ul>
+  </details>
+
+  <p class="explorer__empty" data-empty hidden>{ui.noResults[lang]}</p>
+
+  <script>
+    import { initCommands } from '../scripts/commands';
+    initCommands();
+  </script>
+</div>

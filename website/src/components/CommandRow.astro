@@ -1,0 +1,98 @@
+---
+/**
+ * One catalogue row. Extracted so the main list and the owner section cannot drift: the only
+ * difference between them is whether the permission chips are drawn.
+ *
+ * Owner commands are gated by `is_mistress` inside the handler, and the `administrator` value they
+ * also carry is a gate on the *invoking member*, not a permission the bot asks for in its invite.
+ * Printing it next to `kick_members` and the rest would imply the opposite of what the permissions
+ * page explains, so `showPermissions` is false for that section.
+ */
+import type { Lang } from '../i18n/ui';
+import { ui } from '../i18n/ui';
+
+interface Props {
+  command: {
+    name: string;
+    kind: string;
+    category: string;
+    description_ar: string;
+    description_en: string;
+    owner_only: boolean;
+    caller_gate: string[];
+    bot_permissions: string[];
+    options: { name: string; type: string; description: string | null; required: boolean }[];
+  };
+  lang: Lang;
+  showPermissions?: boolean;
+}
+
+const { command, lang, showPermissions = true } = Astro.props;
+
+// The editorial Arabic copy ends with «، للمالكة فقط» for these ten commands, and the badge below
+// says the same thing. Strip the sentence, keep the badge: one statement, not two.
+const description =
+  lang === 'ar'
+    ? command.description_ar.replace(/[،,]\s*للمالكة فقط\s*$/u, '')
+    : command.description_en;
+---
+
+<li class="cmd" data-command data-category={command.category} data-owner={command.owner_only ? 'true' : undefined} data-search={[
+  command.name,
+  command.description_ar,
+  command.description_en,
+  command.kind,
+  ...command.bot_permissions,
+  ...command.options.map((option) => `${option.name} ${option.description ?? ''}`),
+].filter(Boolean).join(' ')}>
+  <details class="cmd__details">
+    <summary class="cmd__summary">
+      <span class="cmd__head">
+        {command.kind === 'slash' ? (
+          <code class="cmd__name" dir="ltr">/{command.name}</code>
+        ) : (
+          <span class="cmd__name cmd__name--menu">{command.name}</span>
+        )}
+        <span class="cmd__desc">{description}</span>
+      </span>
+      <span class="cmd__badges">
+        {command.kind === 'context_menu' && <span class="badge badge--kind">{ui.contextMenu[lang]}</span>}
+        {command.owner_only && <span class="badge badge--owner">{ui.ownerOnly[lang]}</span>}
+        {showPermissions && command.bot_permissions.map((permission) => (
+          <span class="badge badge--perm" dir="ltr">{permission}</span>
+        ))}
+      </span>
+      <span class="cmd__chevron" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m8 10 4 4 4-4" />
+        </svg>
+      </span>
+    </summary>
+    <div class="cmd__body">
+      {command.options.length > 0 ? (
+        <>
+          <p class="cmd__body-title">{ui.optionsLabel[lang]}</p>
+          <dl class="cmd__options">
+            {command.options.map((option) => (
+              <div class="cmd__option">
+                <dt>
+                  <code dir="ltr">{option.name}</code>
+                  <span class="cmd__type" dir="ltr">{option.type}</span>
+                  <span class="badge">{option.required ? ui.required[lang] : ui.optional[lang]}</span>
+                </dt>
+                {lang === 'ar' && option.description && <dd>{option.description}</dd>}
+              </div>
+            ))}
+          </dl>
+        </>
+      ) : (
+        <p class="cmd__body-title">{ui.noOptions[lang]}</p>
+      )}
+    </div>
+  </details>
+  {command.kind === 'slash' && (
+    <button class="cmd__copy" type="button" data-copy={`/${command.name}`} aria-label={`${ui.copy[lang]} /${command.name}`}>
+      <span data-copy-label>{ui.copy[lang]}</span>
+    </button>
+  )}
+</li>

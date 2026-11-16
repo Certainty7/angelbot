@@ -1,0 +1,190 @@
+name: website
+
+# Website CI. A separate workflow from `.github/workflows/checks.yml` (the bot selftest, which is
+# the deploy gate for the running service), because:
+#
+#   * a website regression must not block a bot hotfix;
+#   * a bot-only commit must not spend Actions minutes on a Playwright run;
+#   * an unbuilt site must not turn a branch red — before `website/package.json` exists both jobs
+#     report success with an explicit notice and do nothing else.
+#
+# It is deliberately NOT a required check on `master` while the Astro scaffold is absent: a
+# required check that self-skips is a green light for every website commit too. `master` is absent
+# from the push trigger below for the same reason; add it in the commit that merges the site.
+#
+# The build entry point is the one Cloudflare Pages runs — `bash website/scripts/build.sh` — so CI
+# proves the Pages command instead of a parallel copy of it.
+# Contract for the implementer (WEB-4), inside `website/`: package.json with `build`, `typecheck`
+# and `test:e2e` scripts, and a committed package-lock.json.
+
+on:
+  # Branch work is covered by the pull_request event; pushing to a branch that already has an open
+  # PR used to run this workflow twice (push + pull_request), which spent Actions minutes for the
+  # same tree. `master` is added here because after the merge it is the only branch with no PR.
+  push:
+    branches: [master]
+    paths:
+      - "website/**"
+      - "tests/website/**"
+      - "tools/website-data-generator/**"
+      - "cogs/**"
+      - "angel/**"
+      - "bot.py"
+      - ".github/workflows/website.yml"
+  pull_request:
+    paths:
+      - "website/**"
+      - "tests/website/**"
+      - "tools/website-data-generator/**"
+      - "cogs/**"
+      - "angel/**"
+      - "bot.py"
+      - ".github/workflows/website.yml"
+  workflow_dispatch:
+
+# Least privilege: build and test only. Cloudflare Pages builds from the Git integration, so this
+# workflow holds no deploy token and never publishes anything.
+permissions:
+  contents: read
+
+concurrency:
+  group: website-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  catalogue:
+    name: catalogue from source
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # Pinned to immutable commit SHAs (tag in the trailing comment), same policy as checks.yml:
+      # a retagged release cannot silently change what runs here.
+      # actions/checkout v4.4.0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Detect generator
+        id: detect
+        run: |
+          if [ -f tools/website-data-generator/generate.py ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=catalogue::tools/website-data-generator/generate.py is absent - catalogue job skipped by design."
+          fi
+
+      # actions/setup-python v5.6.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        if: steps.detect.outputs.present == 'true'
+        with:
+          python-version: "3.12"
+
+      - name: Generate from the checked-out source
+        if: steps.detect.outputs.present == 'true'
+        run: python3 tools/website-data-generator/generate.py
+
+      # The committed JSON is the artifact that ships. If regenerating it from this commit changes
+      # a single byte, the committed data is stale and the site would publish yesterday's facts.
+      - name: "Gate: the committed catalogue matches the source"
+        if: steps.detect.outputs.present == 'true'
+        run: |
+          if ! git diff --exit-code -- website/src/data; then
+            echo "::error::website/src/data does not match the generator output for this commit. Regenerate and commit it."
+            exit 1
+          fi
+          echo "committed catalogue is identical to a fresh generation"
+
+      - name: "Gate: the generator reports the data fresh"
+        if: steps.detect.outputs.present == 'true'
+        run: python3 tools/website-data-generator/generate.py --check
+
+      # Independent oracle: the fixture census was captured by installing every cog against a stub
+      # command tree, so this checks registration rather than decorator text.
+      - name: Catalogue oracle tests
+        if: steps.detect.outputs.present == 'true'
+        run: python3 tests/website/test_command_catalog.py
+
+      # The published JSON carries command metadata only: a host path, an address or a
+      # credential-shaped string in build output is a leak, not a bug to triage later.
+      - name: "Gate: catalogue JSON is valid and free of host paths and credentials"
+        if: steps.detect.outputs.present == 'true'
+        run: |
+          for file in website/src/data/*.json; do
+            jq -e . "$file" > /dev/null
+          done
+          if grep -nE '(/home/[a-z]|/opt/|/root/|/srv/|[0-9]{1,3}(\.[0-9]{1,3}){3}|Bearer [A-Za-z0-9]|"[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{6}\.)' website/src/data/*.json; then
+            echo "::error::Generated catalogue contains a path, address or credential-shaped string. Fix the generator; do not rewrite the JSON."
+            exit 1
+          fi
+          echo "catalogue JSON valid, no host paths, addresses or credential shapes"
+
+  website:
+    name: build, type check, e2e
+    needs: catalogue
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      # actions/checkout v4.4.0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Detect website
+        id: detect
+        run: |
+          if [ -f website/package.json ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=website::website/package.json is absent - the Astro scaffold has not landed, so build, type check and e2e are skipped by design. The branch is not gated on an unbuilt site."
+          fi
+
+      # actions/setup-node v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        if: steps.detect.outputs.present == 'true' && hashFiles('website/package-lock.json') != ''
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      # Same runtime without the cache when no lockfile is committed yet, so `build.sh` fails with
+      # its own message (missing lockfile) instead of a caching error.
+      # actions/setup-node v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        if: steps.detect.outputs.present == 'true' && hashFiles('website/package-lock.json') == ''
+        with:
+          node-version: "22"
+
+      # The exact command Cloudflare Pages runs: generator, npm ci from the lockfile, astro build,
+      # then the publish-output guards (file count, asset size, private files).
+      - name: Build with the Pages entry point
+        if: steps.detect.outputs.present == 'true'
+        run: bash website/scripts/build.sh
+
+      - name: Type check with astro check
+        if: steps.detect.outputs.present == 'true'
+        working-directory: website
+        run: npm run typecheck
+
+      - name: Install Playwright chromium
+        if: steps.detect.outputs.present == 'true'
+        working-directory: website
+        run: npx playwright install --with-deps chromium
+
+      - name: End-to-end with playwright
+        if: steps.detect.outputs.present == 'true'
+        working-directory: website
+        run: npm run test:e2e
+
+      - name: Upload Playwright report on failure
+        if: failure() && steps.detect.outputs.present == 'true'
+        # actions/upload-artifact v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: playwright-report
+          path: |
+            website/playwright-report/
+            website/test-results/
+          if-no-files-found: ignore
+          retention-days: 7

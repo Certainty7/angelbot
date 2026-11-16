@@ -1,0 +1,46 @@
+---
+import { home } from '../i18n/content';
+import { ui, href, type Lang } from '../i18n/ui';
+import invite from '../data/invite.json';
+import markLight from '../assets/brand/angel-mark.svg?raw';
+import markDark from '../assets/brand/angel-mark-dark.svg?raw';
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+const lines = home.h1[lang].split(/(?<=[.،])\s+/);
+---
+<section class="hero" aria-labelledby="hero-title">
+  <div class="container hero__grid">
+    <div class="hero__col">
+      <p class="hero__eyebrow">{home.eyebrow[lang]}</p>
+      <h1 class="hero__title" id="hero-title">
+        {lines.map((line, index) => (
+          <span class="hero__line">{line}{index < lines.length - 1 ? ' ' : ''}</span>
+        ))}
+      </h1>
+      <hr class="hero__rule" />
+      <p class="hero__lede">{home.description[lang]}</p>
+      <div class="hero__actions">
+        <a class="btn btn--primary" href={invite.invite_url}>{ui.invite[lang]}</a>
+        <a class="btn btn--secondary" href={href(lang, 'commands')}>{ui.browse[lang]}</a>
+      </div>
+      <p class="hero__note">{ui.heroNote[lang]}</p>
+    </div>
+
+    <div class="hero__object" aria-hidden="true">
+      <div class="aperture">
+        <span class="ring ring--1"></span>
+        <span class="ring ring--2"></span>
+        <span class="ring ring--3"></span>
+        <span class="bloom"></span>
+        <span class="specular"></span>
+        <span class="mark mark--light" set:html={markLight} />
+        <span class="mark mark--dark" set:html={markDark} />
+        <span class="sheen"></span>
+      </div>
+    </div>
+  </div>
+</section>

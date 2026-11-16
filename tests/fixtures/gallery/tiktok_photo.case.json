@@ -1,0 +1,26 @@
+{
+  "case": "tiktok_photo",
+  "url": "https://www.tiktok.com/@gallery.creator/photo/7310000000000000002",
+  "responses": {
+    "https://www.tikwm.com/api/?url=https%3A//www.tiktok.com/%40gallery.creator/photo/7310000000000000002&hd=0": {
+      "file": "tiktok_photo.tikwm.json"
+    }
+  },
+  "expect": {
+    "slides": [
+      {
+        "name": "tiktok_1.jpg",
+        "url": "https://cdn.fixture.invalid/tiktok/photo_1.jpg"
+      },
+      {
+        "name": "tiktok_2.jpg",
+        "url": "https://cdn.fixture.invalid/tiktok/photo_2.jpg"
+      },
+      {
+        "name": "tiktok_3.jpg",
+        "url": "https://cdn.fixture.invalid/tiktok/photo_3.jpg"
+      }
+    ],
+    "fallback": null
+  }
+}

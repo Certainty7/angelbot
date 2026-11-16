@@ -1,0 +1,21 @@
+---
+import type { PageDef } from '../i18n/content';
+import { pages } from '../i18n/content';
+import Base from '../layouts/Base.astro';
+import PageHead from '../components/PageHead.astro';
+import Blocks from '../components/Blocks.astro';
+
+export function getStaticPaths() {
+  return pages
+    .filter((page) => page.slug !== '')
+    .map((page) => ({ params: { slug: page.slug }, props: { page } }));
+}
+
+const { page } = Astro.props as { page: PageDef };
+---
+<Base lang="ar" title={page.title.ar} description={page.description.ar} slug={page.slug}>
+  <PageHead page={page} lang="ar" />
+  <div class="container page-body">
+    <Blocks blocks={page.blocks} lang="ar" />
+  </div>
+</Base>

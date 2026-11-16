@@ -1,0 +1,359 @@
+/* ============================================================================
+   ANGEL — base layer
+   Fonts, reset, typographic primitives and the component seeds named in
+   docs/DESIGN_SYSTEM.md §9. Values come from tokens.css only.
+   Owner: Certina. Consumers: every page and component.
+   ========================================================================== */
+
+/* ------------------------------------------------------------------- fonts
+   The @font-face set lives in fonts.css (the four families are wired there);
+   this layer only consumes them through the tokens. Import order in Base.astro:
+   fonts.css → tokens.css → base.css → site.css. */
+
+/* ------------------------------------------------------------------- reset */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+html {
+  -webkit-text-size-adjust: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-block-start: calc(var(--header-h) + var(--space-6));
+  font-synthesis: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+body {
+  margin: 0;
+  min-block-size: 100dvh;
+  background: var(--surface-page);
+  color: var(--text-primary);
+  font-family: var(--font-ar-text);
+  font-size: var(--fs-body);
+  line-height: var(--lh-body-ar);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
+}
+/* English pages read tighter: same families, Latin metrics. */
+:where(html[lang="en"]) body {
+  font-family: var(--font-lat-text);
+  line-height: var(--lh-body);
+}
+h1,
+h2,
+h3,
+h4,
+p,
+figure,
+blockquote,
+dl,
+dd {
+  margin: 0;
+}
+ul[role="list"],
+ol[role="list"] {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+img,
+svg,
+video,
+canvas {
+  display: block;
+  max-inline-size: 100%;
+}
+img {
+  block-size: auto;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+button {
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+a {
+  color: inherit;
+  text-decoration-color: color-mix(in oklab, currentColor 45%, transparent);
+  text-underline-offset: 0.18em;
+  text-decoration-thickness: 1px;
+  transition: color var(--dur-fast) var(--ease-soft);
+}
+a:hover {
+  color: var(--text-accent);
+  text-decoration-color: currentColor;
+}
+::selection {
+  background: var(--blush-200);
+  color: var(--ink-900);
+}
+
+/* ------------------------------------------------------------------- focus
+   Two-tone, so a single ring survives on the ground and on the filled CTA. */
+/* The two focus tokens carry a `solid` shorthand, which is invalid inside
+   box-shadow; the ring is therefore built from the palette directly (the earlier
+   site.css had to override this — the fix belongs here, at the source). */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 var(--focus-offset) var(--surface-page),
+    0 0 0 calc(var(--focus-offset) + 2px) var(--rose-600);
+  border-radius: var(--radius-sm);
+}
+
+/* -------------------------------------------------------------- typography */
+h1,
+h2,
+h3 {
+  font-family: var(--font-ar-display);
+  font-weight: 700;
+  line-height: var(--lh-heading-ar);
+  color: var(--text-primary);
+  text-wrap: balance;
+}
+:where(html[lang="en"]) :is(h1, h2, h3) {
+  font-family: var(--font-lat-display);
+  font-weight: 400;
+  line-height: var(--lh-display);
+  letter-spacing: var(--track-display);
+}
+h1 {
+  font-size: var(--fs-h1);
+}
+h2 {
+  font-size: var(--fs-h2);
+}
+h3 {
+  font-size: var(--fs-h3);
+}
+h4 {
+  font-family: var(--font-ar-text);
+  font-weight: 600;
+  font-size: var(--fs-h4);
+  line-height: var(--lh-heading);
+  color: var(--text-primary);
+}
+p {
+  text-wrap: pretty;
+}
+strong,
+b {
+  font-weight: 600;
+}
+small {
+  font-size: var(--fs-caption);
+}
+/* Latin/numerals inside Arabic get isolated, never re-ordered by the bidi run. */
+bdi,
+.bidi {
+  unicode-bidi: isolate;
+}
+
+.display {
+  font-family: var(--font-ar-display);
+  font-weight: 700;
+  font-size: calc(var(--fs-display-1) * var(--ar-display-scale));
+  line-height: var(--lh-display-ar);
+  text-wrap: balance;
+}
+:where(html[lang="en"]) .display {
+  font-family: var(--font-lat-display);
+  font-weight: 400;
+  font-size: var(--fs-display-1);
+  line-height: var(--lh-display);
+  letter-spacing: var(--track-display);
+}
+
+.lede {
+  font-size: var(--fs-body-lg);
+  line-height: var(--lh-body-ar);
+  color: var(--text-secondary);
+  max-inline-size: 46ch;
+  text-wrap: pretty;
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-family: var(--font-lat-text);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--rose-600);
+}
+:where(html[lang="ar"]) .eyebrow--ar {
+  font-family: var(--font-ar-text);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.eyebrow::before {
+  content: "";
+  inline-size: 18px;
+  block-size: 1px;
+  background: currentColor;
+  opacity: 0.6;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------------------------ layout */
+.container {
+  inline-size: 100%;
+  max-inline-size: calc(var(--container) + var(--gutter) * 2);
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+.container--narrow {
+  max-inline-size: calc(var(--container-narrow) + var(--gutter) * 2);
+}
+.section {
+  padding-block: clamp(4rem, 9vw, 7rem);
+}
+.rule {
+  block-size: 1px;
+  inline-size: 100%;
+  border: 0;
+  background: var(--grad-hairline);
+}
+
+/* ---------------------------------------------------------------- controls */
+.btn {
+  --btn-bg: var(--grad-seal);
+  --btn-fg: var(--text-on-accent);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-block-size: 48px;
+  padding-inline: 28px;
+  border-radius: var(--radius-pill);
+  background: var(--btn-bg);
+  color: var(--btn-fg);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  box-shadow: var(--shadow-accent), var(--shadow-inset-top);
+  overflow: hidden;
+  isolation: isolate;
+  transition: transform var(--dur-fast) var(--ease-soft),
+    box-shadow var(--dur-base) var(--ease-out);
+}
+.btn:hover {
+  color: var(--btn-fg);
+  transform: translateY(-1px);
+}
+.btn:active {
+  transform: translateY(1px);
+  background: var(--surface-accent-press);
+}
+.btn__icon {
+  inline-size: 18px;
+  block-size: 18px;
+  flex: none;
+}
+.btn--secondary {
+  --btn-bg: transparent;
+  --btn-fg: var(--text-primary);
+  box-shadow: none;
+  border: var(--border-control);
+}
+.btn--secondary:hover {
+  background: var(--surface-tint);
+  color: var(--text-primary);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: 24px;
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--surface-tint);
+  color: var(--text-secondary);
+  font-size: var(--fs-caption);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.chip--mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  background: var(--surface-raised);
+  border: var(--border-soft);
+}
+
+.card {
+  background: var(--surface-card);
+  border: var(--border-hair);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+  padding: var(--space-6);
+}
+
+/* ---------------------------------------------------------------- reveal
+   Below-the-fold only. Content is visible by default and an observer may
+   *add* motion; it never gates the content. */
+[data-reveal] {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-reveal]:not(.is-in) {
+    opacity: 0;
+    translate: 0 var(--rise);
+    transition: opacity var(--dur-slower) var(--ease-out),
+      translate var(--dur-slower) var(--ease-out);
+  }
+  [data-reveal].is-in {
+    opacity: 1;
+    translate: none;
+    transition: opacity var(--dur-slower) var(--ease-out),
+      translate var(--dur-slower) var(--ease-out);
+  }
+}
+
+/* --------------------------------------------------------------- utilities */
+.visually-hidden {
+  position: absolute !important;
+  inline-size: 1px;
+  block-size: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.skip-link {
+  position: fixed;
+  inset-block-start: var(--space-3);
+  inset-inline-start: var(--space-3);
+  z-index: var(--z-toast);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-pill);
+  background: var(--surface-page);
+  border: var(--border-control);
+  translate: 0 -180%;
+  transition: translate var(--dur-fast) var(--ease-soft);
+}
+.skip-link:focus-visible {
+  translate: none;
+}

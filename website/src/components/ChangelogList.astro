@@ -1,0 +1,11 @@
+---
+import changelog from '../data/changelog.json';
+---
+<ol class="changelog">
+  {changelog.entries.map((entry) => (
+    <li class="changelog__item">
+      <time class="changelog__date" datetime={entry.date}>{entry.date}</time>
+      <span class="changelog__subject" lang="en" dir="ltr">{entry.subject}</span>
+    </li>
+  ))}
+</ol>

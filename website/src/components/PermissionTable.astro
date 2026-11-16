@@ -1,0 +1,32 @@
+---
+import invite from '../data/invite.json';
+import { permissionNotesAr } from '../i18n/permission-notes';
+import { inline } from '../lib/inline';
+import { ui, type Lang } from '../i18n/ui';
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+const rows = invite.permissions;
+---
+<div class="perm">
+  <table class="perm-table">
+    <caption class="visually-hidden">{ui.permissionTableCaption[lang]}</caption>
+    <thead>
+      <tr>
+        <th scope="col">{ui.permissionCol[lang]}</th>
+        <th scope="col">{ui.whyCol[lang]}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {rows.map((row) => (
+        <tr>
+          <th scope="row"><code dir="ltr">{row.permission}</code></th>
+          <td set:html={inline(lang === 'ar' ? (permissionNotesAr[row.permission] ?? row.why) : row.why)} />
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>

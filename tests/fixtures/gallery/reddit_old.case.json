@@ -1,0 +1,9 @@
+{
+  "case": "reddit_old",
+  "url": "https://old.reddit.com/r/pics/comments/def456/gallery_fixture/",
+  "responses": {},
+  "expect": {
+    "slides": [],
+    "fallback": "https://rxddit.com/r/pics/comments/def456/gallery_fixture/"
+  }
+}

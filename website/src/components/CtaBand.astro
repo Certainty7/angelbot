@@ -1,0 +1,22 @@
+---
+import { ui, href, type Lang } from '../i18n/ui';
+import invite from '../data/invite.json';
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+---
+<aside class="cta-band" aria-labelledby="cta-title">
+  <div class="cta-band__inner">
+    <div>
+      <h2 class="cta-band__title" id="cta-title">{ui.ctaTitle[lang]}</h2>
+      <p class="cta-band__body">{ui.ctaBody[lang]}</p>
+    </div>
+    <div class="cta-band__actions">
+      <a class="btn btn--primary" href={invite.invite_url}>{ui.invite[lang]}</a>
+      <a class="btn btn--secondary" href={href(lang, 'commands')}>{ui.browse[lang]}</a>
+    </div>
+  </div>
+</aside>

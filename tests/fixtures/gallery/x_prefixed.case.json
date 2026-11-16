@@ -1,0 +1,9 @@
+{
+  "case": "x_prefixed",
+  "url": "https://vxtwitter.com/gallery_fixture/status/1700000000000000001?s=20",
+  "responses": {},
+  "expect": {
+    "slides": [],
+    "fallback": "https://fxtwitter.com/gallery_fixture/status/1700000000000000001"
+  }
+}

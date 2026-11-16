@@ -1,0 +1,99 @@
+name: checks
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+# Least privilege: this workflow only reads the repository. It never writes back,
+# never comments on PRs and never publishes. A workflow that needs more must declare
+# it explicitly instead of inheriting a broad default.
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Fixture owner id: the self-test must never read a real one.
+      MALAK_OWNER_ID: "42"
+    steps:
+      # Pinned to immutable commit SHAs (tag in the trailing comment) so a retagged or
+      # compromised action release cannot silently change what runs here.
+      # actions/checkout v4.4.0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      # actions/setup-python v5.6.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile
+        run: python -m compileall -q bot.py angel cogs tools
+
+      - name: Media extraction test
+        run: python tests/test_tiktok_photo_slides.py
+
+      - name: Deploy gate
+        run: python tools/selftest.py
+
+  # The website publishes counts and an invite link, so they are generated from this tree and
+  # verified against a runtime census instead of being typed by hand. Standard library only:
+  # no pip install, no bot token, no Discord connection.
+  website-data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # actions/checkout v4.4.0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      # actions/setup-python v5.6.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.12"
+
+      - name: Catalogue and invite data
+        run: python tests/website/test_command_catalog.py
+
+      - name: Generated data is committed
+        run: python tools/website-data-generator/generate.py --check
+
+  # The site itself must build in CI, not only on Cloudflare Pages: a broken import or a missing
+  # stylesheet should fail the pull request, not the production deploy. Node is pinned to the same
+  # major the Pages project uses, because astro 7 refuses anything below 22.23.4.
+  website-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # actions/checkout v4.4.0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      # actions/setup-node v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Build the static site
+        run: bash website/scripts/build.sh
+
+      - name: Upload the build output
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: website-dist
+          path: website/dist
+          retention-days: 7

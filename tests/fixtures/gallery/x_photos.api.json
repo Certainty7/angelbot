@@ -1,0 +1,55 @@
+{
+  "code": 200,
+  "message": "OK",
+  "tweet": {
+    "url": "https://x.com/gallery_fixture/status/1700000000000000002",
+    "id": "1700000000000000002",
+    "text": "Three photos in one post",
+    "author": {
+      "screen_name": "gallery_fixture",
+      "name": "Gallery Fixture"
+    },
+    "media": {
+      "all": [
+        {
+          "type": "photo",
+          "id": "1700000000000000101",
+          "url": "https://pbs.twimg.com/media/fixture_a.jpg?name=orig",
+          "width": 1200,
+          "height": 800
+        },
+        {
+          "type": "photo",
+          "id": "1700000000000000102",
+          "url": "https://pbs.twimg.com/media/fixture_b.jpg?name=orig",
+          "width": 800,
+          "height": 1200
+        },
+        {
+          "type": "photo",
+          "id": "1700000000000000103",
+          "url": "https://pbs.twimg.com/media/fixture_c.jpg?name=orig",
+          "width": 1000,
+          "height": 1000
+        }
+      ],
+      "photos": [
+        {
+          "type": "photo",
+          "id": "1700000000000000101",
+          "url": "https://pbs.twimg.com/media/fixture_a.jpg?name=orig"
+        },
+        {
+          "type": "photo",
+          "id": "1700000000000000102",
+          "url": "https://pbs.twimg.com/media/fixture_b.jpg?name=orig"
+        },
+        {
+          "type": "photo",
+          "id": "1700000000000000103",
+          "url": "https://pbs.twimg.com/media/fixture_c.jpg?name=orig"
+        }
+      ]
+    }
+  }
+}

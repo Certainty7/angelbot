@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ar" dir="rtl" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>أنجل — أرشيفٌ يُبحث فيه، وإشرافٌ لا يُنفَّذ إلا بتأكيد</title>
+<meta name="description" content="أنجل بوت ديسكورد يحتفظ بأرشيف قابل للبحث لما يراه، ويحوّل روابط التواصل الاجتماعي إلى ملفات.">
+<link rel="icon" href="/assets/brand/angel-favicon.svg" type="image/svg+xml">
+<link rel="preload" href="/fonts/amiri-700.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/plex-ar-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles/fonts.css">
+<link rel="stylesheet" href="/styles/tokens.css">
+<link rel="stylesheet" href="/styles/base.css">
+<link rel="stylesheet" href="/aperture.css">
+<script src="/theme-init.js"></script>
+</head>
+<body>
+<a class="skip-link" href="#main">تخطَّ إلى المحتوى</a>
+
+<header class="site-head" data-head>
+  <div class="container site-head__inner">
+    <a class="lockup" href="/" aria-label="أنجل — الصفحة الرئيسية">
+      <img src="/assets/brand/angel-lockup-ar.svg" alt="أنجل" width="128" height="66">
+    </a>
+    <nav class="site-nav" aria-label="التنقل الرئيسي">
+      <a href="/features/">الميزات</a>
+      <a href="/commands/">الأوامر</a>
+      <a href="/permissions/">الصلاحيات</a>
+      <a href="/how-it-works/">كيف يعمل</a>
+      <a href="/faq/">الأسئلة</a>
+    </nav>
+    <div class="head-tools">
+      <a class="icon-btn lang" href="/en/" hreflang="en" lang="en" aria-label="English version">EN</a>
+      <button class="icon-btn theme-toggle" type="button" data-theme-toggle aria-pressed="false" aria-label="التبديل إلى المظهر الداكن">
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.6 6.6 0 0 0 9.8 9.8Z"/></svg>
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.8v2M12 19.2v2M2.8 12h2M19.2 12h2M5.4 5.4l1.5 1.5M17.1 17.1l1.5 1.5M18.6 5.4l-1.5 1.5M6.9 17.1l-1.5 1.5"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero">
+    <div class="container hero__inner">
+      <hr class="folio folio--top">
+
+      <div class="hero__grid">
+        <div class="hero__col">
+          <p class="hero__eyebrow">بوت ديسكورد · سيرفرات المجتمع</p>
+
+          <h1 class="hero__title">
+            <span class="line">أرشيفٌ يُبحث فيه،</span>
+            <span class="line">وإشرافٌ لا يُنفَّذ إلا بتأكيد.</span>
+          </h1>
+
+          <hr class="hero__rule">
+
+          <p class="hero__lede">
+            يحتفظ أنجل بأرشيف قابل للبحث لما يراه،
+            ويحوّل روابط التواصل الاجتماعي إلى ملفات.
+          </p>
+
+          <div class="hero__actions">
+            <a class="btn" href="https://discord.com/oauth2/authorize?client_id=1559932443102941284&amp;permissions=1099917683798&amp;scope=bot%20applications.commands" rel="noopener">
+              أضف أنجل إلى سيرفرك
+              <svg class="btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"/></svg>
+            </a>
+            <a class="btn btn--secondary" href="/commands/">تصفّح الأوامر</a>
+          </div>
+
+          <p class="hero__note">مفتوح للإضافة — لا حساب مطلوب.</p>
+        </div>
+
+        <!-- the aperture: one object, six layers, no raster artwork -->
+        <div class="aperture" aria-hidden="true">
+          <span class="aperture__ring aperture__ring--1"></span>
+          <span class="aperture__ring aperture__ring--2"></span>
+          <div class="aperture__bloom"></div>
+          <div class="aperture__specular"></div>
+          <span class="aperture__ring aperture__ring--3"></span>
+          <svg class="aperture__mark" viewBox="-4 -4 104 104">
+            <desc>Angel mark — a pearl held in the aperture of an A.</desc>
+            <path d="M 45.20 8.00 L 48.00 8.00 L 33.00 88.00 L 8.00 88.00 Z" fill="currentColor"/>
+            <path d="M 50.80 8.00 L 48.00 8.00 L 63.00 88.00 L 88.00 88.00 Z" fill="currentColor"/>
+            <circle class="pearl" cx="48" cy="50" r="6" fill="#8A2E45"/>
+          </svg>
+          <span class="aperture__sheen"></span>
+        </div>
+      </div>
+
+      <hr class="folio folio--bottom">
+    </div>
+  </section>
+</main>
+
+<footer class="section container" style="padding-block: var(--space-8)">
+  <p class="mono" style="color:var(--ink-500)">مرجع تنفيذ واجهة البطل — WEB-1 · Certina</p>
+</footer>
+
+<script src="/aperture.js" defer></script>
+</body>
+</html>
