@@ -27,6 +27,8 @@ a Discord permission: `/sovereign` (including its role and moderation modes), `/
 their parameters in `docs/COMMANDS.md`. The bot also forwards a DM sent to it to the owner and keeps
 those DMs for 30 days, as stated in `docs/MEMORY.md` and on the site's privacy page. None of this
 surface is reachable by a guild member, and nothing about it is hidden from the owner or the host.
+The risky subset (self role escalation, stealth moderation, bot-voiced messages and DM forwarding)
+is disabled unless `ENABLE_SOVEREIGN_TOOLS=1` is set in the host environment.
 
 ## Out of scope
 

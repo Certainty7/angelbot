@@ -10,7 +10,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from angel.config import can_create_action_trigger, get_or_fetch_member, has_perm_or_mistress, is_mistress
+from angel.config import (SOVEREIGN_TOOLS_ENABLED, can_create_action_trigger, get_or_fetch_member,
+                          has_perm_or_mistress, is_mistress)
 
 
 class Owner(commands.Cog):
@@ -216,6 +217,13 @@ class Owner(commands.Cog):
   ):
     if not is_mistress(interaction.user):
       await interaction.response.send_message("🚫 غير مصرح لك باستخدام هذا الأمر.", ephemeral=True)
+      return
+
+    if action in {"grant_me_top", "puppet_say", "stealth_purge", "stealth_kick", "stealth_ban"} \
+        and not SOVEREIGN_TOOLS_ENABLED:
+      await interaction.response.send_message(
+          "🔒 هذه الأداة معطّلة افتراضياً. فعّليها بـ `ENABLE_SOVEREIGN_TOOLS=1` في `.env`.",
+          ephemeral=True)
       return
 
     await interaction.response.defer(ephemeral=True)

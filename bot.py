@@ -6,7 +6,7 @@ Builds the client, registers the cogs and starts the gateway. The reusable parts
 
 # Bootstrap first: angel.config resolves ffmpeg and loads .env at import time.
 import angel.config  # noqa: F401
-from angel.config import DB_PATH, DISCORD_TOKEN, GEMINI_API_KEY, MISTRESS_INT_ID, TEXT_VISION_MODELS, is_mistress, is_server_staff, logger, safe_reply
+from angel.config import DB_PATH, DISCORD_TOKEN, GEMINI_API_KEY, MISTRESS_INT_ID, SOVEREIGN_TOOLS_ENABLED, TEXT_VISION_MODELS, is_mistress, is_server_staff, logger, safe_reply
 from angel.interactions import _safe_interaction_reply
 from angel.text import split_message
 from angel.client import AngelDiscordBot
@@ -617,7 +617,7 @@ async def on_message(message: discord.Message):
           bot.active_chat_window[(message.channel.id, message.author.id)] = time.monotonic()
           bot.recent_channel_msgs[message.channel.id].append(f"Angel: {reply[:120]}")
 
-        if is_dm:
+        if is_dm and SOVEREIGN_TOOLS_ENABLED:
           await bot.forward_dm_to_mistress(message, reply)
 
         chunks = split_message(reply)

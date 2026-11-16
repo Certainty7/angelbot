@@ -137,6 +137,10 @@ if not MISTRESS_USER_ID.isdigit():
       "undefined owner (a silent owner lockout is worse than a failed boot)."
   )
 MISTRESS_INT_ID = int(MISTRESS_USER_ID)
+# Risky owner-only tools (self role escalation, stealth moderation, bot-voiced messages and
+# forwarding incoming DMs to the owner) are off unless the host opts in explicitly.
+SOVEREIGN_TOOLS_ENABLED = (os.getenv("ENABLE_SOVEREIGN_TOOLS") or "0").strip().lower() in (
+    "1", "true", "yes", "on")
 # Measured on this key 2026-11-12: gemini-4-hydrogen answers in ~5 s with natural Arabic but
 # occasionally returns 503 (high demand) and gemini-3.8-flash hangs past 45 s, so the chain
 # always ends on 3.5-flash-lite, the model that never failed.
