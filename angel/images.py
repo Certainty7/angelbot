@@ -19,6 +19,9 @@ from .net import (
 )
 from .persona import RELIGIOUS_TERMS_FILTER, normalize_arabic_text
 
+if Image is not None:
+  Image.MAX_IMAGE_PIXELS = 20_000_000
+
 # 6. Media, GIF Downloader, Watermark Crop & Tag Sanitizer
 # Patterns that strip repetitive vocatives ('يا اليقين', 'يا سيدتي') & stiff servant clichés
 _REPETITIVE_VOCATIVES_RE = [
@@ -141,10 +144,10 @@ def remove_bottom_watermark_if_needed(img_bytes: bytes) -> bytes:
     with Image.open(io.BytesIO(img_bytes)) as im:
       w, h = im.size
       if h > 400:
-        cropped = im.crop((0, 0, w, h - 38))
-        out = io.BytesIO()
-        cropped.save(out, format="PNG", compress_level=1)
-        return out.getvalue()
+        with im.crop((0, 0, w, h - 38)) as cropped:
+          out = io.BytesIO()
+          cropped.save(out, format="PNG", compress_level=1)
+          return out.getvalue()
   except Exception:
     pass
   return img_bytes
@@ -162,6 +165,19 @@ async def remove_bottom_watermark_async(img_bytes: bytes) -> bytes:
 def _is_safe_public_http_url(url: str) -> bool:
   """SSRF gate shared with angel.net: strict syntax plus DNS resolution of every address."""
   return is_safe_public_http_url_sync(url)
+
+
+def _sniff_raster_mime(data: bytes) -> Optional[str]:
+  """Return a raster MIME only when the magic bytes prove it; an HTML 200 is rejected."""
+  if data.startswith(b"\x89PNG\r\n\x1a\n"):
+    return "image/png"
+  if data.startswith(b"\xff\xd8\xff"):
+    return "image/jpeg"
+  if data.startswith((b"GIF87a", b"GIF89a")):
+    return "image/gif"
+  if data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+    return "image/webp"
+  return None
 
 
 async def download_media_as_base64(url: str) -> Optional[Tuple[str, str]]:
@@ -194,17 +210,12 @@ async def download_media_as_base64(url: str) -> Optional[Tuple[str, str]]:
           data = await read_bounded_stream(resp, max_bytes=10 * 1024 * 1024, min_bytes=64)
           if not data:
             return None
-          if not content_type.startswith("image/"):
-            lower_url = curr_url.lower()
-            if ".gif" in lower_url:
-              content_type = "image/gif"
-            elif ".png" in lower_url:
-              content_type = "image/png"
-            elif ".webp" in lower_url:
-              content_type = "image/webp"
-            else:
-              content_type = "image/jpeg"
-          return content_type, base64.b64encode(data).decode("utf-8")
+          if content_type == "image/svg+xml":
+            return None
+          sniffed = _sniff_raster_mime(data)
+          if sniffed is None:
+            return None
+          return sniffed, base64.b64encode(data).decode("utf-8")
       return None
     except Exception:
       return None

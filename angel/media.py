@@ -507,12 +507,20 @@ def _extract_single_ig_node_media(node: Dict[str, Any]) -> Optional[Tuple[str, s
   return None
 
 
-def _collect_ig_slides_from_json_obj(obj: Any, slides: List[Tuple[str, str]], seen_urls: Set[str]):
+def _collect_ig_slides_from_json_obj(
+    obj: Any,
+    slides: List[Tuple[str, str]],
+    seen_urls: Set[str],
+    _depth: int = 0,
+    _max_depth: int = 32,
+):
   """
   Walk Instagram GraphQL / contextJSON / xig_polaris_media objects.
   If a carousel container (`edge_sidecar_to_children` or `carousel_media`) is found,
   collects ALL child slides in exact order and returns without recursing into duplicate thumbnail trees.
   """
+  if _depth > _max_depth:
+    return
   if isinstance(obj, dict):
     sidecar = obj.get("edge_sidecar_to_children")
     if isinstance(sidecar, dict) and isinstance(sidecar.get("edges"), list) and sidecar["edges"]:
@@ -548,14 +556,14 @@ def _collect_ig_slides_from_json_obj(obj: Any, slides: List[Tuple[str, str]], se
     for k, val in obj.items():
       if k in (
           "owner", "user", "comment", "edge_media_to_comment", "edge_media_preview_comment",
-          "caption", "edge_web_media_to_related_media", " edge_owner_to_timeline_media",
+          "caption", "edge_web_media_to_related_media", "edge_owner_to_timeline_media",
           "thumbnail_resources", "thumbnail_src",
       ):
         continue
-      _collect_ig_slides_from_json_obj(val, slides, seen_urls)
+      _collect_ig_slides_from_json_obj(val, slides, seen_urls, _depth + 1, _max_depth)
   elif isinstance(obj, list):
     for elem in obj:
-      _collect_ig_slides_from_json_obj(elem, slides, seen_urls)
+      _collect_ig_slides_from_json_obj(elem, slides, seen_urls, _depth + 1, _max_depth)
 
 
 async def _fetch_ig_embed_and_graphql_slides(

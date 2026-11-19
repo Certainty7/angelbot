@@ -24,11 +24,11 @@ def split_message(text: str, max_len: int = 1950) -> List[str]:
       chunks.append(text)
       break
     idx = text.rfind("\n", 0, max_len)
-    if idx == -1:
+    if idx <= 0:
       idx = max_len
     chunks.append(text[:idx])
     text = text[idx:].lstrip("\n")
-  return chunks
+  return [chunk for chunk in chunks if chunk.strip()]
 
 
 def clean_social_url(url: str) -> str:

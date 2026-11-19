@@ -40,7 +40,9 @@ def refusal_line() -> str:
 
 
 # --- Arabizi / Arabic scam normaliser (zero AI cost) ---
-_ARABIC_DIACRITICS_RE = re.compile(r"[\u064B-\u065F\u0670\u0640]")
+_ARABIC_DIACRITICS_RE = re.compile(
+    "[\u064B-\u065F\u0670\u0640\u061C\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]"
+)
 _ARABIZI_TRANS = str.maketrans({"3": "ع", "7": "ح", "5": "خ", "2": "أ", "8": "ق", "9": "ص"})
 _SCAM_PATTERNS = (
     re.compile(r"(?:نيترو|nitro).{0,24}(?:مجان|free|هدي|gift|هدية)", re.I),
@@ -92,9 +94,12 @@ async def set_silent(guild_id: int, channel_id: int, silent: bool, added_by: int
   cache = getattr(get_bot(), "silent_cache", None)
   if cache is None:
     get_bot().silent_cache = cache = {}
-  bucket = cache.setdefault(guild_id, set())
   if silent:
-    bucket.add(channel_id)
+    cache.setdefault(guild_id, set()).add(channel_id)
   else:
-    bucket.discard(channel_id)
+    bucket = cache.get(guild_id)
+    if bucket:
+      bucket.discard(channel_id)
+      if not bucket:
+        cache.pop(guild_id, None)
   logger.info("silence %s guild=%s channel=%s", "ON" if silent else "OFF", guild_id, channel_id or "ALL")
