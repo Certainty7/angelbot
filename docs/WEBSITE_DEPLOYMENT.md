@@ -33,6 +33,11 @@ then guards the output (file count, asset size, no `.env`/database/credential fi
 
 A push to `master` therefore updates the live site with no manual publish step.
 
+> Troubleshooting (2026-11-19): an empty `path_includes` list made Pages skip every push
+> with `skip_reason=path_config`. The project now watches `*`; a skipped deployment can be
+> retried from the dashboard, or the push can be re-sent after fixing the filter. If a
+> deployment shows as skipped, check this setting first.
+
 ## 3. Domain and TLS
 
 - DNS: proxied `CNAME` record `angel` → `angel-site-8th.pages.dev` in the
