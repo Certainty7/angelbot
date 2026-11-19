@@ -3,6 +3,7 @@
 The control-center view, the knowledge board, the pulse dashboard, the guard switch, the
 diagnostics report and the reputation cooldown.
 """
+import math
 import os
 import shutil
 import time
@@ -13,7 +14,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from angel.config import FFMPEG_EXE, has_perm_or_mistress, is_mistress, is_server_staff
+from angel.config import FFMPEG_EXE, has_perm_or_mistress, is_mistress, is_server_staff, logger
 from angel.dashboard import build_server_pulse_embed
 from angel.ui import AngelControlCenterView
 
@@ -112,16 +113,16 @@ class Flagship(commands.Cog):
 
   @app_commands.command(name="pulse", description="عرض لوحة نبض السيرفر ومؤشرات النشاط")
   @app_commands.default_permissions(manage_guild=True)
+  @app_commands.guild_only()
   @has_perm_or_mistress(manage_guild=True)
   async def pulse_cmd(self, interaction: discord.Interaction):
-    if not interaction.guild:
-      return
     embed = await build_server_pulse_embed(self.bot, interaction.guild)
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
   @app_commands.command(name="guard", description="إدارة نظام الحماية الذكية ومكافحة السبام (Angel Guard)")
   @app_commands.default_permissions(manage_guild=True)
+  @app_commands.guild_only()
   @app_commands.describe(mode="وضع الحماية المطلوب")
   @app_commands.choices(
       mode=[
@@ -132,8 +133,6 @@ class Flagship(commands.Cog):
   )
   @has_perm_or_mistress(manage_guild=True)
   async def guard_cmd(self, interaction: discord.Interaction, mode: str):
-    if not interaction.guild:
-      return
     await self.bot.db.set_guard_mode(interaction.guild.id, mode)
     self.bot.guard_modes_cache[interaction.guild.id] = mode
     labels = {
@@ -154,6 +153,13 @@ class Flagship(commands.Cog):
 
     api_ok, api_ms, api_msg = await self.bot.ai.check_api_models_health()
     ffmpeg_ok = bool(FFMPEG_EXE and (os.path.exists(FFMPEG_EXE) or shutil.which(FFMPEG_EXE)))
+    try:
+      db_ok, table_count = await self.bot.db.health_check()
+    except Exception as exc:
+      logger.warning("diagnostics db check failed: %s: %s", type(exc).__name__, exc)
+      db_ok, table_count = False, 0
+    latency = self.bot.latency
+    latency_text = f"{round(latency * 1000)}ms" if math.isfinite(latency) else "—"
     uptime = datetime.now(timezone.utc) - self.bot.start_time
     h, rem = divmod(int(uptime.total_seconds()), 3600)
     m, s = divmod(rem, 60)
@@ -164,32 +170,32 @@ class Flagship(commands.Cog):
     ] or ["• لا توجد طلبات مسجلة بعد"]
 
     embed = discord.Embed(title="🔬 تشخيص النظام الشامل (Angel Diagnostics)", color=0xD4AF37, timestamp=datetime.now(timezone.utc))
-    embed.add_field(name="🌐 بوابة Discord", value=f"✅ متصل (`{round(self.bot.latency * 1000)}ms`)", inline=True)
-    embed.add_field(name="🧠 واجهة الذكاء", value=f"{'✅' if api_ok else '⚠️'} {api_msg} (`{api_ms}ms`)", inline=True)
+    embed.add_field(name="🌐 بوابة Discord", value=f"✅ متصل (`{latency_text}`)", inline=True)
+    embed.add_field(name="🧠 واجهة الذكاء", value=f"{'✅' if api_ok else '⚠️'} {api_msg[:1024]} (`{api_ms}ms`)", inline=True)
     embed.add_field(name="🎙️ محرك الصوت FFmpeg", value="✅ جاهز (`48kHz Opus`)" if ffmpeg_ok else "⚠️ غير متوفر", inline=True)
-    embed.add_field(name="🗄️ قاعدة البيانات SQLite", value="✅ متصلة (`19 جدولاً`)", inline=True)
+    embed.add_field(name="🗄️ قاعدة البيانات SQLite", value=f"{'✅ متصلة' if db_ok else '⚠️ تعذر الفحص'} (`{table_count}` جدولاً)", inline=True)
     embed.add_field(name="⏱️ مدة التشغيل", value=f"`{h}h {m}m {s}s`", inline=True)
-    embed.add_field(name="🛠️ حالة المجدول", value=self.bot.quota.last_scheduler_error or "✅ يعمل بدون أخطاء", inline=True)
-    embed.add_field(name="📊 إحصاءات المحركات وزمن الاستجابة", value="\n".join(lat_lines), inline=False)
+    embed.add_field(name="🛠️ حالة المجدول", value=(self.bot.quota.last_scheduler_error or "✅ يعمل بدون أخطاء")[:1024], inline=True)
+    embed.add_field(name="📊 إحصاءات المحركات وزمن الاستجابة", value="\n".join(lat_lines)[:1024], inline=False)
     await interaction.followup.send(embed=embed, ephemeral=True)
 
 
   @app_commands.command(name="rep", description="منح نقطة سمعة وتقدير لعضو في السيرفر")
+  @app_commands.guild_only()
   @app_commands.describe(member="اختر العضو")
   async def rep_cmd(self, interaction: discord.Interaction, member: discord.Member):
-    if not interaction.guild:
-      return
     if member.id == interaction.user.id or member.bot:
       await interaction.response.send_message("⚠️ لا يمكنك منح نقاط سمعة لنفسك أو لبوت.", ephemeral=True)
       return
     now_m = time.monotonic()
-    last_rep = self.bot.rep_cooldowns.get(interaction.user.id)
+    rep_key = (interaction.guild.id, interaction.user.id)
+    last_rep = self.bot.rep_cooldowns.get(rep_key)
     if last_rep is not None and now_m - last_rep < 3600 and not is_mistress(interaction.user):
       rem_m = int((3600 - (now_m - last_rep)) // 60) + 1
       await interaction.response.send_message(f"⏳ يمكنك منح نقطة سمعة جديدة بعد **{rem_m} دقيقة**.", ephemeral=True)
       return
-    self.bot.rep_cooldowns[interaction.user.id] = now_m
     new_rep = await self.bot.db.add_rep(interaction.guild.id, member.id)
+    self.bot.rep_cooldowns[rep_key] = now_m
     await interaction.response.send_message(f"🌟 منح {interaction.user.mention} نقطة سمعة إلى {member.mention}! (إجمالي السمعة: **`+{new_rep}`**)")
 
 

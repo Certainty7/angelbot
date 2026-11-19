@@ -21,6 +21,7 @@ class Control(commands.Cog):
     self.bot = bot
 
   @app_commands.command(name="silence", description="منع أنجل من الكلام في قناة أو السيرفر كله (للمالكة فقط)")
+  @app_commands.guild_only()
   @app_commands.describe(mode="on = صامتة، off = تتكلم", channel="اتركها فارغة لكتم السيرفر كله")
   @app_commands.choices(mode=[
       app_commands.Choice(name="🔇 on — اسكتي", value="on"),
@@ -32,9 +33,8 @@ class Control(commands.Cog):
       mode: app_commands.Choice[str],
       channel: Optional[discord.TextChannel] = None,
   ):
-    if not is_mistress(interaction.user) or not interaction.guild:
-      if interaction.guild:
-        await _safe_interaction_reply(interaction, "🚫 هذا الأمر لصاحبتي فقط.", ephemeral=True)
+    if not is_mistress(interaction.user):
+      await _safe_interaction_reply(interaction, "🚫 هذا الأمر لصاحبتي فقط.", ephemeral=True)
       return
     target_id = channel.id if channel else 0
     silent = (mode.value == "on")
@@ -47,15 +47,15 @@ class Control(commands.Cog):
 
 
   @app_commands.command(name="autonomy", description="تفعيل/إيقاف تفاعل أنجل التلقائي وبدء الأحاديث من نفسها (للمالكة)")
+  @app_commands.guild_only()
   @app_commands.choices(mode=[
       app_commands.Choice(name="✅ تشغيل", value="on"),
       app_commands.Choice(name="⛔ إيقاف", value="off"),
       app_commands.Choice(name="📊 الحالة", value="status"),
   ])
   async def autonomy_cmd(self, interaction: discord.Interaction, mode: Optional[app_commands.Choice[str]] = None):
-    if not is_mistress(interaction.user) or not interaction.guild:
-      if interaction.guild:
-        await _safe_interaction_reply(interaction, "🚫 هذا الأمر لصاحبتي فقط.", ephemeral=True)
+    if not is_mistress(interaction.user):
+      await _safe_interaction_reply(interaction, "🚫 هذا الأمر لصاحبتي فقط.", ephemeral=True)
       return
     gid = interaction.guild.id
     choice = (mode.value if mode else "status")

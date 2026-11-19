@@ -2,6 +2,7 @@
 
 The client is passed explicitly, so a cog or a view can build the embed without importing bot.py.
 """
+import re
 from collections import Counter
 from datetime import datetime, timezone
 
@@ -10,13 +11,16 @@ import discord
 
 async def build_server_pulse_embed(bot, guild: discord.Guild) -> discord.Embed:
   """Build Angel Server Pulse dashboard for staff and owner."""
-  open_tickets = sum(1 for ch in guild.text_channels if ch.name.startswith("ticket-"))
+  open_tickets = sum(
+      1 for ch in guild.text_channels
+      if ch.topic and re.search(r"\bowner_id:\d+\b", ch.topic)
+  )
   triggers = await bot.db.get_action_triggers(guild.id)
   top_triggers = sorted(triggers.values(), key=lambda x: x.get("usage_count", 0), reverse=True)[:5]
   trig_str = "\n".join(
       f"• `{t['phrase']}` ({t['action_type']}) — استُخدم `{t.get('usage_count', 0)}` مرة"
       for t in top_triggers
-  ) or "لا توجد اختصارات مسجلة."
+  )[:1024] or "لا توجد اختصارات مسجلة."
 
   ch_counts = bot.channel_activity_counter.get(guild.id, Counter())
   top_channels = ch_counts.most_common(5)
@@ -36,6 +40,6 @@ async def build_server_pulse_embed(bot, guild: discord.Guild) -> discord.Embed:
   embed.add_field(name="📚 معرفة السيرفر", value=f"`{len(knowledge_items)}` قاعدة", inline=True)
   embed.add_field(name="🛡️ وضع الحماية (Guard)", value=f"`{guard_mode}`", inline=True)
   embed.add_field(name="📋 قناة السجلات (ModLog)", value=f"<#{modlog_id}>" if modlog_id else "`غير محددة`", inline=True)
-  embed.add_field(name="🔥 أنشط القنوات (الجلسة الحالية)", value=ch_str, inline=False)
-  embed.add_field(name="⚡ أبرز الاختصارات الإدارية", value=trig_str, inline=False)
+  embed.add_field(name="🔥 أنشط القنوات (الجلسة الحالية)", value=ch_str[:1024], inline=False)
+  embed.add_field(name="⚡ أبرز الاختصارات الإدارية", value=trig_str[:1024], inline=False)
   return embed

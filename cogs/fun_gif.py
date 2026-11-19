@@ -52,16 +52,19 @@ class FunGif(commands.Cog):
       action: str,
       target: Optional[discord.User] = None,
   ):
-    await interaction.response.defer()
     mistress = is_mistress(interaction.user)
     harem_title = self.bot.get_harem_title(interaction.user.id)
     is_female_tier = mistress or (harem_title is not None)
     resolved_action = ARABIC_GIF_KEYWORDS.get((action or "").lower().strip(), (action or "").lower().strip())
 
-    # HAREM-ONLY romance: refuse physical-affection reactions for everyone else, in character and without a GIF.
+    # HAREM-ONLY romance: refuse physical-affection reactions before any public defer.
     if is_romantic_gif(resolved_action) and not is_female_tier:
-      await interaction.followup.send(f"🪽 {interaction.user.mention} {guard.refusal_line()}", ephemeral=True)
+      await interaction.response.send_message(
+          f"🪽 {interaction.user.mention} {guard.refusal_line()}", ephemeral=True
+      )
       return
+
+    await interaction.response.defer()
 
     # Internal private routing: Mistress & Harem automatically receive girl-x-girl GIFs without any public label exposure
     gif_bytes, gif_url = await self.bot.ai.fetch_anime_gif_data(

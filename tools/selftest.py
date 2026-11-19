@@ -513,8 +513,10 @@ def _gallery():
     import glob
     import hashlib
     import json
+    from types import SimpleNamespace
 
     from angel import media
+    from angel.net import SafeAsyncResolver
 
     fix_dir = os.path.join(ROOT, "tests", "fixtures", "gallery")
     VIDEO_HEAD = b"\x00\x00\x00\x18ftypisom"
@@ -556,6 +558,8 @@ def _gallery():
     class _Session:
         def __init__(self, routes):
             self.routes, self.hits = routes, []
+            # safe_fetch_response only accepts sessions backed by the connect-time resolver.
+            self.connector = SimpleNamespace(_resolver=SafeAsyncResolver())
 
         def _response(self, url):
             self.hits.append(url)

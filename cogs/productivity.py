@@ -53,6 +53,7 @@ class Productivity(commands.Cog):
 
   @app_commands.command(name="autorole", description="تحديد رتبة تُمنح تلقائياً لكل عضو جديد ينضم للسيرفر")
   @app_commands.default_permissions(manage_roles=True)
+  @app_commands.guild_only()
   @app_commands.describe(role="الرتبة التلقائية (اتركيها فارغة لإلغاء التفعيل)")
   @has_perm_or_mistress(manage_roles=True)
   async def autorole_cmd(self, interaction: discord.Interaction, role: Optional[discord.Role] = None):

@@ -99,6 +99,17 @@ class BotDatabase:
           logger.warning("database close failed: %s: %s", type(exc).__name__, exc)
         self._conn = None
 
+  async def health_check(self) -> Tuple[bool, int]:
+    """Live SELECT 1 plus the real table count (the old dashboard hardcoded '19')."""
+    async with self._connect() as db:
+      async with db.execute(
+          "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table'"
+      ) as cur:
+        row = await cur.fetchone()
+      async with db.execute("SELECT 1") as cur:
+        await cur.fetchone()
+    return True, int(row[0]) if row else 0
+
   async def initialize(self):
     async with self._connect() as db:
       await db.execute("PRAGMA journal_mode=WAL")

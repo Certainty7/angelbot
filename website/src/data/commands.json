@@ -643,15 +643,15 @@
       "category_en": "AI & Chat",
       "category_ar": "الذكاء والمحادثة",
       "description_ar": "قراءة آخر رسائل القناة وتلخيصها في نقاط",
-      "description_discord": "قراءة وتلخيص محادثات القناة بدقة (حتى 500 رسالة)",
+      "description_discord": "قراءة وتلخيص محادثات القناة بدقة (حتى 200 رسالة)",
       "config_scope": "guild",
       "caller_gate": [],
       "owner_only": false,
       "options": [
         {
           "name": "limit",
-          "type": "app_commands.Range[int, 10, 500]",
-          "description": "عدد الرسائل (10 إلى 500)",
+          "type": "app_commands.Range[int, 10, 200]",
+          "description": "عدد الرسائل (10 إلى 200)",
           "required": false,
           "choices": []
         },
