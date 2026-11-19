@@ -51,7 +51,7 @@ def _declared_owner_id() -> str:
 
 os.environ.setdefault("MALAK_OWNER_ID", _declared_owner_id())
 
-EXPECTED_COMMANDS = 65
+EXPECTED_COMMANDS = 67
 results = []
 
 

@@ -4,7 +4,7 @@ Angel registers 65 commands at startup: 62 slash commands and 3 message context 
 
 Parameters use `<required>` and `[optional]` notation. The permission column is the Discord permission the command needs by default; the owner ID bypasses these checks. Command descriptions are Arabic inside Discord.
 
-Ten commands also refuse everyone but the owner at runtime: `/sync`, `/diagnostics`, `/mood`, `/autonomy`, `/silence`, `/harem`, `/sovereign`, `/dm_send`, `/whisper` and `/dm_logs`. Their row still shows the Discord permission the command carries.
+Eleven commands also refuse everyone but the owner at runtime: `/sync`, `/diagnostics`, `/mood`, `/autonomy`, `/silence`, `/harem`, `/sovereign`, `/dm_send`, `/whisper`, `/dm_logs` and `/cleanup` (global storage sweep). Their row still shows the Discord permission the command carries.
 
 ## Moderation (17)
 

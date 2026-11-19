@@ -1,8 +1,10 @@
 """Angel persona, tunable styles, system-prompt builder and safety filters."""
 
 import discord
+import os
 import random
 import re
+from dataclasses import dataclass
 from typing import Optional
 from collections import deque
 from .config import is_mistress
@@ -277,6 +279,87 @@ def build_angel_system_prompt(
 
 
 _AR_SWAPS = (("ا", "أ"), ("ه", "ة"), ("ي", "ى"), ("و", "ؤ"))
+
+# Dialect guidance stays short so it costs a handful of prompt tokens.
+DIALECT_PROFILES = {
+    "gulf": "تحدّثي بلهجة خليجية طبيعية راقية وخفيفة الظل دون مبالغة أو تصنّع.",
+    "msa": "تحدّثي بعربية فصحى معاصرة سلسة وقريبة من القلب، بلا جمود.",
+    "egyptian": "تحدّثي بلهجة مصرية طبيعية وودودة وخفيفة الظل دون إطالة.",
+    "levantine": "تحدّثي بلهجة شامية طبيعية لطيفة وسلسة في الحوار.",
+    "en": "Reply in natural, warm, concise everyday English.",
+}
+
+
+@dataclass(frozen=True)
+class ReplyRhythm:
+  mode: str
+  hint: str
+
+
+def detect_reply_rhythm(user_text: str) -> ReplyRhythm:
+  """Casual Discord chat gets 1-2 lines; a real question gets room to answer."""
+  clean = " ".join((user_text or "").split())
+  length = len(clean)
+  deep = any(k in clean.lower() for k in (
+      "```", "اشرح", "كيف يعمل", "لماذا", "قارن", "خطوات", "explain", "compare", "debug", "error"))
+  if length <= 35 and not deep:
+    return ReplyRhythm("quick", "ردّي بجملة أو جملتين قصيرتين تناسب إيقاع ديسكورد.")
+  if deep or length >= 140:
+    return ReplyRhythm("deep", "قدّمي إجابة مركّزة ومرتبة دون حشو أو مقدمات طويلة.")
+  return ReplyRhythm("normal", "ردّي بإيجاز طبيعي في ٢ إلى ٤ جمل مترابطة.")
+
+
+def reply_directives(rhythm: Optional[ReplyRhythm] = None, dialect: Optional[str] = None) -> str:
+  """Dialect + rhythm instructions appended to the system prompt."""
+  key = (dialect or os.getenv("ANGEL_DIALECT") or "gulf").strip().lower()
+  return DIALECT_PROFILES.get(key, DIALECT_PROFILES["gulf"]) + "\n" + (rhythm or detect_reply_rhythm("")).hint
+
+
+_ROBOTIC_OPENERS = (
+    re.compile(r"^\s*(?:بالتأكيد|بالطبع|بكل سرور)[!؟،,.\s]*", re.UNICODE),
+    re.compile(r"^\s*(?:يسعدني مساعدتك|كيف يمكنني مساعدتك اليوم|أهلاً بك)[!؟،,.\s]*", re.UNICODE),
+    re.compile(r"^\s*(?:بصفتي (?:نموذج |مساعد )?ذكاء اصطناعي[،,.!؟\s]*)", re.UNICODE),
+    re.compile(r"^\s*(?:Certainly[!,.]*\s*|Sure thing[!,.]*\s*|As an AI(?: language model)?[,:.!\s]*)",
+               re.IGNORECASE),
+)
+_MODEL_IDENTITY_RE = re.compile(
+    r"\b(?:gemini(?:[\s\-]?\d[\w.\-]*)?|google\s*ai|large\s+language\s+model|نموذج\s+لغوي\s+كبير)\b",
+    re.IGNORECASE,
+)
+
+
+def humanize_reply(raw_text: str, max_len: int = 1900) -> str:
+  """Strip robotic openers, model leaks and role mentions from an outgoing reply."""
+  text = raw_text or ""
+  for pattern in _ROBOTIC_OPENERS:
+    text = pattern.sub("", text).strip()
+  text = _MODEL_IDENTITY_RE.sub("آنجل", text)
+  text = re.sub(r"@(everyone|here)\b", r"@\u200b\1", text, flags=re.IGNORECASE)
+  text = re.sub(r"<@&\d{15,25}>", "@\u200brole", text)
+  text = re.sub(r"\n{3,}", "\n\n", text).strip()
+  if len(text) > max_len:
+    text = text[: max_len - 1].rstrip() + "…"
+  return text
+
+
+def should_engage_message(
+    *,
+    is_direct_mention: bool,
+    is_reply_to_bot: bool,
+    in_followup_window: bool,
+    is_dm: bool,
+    author_opted_out: bool,
+    channel_silenced: bool,
+    message_text: str,
+) -> bool:
+  """Whether Angel may answer at all; privacy wins over every other signal."""
+  if author_opted_out or channel_silenced:
+    return False
+  if not (message_text or "").strip():
+    return False
+  if is_dm or is_direct_mention or is_reply_to_bot:
+    return True
+  return bool(in_followup_window and len(message_text.strip()) >= 3)
 
 
 def humanize(text: str, settings: Optional[dict] = None, rng=None) -> str:
