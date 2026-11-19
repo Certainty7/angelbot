@@ -1,9 +1,9 @@
 {
-  "note": "Captured from the live tree by importing every cog's install() against a stub tree (no gateway, no DB) on 2026-11-14. Eager tree only: the music cog is loaded lazily. | 2026-11-15: /data added (member data access and erasure).",
+  "note": "Captured from the live tree by importing every cog's install() against a stub tree (no gateway, no DB) on 2026-11-14. Eager tree only: the music cog is loaded lazily. | 2026-11-15: /data added (member data access and erasure). | 2026-11-19: /setup and /catchup added (multi-tenant onboarding).",
   "source_commit": "2bfddfa",
   "discord_py": "2.7.1",
-  "global_commands": 65,
-  "slash": 62,
+  "global_commands": 67,
+  "slash": 64,
   "context_menu": 3,
   "commands": [
     {
@@ -132,6 +132,16 @@
         "administrator"
       ],
       "options": []
+    },
+    {
+      "name": "catchup",
+      "description": "وش فاتني؟ ملخص ذكي لآخر الرسائل في هذه القناة",
+      "module": "cogs.setup_and_catchup",
+      "type": "Command",
+      "default_permissions": [],
+      "options": [
+        "count"
+      ]
     },
     {
       "name": "chat",
@@ -512,6 +522,16 @@
       "options": [
         "channel"
       ]
+    },
+    {
+      "name": "setup",
+      "description": "إعداد أنجل السريع لهذا السيرفر",
+      "module": "cogs.setup_and_catchup",
+      "type": "Command",
+      "default_permissions": [
+        "manage_guild"
+      ],
+      "options": []
     },
     {
       "name": "silence",

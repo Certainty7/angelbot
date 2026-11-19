@@ -20,7 +20,7 @@ def _id_set(name: str) -> set:
 
 ADMIN_ROLE_IDS = _id_set("MALAK_ADMIN_ROLE_IDS")
 ADMIN_CHANNEL_IDS = _id_set("MALAK_ADMIN_CHANNEL_IDS")
-OWNER_ID = int((os.getenv("MALAK_OWNER_ID") or "0").strip() or 0)
+OWNER_ID = int((os.getenv("MALAK_OWNER_ID") or "0").strip() or 0) if (os.getenv("MALAK_OWNER_ID") or "").strip().isdigit() else 0
 
 
 class AclError(PermissionError):

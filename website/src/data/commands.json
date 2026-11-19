@@ -1,12 +1,12 @@
 {
   "schema": 1,
   "generator": "tools/website-data-generator/generate.py",
-  "source_files": 14,
+  "source_files": 15,
   "totals": {
-    "all": 69,
-    "slash": 66,
+    "all": 71,
+    "slash": 68,
     "context_menu": 3,
-    "categories": 13,
+    "categories": 14,
     "per_category": {
       "admin": 17,
       "ai_chat": 4,
@@ -20,11 +20,12 @@
       "music": 4,
       "owner": 6,
       "productivity": 2,
+      "setup_and_catchup": 2,
       "xp_profile": 2
     },
-    "eager": 65,
+    "eager": 67,
     "lazy": 4,
-    "loaded_modules": 13
+    "loaded_modules": 14
   },
   "missing_english_descriptions": [],
   "commands": [
@@ -1338,7 +1339,7 @@
       "caller_gate": [
         "manage_guild"
       ],
-      "owner_only": false,
+      "owner_only": true,
       "options": [],
       "description_en": "Clear the bot's temporary files and trash storage",
       "bot_permissions": []
@@ -1975,6 +1976,46 @@
       "bot_permissions": [
         "manage_messages"
       ]
+    },
+    {
+      "name": "catchup",
+      "kind": "slash",
+      "category": "setup_and_catchup",
+      "category_en": "Setup And Catchup",
+      "category_ar": "setup_and_catchup",
+      "description_ar": "وش فاتني؟ ملخص ذكي لآخر الرسائل في هذه القناة",
+      "description_discord": "وش فاتني؟ ملخص ذكي لآخر الرسائل في هذه القناة",
+      "config_scope": "guild",
+      "caller_gate": [],
+      "owner_only": false,
+      "options": [
+        {
+          "name": "count",
+          "type": "app_commands.Range[int, 20, 150]",
+          "description": "عدد الرسائل المطلوب تلخيصها (بين 20 و 150)",
+          "required": false,
+          "choices": []
+        }
+      ],
+      "description_en": "Summarise the recent messages you missed in this channel",
+      "bot_permissions": []
+    },
+    {
+      "name": "setup",
+      "kind": "slash",
+      "category": "setup_and_catchup",
+      "category_en": "Setup And Catchup",
+      "category_ar": "setup_and_catchup",
+      "description_ar": "إعداد أنجل السريع لهذا السيرفر",
+      "description_discord": "إعداد أنجل السريع لهذا السيرفر",
+      "config_scope": "guild",
+      "caller_gate": [
+        "manage_guild"
+      ],
+      "owner_only": false,
+      "options": [],
+      "description_en": "Configure Angel for this server (dialect, guard level, link fixer)",
+      "bot_permissions": []
     },
     {
       "name": "leaderboard",

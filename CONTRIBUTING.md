@@ -1,16 +1,19 @@
 # Contributing
 
-Contributions are by invitation. If you have access, these are the rules the project runs on.
+Thanks for helping. These are the rules the project runs on.
 
 ## Before you open a pull request
 
 ```bash
-python -m compileall -q bot.py angel cogs tools
+python -m compileall -q bot.py angel cogs tools tests
 python tools/selftest.py
+python tools/security_probe.py
+python tools/recall_probe.py
+pytest -q
 ```
 
-The gate must end with `N/N checks passed`. Paste that line in the pull request. If a check fails,
-fix the code, not the check.
+The gate must end with `N/N checks passed` and the test suite must be green. Paste that line in the
+pull request. If a check fails, fix the code, not the check.
 
 ## What a change should look like
 

@@ -11,7 +11,14 @@ import socket
 import urllib.parse
 from typing import List, Optional, Tuple
 from .config import ARABIC_GIF_KEYWORDS, Image, is_romantic_gif
-from .net import _IMAGE_PROC_SEMAPHORE, _MEDIA_DOWNLOAD_SEMAPHORE, _lower_worker_cpu_priority, get_shared_http_session, read_bounded_stream
+from .net import (
+    _IMAGE_PROC_SEMAPHORE,
+    _MEDIA_DOWNLOAD_SEMAPHORE,
+    _lower_worker_cpu_priority,
+    get_shared_http_session,
+    is_safe_public_http_url_sync,
+    read_bounded_stream,
+)
 from .persona import RELIGIOUS_TERMS_FILTER, normalize_arabic_text
 
 # 6. Media, GIF Downloader, Watermark Crop & Tag Sanitizer
@@ -155,38 +162,8 @@ async def remove_bottom_watermark_async(img_bytes: bytes) -> bytes:
 
 
 def _is_safe_public_http_url(url: str) -> bool:
-  """Block SSRF to loopback, private, link-local, multicast, IPv4-mapped, or cloud metadata IPs (169.254.169.254)."""
-  try:
-    parsed = urllib.parse.urlsplit(url.strip())
-    if parsed.scheme not in ("http", "https"):
-      return False
-    host = (parsed.hostname or "").lower().strip(".")
-    if not host or host in (
-        "localhost",
-        "0.0.0.0",
-        "169.254.169.254",
-        "metadata.google.internal",
-        "metadata",
-        "instance-data",
-    ):
-      return False
-    for fam, _, _, _, sockaddr in socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP):
-      ip_obj = ipaddress.ip_address(sockaddr[0])
-      mapped = getattr(ip_obj, "ipv4_mapped", None)
-      for check_ip in (ip_obj, mapped) if mapped else (ip_obj,):
-        if (
-            check_ip.is_private
-            or check_ip.is_loopback
-            or check_ip.is_link_local
-            or check_ip.is_multicast
-            or check_ip.is_reserved
-            or check_ip.is_unspecified
-            or str(check_ip).startswith("169.254.")
-        ):
-          return False
-    return True
-  except Exception:
-    return False
+  """SSRF gate shared with angel.net: strict syntax plus DNS resolution of every address."""
+  return is_safe_public_http_url_sync(url)
 
 
 async def download_media_as_base64(url: str) -> Optional[Tuple[str, str]]:

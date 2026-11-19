@@ -14,14 +14,31 @@ import re
 
 from .config import logger
 
+
+def redact_secrets(text: str) -> str:
+  """Redact token-shaped strings; used before a summary or log line is shown."""
+  out = text or ""
+  for pattern in _SECRETS:
+    out = pattern.sub("[محجوب]", out)
+  return out
+
 _MASS = re.compile(r"@(everyone|here)\b", re.IGNORECASE)
+# A model can emit a role mention directly; neutralise it even if the API layer also
+# disables role pings.
+_ROLE_MENTION = re.compile(r"<@&\d+>")
 
 _SECRETS = (
     # Discord bot token: id.timestamp.hmac
     re.compile(r"\b[A-Za-z0-9_-]{20,30}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{25,40}\b"),
     re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b"),
+    re.compile(r"\bgsk_[A-Za-z0-9]{20,}\b"),
     re.compile(r"\bAIza[0-9A-Za-z_-]{30,}\b"),
     re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"),
+    re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{30,}\b"),
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{30,}\b"),
+    re.compile(r"(?i)\bBearer\s+[A-Za-z0-9\-._~+/]+=*"),
+    # KEY=value lines pasted from a .env file.
+    re.compile(r"(?i)\b[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_?KEY)\s*=\s*\S+"),
 )
 
 _TAGS = re.compile(
@@ -54,6 +71,11 @@ def filter_outgoing(text: str, action_status: str = "none") -> str:
   out = _MASS.sub(lambda m: m.group(1), text)
   if out != text:
     reasons.append("mass-mention")
+
+  replaced = _ROLE_MENTION.sub("@role", out)
+  if replaced != out:
+    out = replaced
+    reasons.append("role-mention")
 
   for pattern in _SECRETS:
     replaced = pattern.sub("[محجوب]", out)

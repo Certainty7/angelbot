@@ -10,6 +10,9 @@ import os
 import sqlite3
 import sys
 import tempfile
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from angel import memory, registry
 from angel.database import BotDatabase
@@ -37,32 +40,39 @@ class _Stub:
 
 async def run() -> int:
     tmp = os.path.join(tempfile.gettempdir(), "angel-recall-probe.db")
-    # A WAL database copied with shutil is a torn snapshot; `.backup` reads a consistent one.
-    src = sqlite3.connect("chat_history.db")
-    dst = sqlite3.connect(tmp)
-    with dst:
-        src.backup(dst)
-    src.close()
-    dst.close()
+    src_path = "chat_history.db"
+    if os.path.isfile(src_path):
+        # A WAL database copied with shutil is a torn snapshot; `.backup` reads a consistent one.
+        src = sqlite3.connect(src_path)
+        dst = sqlite3.connect(tmp)
+        with dst:
+            src.backup(dst)
+        src.close()
+        dst.close()
     db = BotDatabase(tmp)
+    await db.initialize()
     registry.install(_Stub(db))
 
-    hits = 0
-    for key, value, _question in CASES:
-        await db.upsert_profile_fact(PROBE_USER, key, value, confidence=0.9)
-
-    for key, value, question in CASES:
-        facts = await memory.recall(PROBE_USER, question, limit=8)
-        got = any(value.split()[0] in (f.get("fact_value") or "") for f in facts)
-        hits += got
-        print(f"[{'HIT ' if got else 'MISS'}] {key:7s} {value!r:30s} q={question!r:26s} n={len(facts)}")
-
-    print(f"\nrecall: {hits}/{len(CASES)} = {hits * 100 // len(CASES)}%")
     try:
-        os.remove(tmp)
-    except OSError:
-        pass
-    return 0 if hits == len(CASES) else 1
+        hits = 0
+        for key, value, _question in CASES:
+            await db.upsert_profile_fact(PROBE_USER, key, value, confidence=0.9)
+
+        for key, value, question in CASES:
+            facts = await memory.recall(PROBE_USER, question, limit=8)
+            got = any(value.split()[0] in (f.get("fact_value") or "") for f in facts)
+            hits += got
+            print(f"[{'HIT ' if got else 'MISS'}] {key:7s} {value!r:30s} q={question!r:26s} n={len(facts)}")
+
+        print(f"\nrecall: {hits}/{len(CASES)} = {hits * 100 // len(CASES)}%")
+        return 0 if hits == len(CASES) else 1
+    finally:
+        await db.close()
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                os.remove(tmp + suffix)
+            except OSError:
+                pass
 
 
 def main() -> int:

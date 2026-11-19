@@ -3,6 +3,7 @@
 `bot` is late-bound by bot.py after the client is constructed.
 """
 import random
+import re
 from typing import Any, Optional
 
 from .config import is_mistress, logger
@@ -23,7 +24,8 @@ def harem_title(user) -> Optional[str]:
     if get_bot() is None:
       return None
     return get_bot().get_harem_title(getattr(user, "id", 0))
-  except Exception:
+  except Exception as exc:
+    logger.debug("harem cache lookup failed: %s: %s", type(exc).__name__, exc)
     return None
 
 
@@ -35,6 +37,36 @@ def romantic_allowed(user) -> bool:
 def refusal_line() -> str:
   logger.info("ai-guard reason=harem-gate")
   return random.choice(_REFUSALS)
+
+
+# --- Arabizi / Arabic scam normaliser (zero AI cost) ---
+_ARABIC_DIACRITICS_RE = re.compile(r"[\u064B-\u065F\u0670\u0640]")
+_ARABIZI_TRANS = str.maketrans({"3": "ع", "7": "ح", "5": "خ", "2": "أ", "8": "ق", "9": "ص"})
+_SCAM_PATTERNS = (
+    re.compile(r"(?:نيترو|nitro).{0,24}(?:مجان|free|هدي|gift|هدية)", re.I),
+    re.compile(r"(?:اربح|ربح|اكسب).{0,24}(?:دولار|رصيد|شحن|usdt)", re.I),
+    re.compile(r"(?:steam|discord|نيت?رو).{0,20}(?:free|gift|airdrop|مجان).{0,40}https?://", re.I),
+)
+
+
+def normalize_arabic_and_arabizi(text: str) -> str:
+  """Fold Arabic variants and common Arabizi digits for matching; leaves URLs/numbers alone."""
+  folded = _ARABIC_DIACRITICS_RE.sub("", text or "")
+  for src, dst in (("أ", "ا"), ("إ", "ا"), ("آ", "ا"), ("ى", "ي"), ("ة", "ه")):
+    folded = folded.replace(src, dst)
+  tokens = []
+  for token in folded.split():
+    if token.startswith(("http://", "https://")) or token.isdigit():
+      tokens.append(token)
+    else:
+      tokens.append(token.translate(_ARABIZI_TRANS))
+  return " ".join(tokens)
+
+
+def is_suspicious_arabic_scam(text: str) -> bool:
+  """Fast heuristic for Arabic/Arabizi Nitro & phishing spam."""
+  norm = normalize_arabic_and_arabizi(text)
+  return any(pattern.search(norm) for pattern in _SCAM_PATTERNS)
 
 
 def is_silent(guild_id: Optional[int], channel_id: Optional[int]) -> bool:

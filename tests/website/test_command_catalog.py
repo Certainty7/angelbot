@@ -23,12 +23,12 @@ FIXTURE = pathlib.Path(__file__).resolve().parent / "fixtures" / "runtime_census
 AR_SOURCE = REPO / "tools" / "website-data-generator" / "data" / "descriptions_ar.json"
 INVITE_SOURCE = REPO / "tools" / "website-data-generator" / "data" / "invite.json"
 
-# The ten commands whose handler refuses everyone but the owner (docs/COMMANDS.md, grounded in the
-# source's `is_mistress` gates). Hand-written on purpose: this is the oracle, not a copy of the
+# The eleven commands whose handler refuses everyone but the owner (docs/COMMANDS.md, grounded in
+# the source's `is_mistress` gates). Hand-written on purpose: this is the oracle, not a copy of the
 # generator's own answer.
 OWNER_ONLY = {
     "sync", "diagnostics", "mood", "autonomy", "silence",
-    "harem", "sovereign", "dm_send", "whisper", "dm_logs",
+    "harem", "sovereign", "dm_send", "whisper", "dm_logs", "cleanup",
 }
 
 

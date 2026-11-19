@@ -26,6 +26,13 @@ import subprocess
 import sys
 import tempfile
 
+# Windows consoles default to cp1252, which cannot print the Arabic check details.
+try:
+  sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+  sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+  pass
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
 sys.path.insert(0, ROOT)
@@ -51,7 +58,7 @@ def _declared_owner_id() -> str:
 
 os.environ.setdefault("MALAK_OWNER_ID", _declared_owner_id())
 
-EXPECTED_COMMANDS = 65
+EXPECTED_COMMANDS = 67
 results = []
 
 

@@ -42,12 +42,12 @@ server-side processing is the build.
 | ID | Threat | Control in place | Evidence |
 |---|---|---|---|
 | T-01 | Prompt injection through member messages steers the AI layer into destructive actions | natural-language actions are gated: moderation paths require explicit confirmation and re-check the invoker's permission at execution time, not only at parse time | `angel/nl_router.py`, `angel/guard.py` |
-| T-02 | SSRF from member-supplied media URLs into cloud metadata or loopback | explicit blocklist for loopback, private, link-local, multicast, IPv4-mapped and `169.254.169.254`, and scheme restricted to http/https before any fetch; social links are routed by parsed host and every redirect hop is re-validated | `angel/images.py:158` (`_is_safe_url`), `angel/media.py` (`_allowed_social_host`) |
+| T-02 | SSRF from member-supplied media URLs into cloud metadata or loopback | every outbound request goes through `angel/net.py`: strict URL syntax (no userinfo, control chars or non-canonical IPv4), every resolved address must be public, `SafeAsyncResolver` re-checks at connect time, redirects are followed manually with each hop validated, and FFmpeg gets `-protocol_whitelist` | `angel/net.py`, `angel/media.py`, `angel/voice_engine.py` |
 | T-03 | Secret leakage into git | `.env`, `*.db`, `cookies.txt`, `venv/`, `backups/`, `stage/` are gitignored; gitleaks reports 0 findings across the full history | `.gitignore` |
 | T-04 | Supply-chain compromise of CI | both third-party actions pinned to commit SHAs, `permissions: contents: read` on both workflows, no deploy token in CI | `.github/workflows/checks.yml`, `website.yml` |
 | T-05 | Website build leaking private data into `dist/` | the generator reads only command metadata and emits no snowflake ids beyond the public application id; a CI step gates the JSON for host paths and credential shapes | `tools/website-data-generator/`, `website.yml` catalogue job |
 | T-06 | Public metrics/status surface exposing internals | no metrics API is part of the website; a legacy status service is disabled and retired (`docs/DECISIONS.md`) | service state on the bot host |
-| T-07 | Member data published by mistake | the site publishes no member names, ids, message content or counts; the portal page states the source repository is private | `website/src/data/*.json` scan, portal `projects.json` |
+| T-07 | Member data published by mistake | the site publishes no member names, ids, message content or counts; `website/src/data/*.json` is generated from command metadata only | `website/src/data/*.json` scan, `tools/website-data-generator/` |
 | T-08 | Privilege escalation inside a guild through role commands | permission re-checked at execution; owner-only commands marked as such in the catalogue copy | `cogs/admin.py`, `descriptions_ar.json` («للمالكة فقط») |
 | T-09 | Denial of service by resource exhaustion on a small VM | the unit caps memory and CPU, and `tools/selftest.py` runs as a deploy gate before restart | `deploy/angelbot.service` |
 | T-10 | Malicious content served from the CDN | CSP with `default-src 'none'` on the portal, self-hosted fonts and assets, no third-party scripts | portal `public/_headers`, website headers at cutover |
@@ -64,9 +64,9 @@ server-side processing is the build.
 | Risk | Reason | Mitigation |
 |---|---|---|
 | `hashlib.md5` used as a content-dedupe key (`angel/media.py:772`) | not a security primitive here; it compares image bytes inside one process | documented, `usedforsecurity=False` is the honest label if the file is next touched |
-| Video transcode writes under `/tmp/angelbot_social` | single-tenant VM, no untrusted local users | low; `tempfile.mkdtemp` is the correct future fix |
+| Video transcode writes under a private temp dir | fixed: `tempfile.mkdtemp` with mode 0700 per transcode, removed in `finally` | none |
 | Bot has 16 Discord permissions including `manage_roles` | functional requirement (autorole, reaction roles) | justified call-site by call-site in `invite.json`; no Administrator |
-| The URL guard resolves the name and the HTTP client resolves it again | DNS rebinding between the check and the connection is not fully excluded | accepted for a single-tenant bot; the allowlist limits the hosts a member can reach |
+| The URL guard resolves the name and the HTTP client resolves it again | fixed for aiohttp by `SafeAsyncResolver` (checked at connect); FFmpeg/yt-dlp still resolve on their own, so the host egress firewall remains the second line of defence | keep the RFC1918 egress rule in `09_DEPLOYMENT_AND_OPS.md` |
 
 ## 6. What this model does not claim
 

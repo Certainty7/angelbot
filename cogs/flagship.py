@@ -75,16 +75,6 @@ class Flagship(commands.Cog):
       await interaction.response.send_message("⚠️ يعمل داخل السيرفرات فقط.", ephemeral=True)
       return
 
-    if action == "list":
-      items = await self.bot.db.get_guild_knowledge(interaction.guild.id)
-      if not items:
-        await interaction.response.send_message("📭 قاعدة معرفة السيرفر فارغة حالياً.", ephemeral=True)
-        return
-      lines = [f"• **`#{it['id']}` [{it['topic']}]:** {it['content'][:180]}" for it in items[:20]]
-      embed = discord.Embed(title=f"📚 قاعدة معرفة {interaction.guild.name}", description="\n".join(lines), color=0x2B2D31)
-      await interaction.response.send_message(embed=embed, ephemeral=True)
-      return
-
     if not (
         is_mistress(interaction.user)
         or (
@@ -92,7 +82,19 @@ class Flagship(commands.Cog):
             and interaction.user.guild_permissions.manage_guild
         )
     ):
-      await interaction.response.send_message("🚫 تعديل قاعدة المعرفة مخصص للإدارة فقط.", ephemeral=True)
+      await interaction.response.send_message("🚫 قاعدة المعرفة مخصصة للإدارة فقط.", ephemeral=True)
+      return
+
+    if action == "list":
+      items = await self.bot.db.get_guild_knowledge(interaction.guild.id)
+      if not items:
+        await interaction.response.send_message("📭 قاعدة معرفة السيرفر فارغة حالياً.", ephemeral=True)
+        return
+      lines = [f"• **`#{it['id']}` [{it['topic']}]:** {it['content'][:180]}" for it in items[:20]]
+      # Discord rejects an embed whose description exceeds 4096 characters.
+      embed = discord.Embed(title=f"📚 قاعدة معرفة {interaction.guild.name}"[:256],
+                            description="\n".join(lines)[:4096], color=0x2B2D31)
+      await interaction.response.send_message(embed=embed, ephemeral=True)
       return
 
     if action == "add":
