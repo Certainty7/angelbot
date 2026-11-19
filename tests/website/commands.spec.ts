@@ -4,8 +4,10 @@ import { open, trackErrors } from './helpers';
 
 const commands = JSON.parse(readFileSync('src/data/commands.json', 'utf8')) as {
   totals: { all: number; slash: number; context_menu: number; per_category: Record<string, number> };
+  commands: Array<{ owner_only: boolean }>;
 };
 const total = commands.totals.all;
+const ownerCount = commands.commands.filter((c) => c.owner_only).length;
 
 test.describe('command explorer', () => {
   test.use({ viewport: { width: 1440, height: 1000 } });
@@ -44,8 +46,8 @@ test.describe('command explorer', () => {
 
     await search.press('Escape');
     await expect(page.locator('[data-visible]')).toHaveText(String(total));
-    // 58 rows render in the open list; the 10 owner rows live in the collapsed group by contract.
-    await expect(page.locator('[data-command]:visible')).toHaveCount(total - 10);
+    // Owner rows live in the collapsed group by contract.
+    await expect(page.locator('[data-command]:visible')).toHaveCount(total - ownerCount);
     await expect(page.locator('[data-empty]')).toBeHidden();
   });
 
@@ -67,8 +69,8 @@ test.describe('command explorer', () => {
     await page.locator('[data-cat=""]').click();
     await expect(page.locator('[data-command]:visible')).toHaveCount(1);
     await page.locator('[data-command-search]').fill('');
-    // Everything back: 58 rows in the open list plus the closed owner group.
-    await expect(page.locator('[data-command]:visible')).toHaveCount(total - 10);
+    // Everything back: open rows plus the closed owner group.
+    await expect(page.locator('[data-command]:visible')).toHaveCount(total - ownerCount);
     await expect(page.locator('[data-owner-group]')).not.toHaveAttribute('open', '');
   });
 
@@ -119,12 +121,12 @@ test.describe('owner tools section', () => {
     await expect(group).toHaveCount(1);
     await expect(group).not.toHaveAttribute('open', '');
     await expect(group.locator('.owner-group__summary')).toContainText('أدوات المالكة');
-    await expect(group.locator('[data-command]')).toHaveCount(10);
+    await expect(group.locator('[data-command]')).toHaveCount(ownerCount);
     // The rows exist in the DOM while closed: find-in-page and the browser's own search see them.
     await expect(group.locator('[data-command]').first()).toBeAttached();
     // No permission chips here: `administrator` in those rows gates the caller, not the bot.
     await expect(group.locator('.badge--perm')).toHaveCount(0);
-    await expect(group.locator('.badge--owner')).toHaveCount(10);
+    await expect(group.locator('.badge--owner')).toHaveCount(ownerCount);
     await expect(group.locator('.cmd__desc').first()).not.toContainText('للمالكة فقط');
   });
 
@@ -141,10 +143,10 @@ test.describe('owner tools section', () => {
 
   test('the owner filter chip isolates them and the headline states their count', async ({ page }) => {
     await open(page, '/commands/');
-    await expect(page.locator('.block-heading')).toContainText('69');
-    await expect(page.locator('.block-heading')).toContainText('10');
+    await expect(page.locator('.block-heading')).toContainText(String(total));
+    await expect(page.locator('.block-heading')).toContainText(String(ownerCount));
     await page.locator('[data-cat="__owner__"]').click();
-    await expect(page.locator('[data-visible]')).toHaveText('10');
-    await expect(page.locator('[data-command]:visible')).toHaveCount(10);
+    await expect(page.locator('[data-visible]')).toHaveText(String(ownerCount));
+    await expect(page.locator('[data-command]:visible')).toHaveCount(ownerCount);
   });
 });
