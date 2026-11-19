@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 from .config import yt_dlp
-from .net import _YTDLP_SEMAPHORE, is_allowed_hostname, is_valid_http_url_syntax
+from .net import get_ytdlp_semaphore, is_allowed_hostname, is_valid_http_url_syntax
 
 # Kept for API compatibility with the cleanup routine.
 _AUDIO_STREAM_CACHE: Dict[str, Any] = {}
@@ -148,7 +148,7 @@ async def run_ytdlp_json(
   except ValueError:
     return None
 
-  async with _YTDLP_SEMAPHORE:
+  async with get_ytdlp_semaphore():
     proc = await asyncio.create_subprocess_exec(
         *argv,
         stdout=asyncio.subprocess.PIPE,

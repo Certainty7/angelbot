@@ -957,18 +957,18 @@ async def extract_tiktok_media_items(
     async def _dl_one_img(idx: int, u: str) -> Optional[Tuple[int, bytes, str]]:
       async with dl_sem:
         try:
-          async with session.get(
+          _final, istatus, _ict, raw = await safe_fetch_response(
               u,
+              max_bytes=max_bytes,
               headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", "Referer": "https://www.tiktok.com/"},
-              timeout=aiohttp.ClientTimeout(total=10),
-          ) as iresp:
-            if iresp.status != 200:
-              return None
-            raw = await read_bounded_stream(iresp, max_bytes=max_bytes, min_bytes=400)
-            norm = await _normalize_image_bytes(raw)
-            if norm:
-              ext = "png" if norm.startswith(b"\x89PNG") else "jpg"
-              return (idx, norm, f"tiktok_{idx}.{ext}")
+              session=session,
+          )
+          if istatus != 200 or not raw or len(raw) < 400:
+            return None
+          norm = await _normalize_image_bytes(raw)
+          if norm:
+            ext = "png" if norm.startswith(b"\x89PNG") else "jpg"
+            return (idx, norm, f"tiktok_{idx}.{ext}")
         except Exception:
           pass
         return None
@@ -1068,19 +1068,18 @@ async def extract_tiktok_media_items(
         if play_url.lower().split("?")[0].endswith(".mp3"):
           continue
         try:
-          async with session.get(
+          _final, v_status, v_ctype, video_bytes = await safe_fetch_response(
               play_url,
+              max_bytes=max_bytes,
               headers={"User-Agent": "Mozilla/5.0", "Referer": "https://www.tikwm.com/"},
-              timeout=timeout,
-          ) as vresp:
-            if vresp.status == 200:
-              v_ctype = (vresp.headers.get("Content-Type") or "").lower()
-              video_bytes = await read_bounded_stream(vresp, max_bytes=max_bytes, min_bytes=4096)
-              if _is_valid_mp4_video_bytes(video_bytes, v_ctype):
-                clean_vid = await _ensure_discord_playable_mp4(video_bytes, max_bytes=max_bytes)
-                _safe_gc_collect()
-                cap = f"🎬 **{author_name}**" + (f" — {title}" if title else "")
-                return [(clean_vid, "video.mp4")], None, cap
+              session=session,
+          )
+          if v_status == 200 and video_bytes and len(video_bytes) >= 4096:
+            if _is_valid_mp4_video_bytes(video_bytes, v_ctype):
+              clean_vid = await _ensure_discord_playable_mp4(video_bytes, max_bytes=max_bytes)
+              _safe_gc_collect()
+              cap = f"🎬 **{author_name}**" + (f" — {title}" if title else "")
+              return [(clean_vid, "video.mp4")], None, cap
         except Exception:
           continue
 

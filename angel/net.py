@@ -17,6 +17,7 @@ import asyncio
 import ipaddress
 import re
 import socket
+import weakref
 from typing import Iterable, Optional, Tuple
 from urllib.parse import urljoin, urlparse
 
@@ -28,10 +29,35 @@ from .config import logger
 # 0.5 Shared HTTP Pool, Bounded Stream Reader & CPU Guards (Wispbyte 0.35 vCPU / 612 MiB RAM)
 _SHARED_HTTP_SESSION: Optional[aiohttp.ClientSession] = None
 _SESSION_LOCK: Optional[asyncio.Lock] = None
-_YTDLP_SEMAPHORE = asyncio.Semaphore(1)
-_IMAGE_PROC_SEMAPHORE = asyncio.Semaphore(1)
-_MEDIA_DOWNLOAD_SEMAPHORE = asyncio.Semaphore(2)
+# An asyncio.Semaphore binds to the loop that first waits on it. A module-level
+# instance created at import time breaks the next `asyncio.run()` (tests, CLI jobs),
+# so each running loop gets its own bounded set.
+_SEMAPHORES: "weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict]" = weakref.WeakKeyDictionary()
 _WORKER_NICED = False
+
+
+def _semaphore(name: str, limit: int) -> asyncio.Semaphore:
+  loop = asyncio.get_running_loop()
+  per_loop = _SEMAPHORES.get(loop)
+  if per_loop is None:
+    per_loop = {}
+    _SEMAPHORES[loop] = per_loop
+  sem = per_loop.get(name)
+  if sem is None:
+    sem = per_loop[name] = asyncio.Semaphore(limit)
+  return sem
+
+
+def get_ytdlp_semaphore() -> asyncio.Semaphore:
+  return _semaphore("ytdlp", 1)
+
+
+def get_image_proc_semaphore() -> asyncio.Semaphore:
+  return _semaphore("image", 1)
+
+
+def get_media_download_semaphore() -> asyncio.Semaphore:
+  return _semaphore("media", 2)
 
 _MAX_REDIRECT_HOPS = 4
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
@@ -333,6 +359,16 @@ def _strip_sensitive_headers(headers: Optional[dict], prev_url: str, next_url: s
   return {k: v for k, v in headers.items() if k.lower() not in _SENSITIVE_REDIRECT_HEADERS}
 
 
+async def _safe_session_or_shared(session) -> aiohttp.ClientSession:
+  """Reject injected sessions that would bypass the connect-time SSRF resolver."""
+  if session is None:
+    return await get_shared_http_session()
+  connector = getattr(session, "connector", None)
+  if not isinstance(getattr(connector, "_resolver", None), SafeAsyncResolver):
+    raise PermissionError("custom HTTP session must use SafeAsyncResolver")
+  return session
+
+
 async def safe_fetch_bytes(
     url: str,
     *,
@@ -343,7 +379,7 @@ async def safe_fetch_bytes(
     session=None,
 ) -> Tuple[str, int, bytes]:
   """GET a URL following redirects manually, validating every hop."""
-  sess = session or await get_shared_http_session()
+  sess = await _safe_session_or_shared(session)
   current_url = url
   req_headers = dict(headers) if headers else None
 
@@ -397,7 +433,7 @@ async def safe_fetch_response(    url: str,
     session=None,
 ) -> Tuple[str, int, str, Optional[bytes]]:
   """GET with manual redirects; returns (final_url, status, content_type, body)."""
-  sess = session or await get_shared_http_session()
+  sess = await _safe_session_or_shared(session)
   current_url = url
   req_headers = dict(headers) if headers else None
 
@@ -444,7 +480,10 @@ async def validate_extracted_stream_url(
 __all__ = [
     "SafeAsyncResolver",
     "close_shared_http_session",
+    "get_image_proc_semaphore",
+    "get_media_download_semaphore",
     "get_shared_http_session",
+    "get_ytdlp_semaphore",
     "is_allowed_hostname",
     "is_public_ip",
     "is_safe_public_http_url_sync",

@@ -155,7 +155,7 @@ class MusicEngine:
     self.bot = bot
     self.queues: Dict[int, GuildQueue] = {}
     self._loop: Optional[asyncio.AbstractEventLoop] = None
-    self.last_dave: Dict[str, object] = {}
+    self.last_dave: Dict[int, Dict[str, object]] = {}
     self._watch_tasks: Dict[int, asyncio.Task] = {}
     self._locks: Dict[int, asyncio.Lock] = {}
 
@@ -318,9 +318,9 @@ class MusicEngine:
       logger.warning(f"music-dave reconnect failed: {type(exc).__name__}: {exc}")
       return voice
     try:
-      self.last_dave = await self._wait_for_dave(fresh)
+      self.last_dave[guild.id] = await self._wait_for_dave(fresh)
     except Exception:
-      self.last_dave = {}
+      self.last_dave[guild.id] = {}
     return fresh
 
   async def play_next(self, guild: discord.Guild) -> Optional[Track]:
@@ -349,12 +349,12 @@ class MusicEngine:
       self._schedule_advance(guild)
 
     try:
-      self.last_dave = await self._wait_for_dave(voice)
-      if self.last_dave.get("ver") and not self.last_dave.get("can_encrypt"):
+      dave = self.last_dave[guild.id] = await self._wait_for_dave(voice)
+      if dave.get("ver") and not dave.get("can_encrypt"):
         voice = await self._recover_dave(guild, voice)
     except Exception as exc:  # noqa: BLE001 - a diagnostic must never block playback
       logger.debug(f"music-dave probe failed: {type(exc).__name__}: {exc}")
-      self.last_dave = {}
+      self.last_dave[guild.id] = {}
 
     try:
       await validate_extracted_stream_url(track.stream_url)
@@ -363,10 +363,16 @@ class MusicEngine:
       self._schedule_advance(guild, delay=0.2)
       return None
 
-    source, counted = self._make_source(track, state.volume)
+    source = None
     try:
+      source, counted = self._make_source(track, state.volume)
       voice.play(source, after=after)
     except Exception as exc:  # noqa: BLE001 - a bad stream must never kill the bot
+      if source is not None:
+        try:
+          source.cleanup()
+        except Exception:
+          pass
       logger.warning(f"music-playback failed to start: {exc}")
       self._schedule_advance(guild, delay=1.0)
       return None
@@ -374,16 +380,17 @@ class MusicEngine:
     logger.info(
         f"music-play guild={guild.id} title={track.title[:60]!r} "
         f"dur={track.duration_text} source={track.source} "
-        f"can_encrypt={self.last_dave.get('can_encrypt')} "
+        f"can_encrypt={self.last_dave.get(guild.id, {}).get('can_encrypt')} "
         f"encode_ms={round((time.monotonic() - started) * 1000, 1)}"
     )
     self._watch_audio(guild, voice, counted, track)
     return track
 
   async def start(self, guild: discord.Guild) -> Optional[Track]:
-    voice = guild.voice_client
-    if voice is not None and voice.is_playing():
-      return self.state(guild.id).current
+    async with self._guild_lock(guild.id):
+      voice = guild.voice_client
+      if voice is not None and voice.is_playing():
+        return self.state(guild.id).current
     return await self.play_next(guild)
 
   async def skip(self, guild: discord.Guild) -> Optional[Track]:

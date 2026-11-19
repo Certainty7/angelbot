@@ -10,9 +10,9 @@ import urllib.parse
 from typing import List, Optional, Tuple
 from .config import ARABIC_GIF_KEYWORDS, Image, is_romantic_gif
 from .net import (
-    _IMAGE_PROC_SEMAPHORE,
-    _MEDIA_DOWNLOAD_SEMAPHORE,
     _lower_worker_cpu_priority,
+    get_image_proc_semaphore,
+    get_media_download_semaphore,
     get_shared_http_session,
     is_safe_public_http_url_sync,
     read_bounded_stream,
@@ -155,7 +155,7 @@ async def remove_bottom_watermark_async(img_bytes: bytes) -> bytes:
   if not Image:
     return img_bytes
   loop = asyncio.get_running_loop()
-  async with _IMAGE_PROC_SEMAPHORE:
+  async with get_image_proc_semaphore():
     return await loop.run_in_executor(None, remove_bottom_watermark_if_needed, img_bytes)
 
 
@@ -170,7 +170,7 @@ async def download_media_as_base64(url: str) -> Optional[Tuple[str, str]]:
     return None
   loop = asyncio.get_running_loop()
   timeout = aiohttp.ClientTimeout(total=15)
-  async with _MEDIA_DOWNLOAD_SEMAPHORE:
+  async with get_media_download_semaphore():
     try:
       session = await get_shared_http_session()
       for _hop in range(4):
