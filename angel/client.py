@@ -20,13 +20,10 @@ from discord.ext import commands, tasks
 from angel import archive, autonomy, evolution, guard, memory, persona_notes, sendqueue
 from angel.brain import AIServiceError, AngelBrainService
 from angel.config import (
-    DB_PATH,
-    GEMINI_API_KEY,
     KEEP_RECENT_MESSAGES,
     MISTRESS_INT_ID,
     SESSION_TIMEOUT_HOURS,
     SUMMARIZE_THRESHOLD,
-    TEXT_VISION_MODELS,
     _safe_gc_collect,
     is_mistress,
     logger,
@@ -441,7 +438,10 @@ class AngelDiscordBot(commands.Bot):
           culture=await persona_notes.current(getattr(getattr(user, "guild", None), "id", None)),
           rhythm_hint=reply_directives(
               detect_reply_rhythm(prompt),
-              self.guild_dialects.get(getattr(getattr(message_Context, "guild", None), "id", 0)),
+              self.guild_dialects.get(
+                  getattr(getattr(message_Context, "guild", None), "id", 0)
+                  or getattr(getattr(user, "guild", None), "id", 0)
+              ),
           ),
       )
 

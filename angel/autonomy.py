@@ -10,7 +10,7 @@ import os
 import random
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from . import evolution, guard, memory, scoring
 from .config import logger

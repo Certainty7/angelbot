@@ -295,8 +295,6 @@ def owner_id_not_in_source():
 
 def error_correlation_id():
     """The user reply and the log line carry the same correlation id."""
-    import discord
-
     import bot as bot_mod
 
     class _Resp:

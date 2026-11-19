@@ -19,7 +19,6 @@ Exit 0 = all good.
 """
 import asyncio
 import importlib
-import json
 import logging
 import os
 import subprocess
@@ -221,7 +220,6 @@ def _fresh_db(tag: str):
 @check("memory-fts5")
 def _memory_fts5():
     import asyncio
-    from angel import memory as mem
 
     async def run():
         db = _fresh_db("fts")

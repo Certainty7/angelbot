@@ -9,7 +9,7 @@ import asyncio
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Deque, Dict, List, Optional
+from typing import Any, Deque, Dict, Optional
 
 import discord
 
@@ -157,23 +157,36 @@ class Sender:
     async def _deliver(self, worker: _ChannelWorker, job: SendJob):
         channel = self.client.get_channel(job.channel_id)
         if channel is None:
+            try:
+                channel = await self.client.fetch_channel(job.channel_id)
+            except Exception:
+                channel = None
+        if channel is None:
             job.attempts = self.max_attempts + 1
             self.dead_letters.append(job)
             return
         await worker.bucket.acquire()
+        content = job.content
+        if isinstance(content, str) and len(content) > 2000:
+            content = content[:1997].rstrip() + "…"
         try:
             kwargs = {"allowed_mentions": discord.AllowedMentions(everyone=False, roles=False, users=True)}
             if job.reply_to:
                 kwargs["reference"] = channel.get_partial_message(job.reply_to)
-            await channel.send(job.content, **kwargs)
+            await channel.send(content, **kwargs)
             self.sent += 1
         except discord.HTTPException as exc:
+            status = int(getattr(exc, "status", 0) or 0)
+            retry_after = float(getattr(exc, "retry_after", 0) or 0)
+            if status not in (429, 500, 502, 503, 504):
+                # 400/403/404 will fail the same way forever; do not burn retries on them.
+                self.dead_letters.append(job)
+                return
             job.attempts += 1
             self.retried += 1
-            retry_after = float(getattr(exc, "retry_after", 0) or 0)
             if job.attempts <= self.max_attempts:
                 # Only THIS channel's worker sleeps; every other channel keeps flowing.
-                await asyncio.sleep(max(0.5, retry_after) if getattr(exc, "status", 0) == 429
+                await asyncio.sleep(max(0.5, retry_after) if status == 429
                                     else min(8.0, 1.5 * job.attempts))
                 self._requeue(worker, job)
                 return

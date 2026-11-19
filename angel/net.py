@@ -212,7 +212,7 @@ def is_safe_public_http_url_sync(url: str) -> bool:
 
 async def resolve_and_validate_host(host: str, port: int = 443, *, resolver_fn=None) -> list:
   """Resolve via DNS and require EVERY returned address to be public."""
-  cleaned = (host or "").strip().rstrip(".")
+  cleaned = (host or "").strip().rstrip(".").lower()
   if not cleaned:
     raise PermissionError("SSRF blocked: empty hostname")
   if cleaned == "localhost" or cleaned.endswith(_BLOCKED_HOST_SUFFIXES):

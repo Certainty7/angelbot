@@ -40,7 +40,6 @@ def node(i, x):
 def connector(x_from, x_to, cls="link"):
     """Arrow pointing left (the direction of the flow in RTL)."""
     x1, x2 = x_from - R_OUT - 12, x_to + R_OUT + 12
-    mid = (x1 + x2) / 2
     return (f'      <path class="{cls}" d="M{x1} {Y} H{x2 + 16}"/>'
             f'\n      <path class="{cls}__head" d="M{x2 + 16} {Y} l14 -7 v14 z"/>')
 

@@ -3,7 +3,6 @@
 The harem-only romance gate runs before any fetch, so a refused request never reaches a source.
 """
 import io
-from datetime import datetime, timezone
 from typing import Optional
 
 import discord

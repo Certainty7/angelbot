@@ -12,7 +12,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from angel.brain import AIServiceError
+from angel.brain import AI_ERRORS
 from angel.config import is_mistress, logger
 from angel.images import download_media_as_base64
 from angel.summarize import analyze_channel_history_deep
@@ -67,7 +67,7 @@ class AiChat(commands.Cog):
         await interaction.followup.send(content=first_msg, files=files_to_send)
       for chunk in chunks[1:]:
         await interaction.followup.send(content=chunk)
-    except AIServiceError as err:
+    except AI_ERRORS as err:
       await interaction.followup.send(f"⚠️ {err}", ephemeral=True)
     except Exception as exc:
       logger.exception(f"Error in /chat: {exc}")
@@ -94,7 +94,7 @@ class AiChat(commands.Cog):
           color=0x2B2D31,
       )
       await interaction.followup.send(embed=embed)
-    except AIServiceError as err:
+    except AI_ERRORS as err:
       await interaction.followup.send(f"⚠️ {err}", ephemeral=True)
 
 
@@ -120,7 +120,8 @@ class AiChat(commands.Cog):
 
     await interaction.response.defer(thinking=True)
     try:
-      img_bytes, _ = await self.bot.ai.generate_image_bytes(prompt, style_Preset=style)
+      img_bytes, _ = await self.bot.ai.generate_image_bytes(
+          prompt, style_Preset=style, user=interaction.user)
       mistress = is_mistress(interaction.user)
       caption = f"🪽 **{prompt}**"
 
@@ -132,7 +133,7 @@ class AiChat(commands.Cog):
       )
       embed.set_image(url="attachment://angel_creation.png")
       await interaction.followup.send(embed=embed, file=file, view=ArtStudioView(prompt, self.bot))
-    except AIServiceError as err:
+    except AI_ERRORS as err:
       await interaction.followup.send(f"⚠️ {err}", ephemeral=True)
 
 
@@ -172,7 +173,7 @@ class AiChat(commands.Cog):
           color=0x2B2D31,
       )
       await interaction.followup.send(embed=embed)
-    except AIServiceError as err:
+    except AI_ERRORS as err:
       await interaction.followup.send(f"⚠️ {err}", ephemeral=True)
 
 

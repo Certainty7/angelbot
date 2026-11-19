@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 from collections import deque
+from .cache import sanitize_untrusted_line
 from .config import is_mistress
 from .registry import get_bot
 
@@ -64,8 +65,10 @@ def sanitize_untrusted_context(text: Optional[str]) -> Optional[str]:
   """Strip control tags and directive brackets from untrusted ambient messages or snippets to block Indirect Prompt Injection."""
   if not text:
     return None
-  cleaned = re.sub(r"\[\s*(?:EXEC|SEND_GIF|GENERATE_IMAGE)[^\]]*\]", "", text, flags=re.IGNORECASE)
+  cleaned = re.sub(r"\[\s*(?:EXEC|SEND_GIF|GENERATE_IMAGE|SYSTEM|INST|/SYSTEM|/INST)[^\]]*\]", "", text, flags=re.IGNORECASE)
   cleaned = re.sub(r"(?:system_instruction|ignore previous|تجاهلي التعليمات)", "", cleaned, flags=re.IGNORECASE)
+  cleaned = "".join(ch for ch in cleaned if ch in ("\n", "\t") or ch.isprintable())
+  cleaned = cleaned.replace("<", "\u2039").replace(">", "\u203a")
   return cleaned.strip() or None
 
 PERSONA_STYLE_MODES = {
@@ -164,6 +167,11 @@ def build_angel_system_prompt(
     allow_romantic = mistress or in_harem
   style_desc = PERSONA_STYLE_MODES.get(style_mode, PERSONA_STYLE_MODES["realistic"])
   display = getattr(user, "display_name", None) or getattr(user, "name", "عضو")
+  # A display name is attacker-controlled text; it must never carry a newline or a prompt tag.
+  display = (
+      sanitize_untrusted_line(sanitize_untrusted_context(str(display)) or "عضو")
+      .replace("\n", " ").replace("\t", " ")
+  )[:80]
   settings = settings or {}
   verbosity = float(settings.get("verbosity", 0.4))
   mood_word = "راقية المزاج" if mood >= 0.65 else ("عادية" if mood >= 0.4 else "شوية متضايقة")
@@ -362,6 +370,24 @@ def should_engage_message(
   return bool(in_followup_window and len(message_text.strip()) >= 3)
 
 
+_TYPO_PROTECTED_RE = re.compile(
+    r"https?://\S+|`[^`]*`|<@[!&]?\d+>|<#\d+>|<:\w+:\d+>|\[[^\]]*\]"
+)
+
+
+def _safe_typo_indexes(text: str) -> list[int]:
+  protected = [False] * len(text)
+  for match in _TYPO_PROTECTED_RE.finditer(text):
+    for i in range(match.start(), match.end()):
+      protected[i] = True
+  return [
+      i for i, ch in enumerate(text)
+      if 3 <= i < len(text) - 3
+      and "\u0600" <= ch <= "\u06ff"
+      and not protected[i]
+  ]
+
+
 def humanize(text: str, settings: Optional[dict] = None, rng=None) -> str:
   """Small fast-typing imperfections + strip leaked assistant tics."""
   import random as _random
@@ -372,17 +398,17 @@ def humanize(text: str, settings: Optional[dict] = None, rng=None) -> str:
   if not out:
     return out
   rate = float(settings.get("typo_rate", 0.01))
-  if rng.random() < rate and len(out) > 12:
-    idx = rng.randrange(3, len(out) - 3)
+  safe_indexes = _safe_typo_indexes(out) if rng.random() < rate and len(out) > 12 else []
+  if safe_indexes:
+    idx = rng.choice(safe_indexes)
     ch = out[idx]
-    if ch.isalpha():
-      if rng.random() < 0.5:
-        out = out[:idx] + out[idx + 1:]
-      else:
-        for a, b in _AR_SWAPS:
-          if ch == a:
-            out = out[:idx] + b + out[idx + 1:]
-            break
+    if rng.random() < 0.5:
+      out = out[:idx] + out[idx + 1:]
+    else:
+      for a, b in _AR_SWAPS:
+        if ch == a:
+          out = out[:idx] + b + out[idx + 1:]
+          break
   out = re.sub(r"^(?:بالتأكيد|بكل سرور|طبعاً)[!،,.\s]+", "", out, flags=re.I)
   out = re.sub(r"(?:كيف (?:أ|ا)قدر أساعدك\??|هل تحتاج أي مساعدة أخرى\??)", "", out, flags=re.I)
   return re.sub(r"\s{2,}", " ", out).strip()

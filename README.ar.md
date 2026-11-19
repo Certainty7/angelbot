@@ -6,7 +6,7 @@
 
 [**الموقع**](https://angel.aetherisnode.cloud/) · [English](README.md)
 
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![discord.py](https://img.shields.io/badge/discord.py-2.7.1-5865F2?logo=discord&logoColor=white)](https://discordpy.readthedocs.io/) [![SQLite](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/fts5.html)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![discord.py](https://img.shields.io/badge/discord.py-2.7.1-5865F2?logo=discord&logoColor=white)](https://discordpy.readthedocs.io/) [![SQLite](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/fts5.html) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [نظرة عامة](#نظرة-عامة) · [المزايا](#المزايا) · [البنية](#البنية) · [البدء السريع](#البدء-السريع) · [الإعدادات](#الإعدادات) · [الأوامر](#الأوامر) · [النشر](#النشر) · [الاختبار](#الاختبار) · [الأمان](#الأمان) · [المساهمة](#المساهمة)
 

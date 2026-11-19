@@ -14,7 +14,7 @@ from discord.ext import commands
 
 from angel.audio_source import ResolveError, clean_reason
 from angel.config import logger
-from angel.voice_engine import MusicEngine, Track
+from angel.voice_engine import MusicEngine
 
 MUSIC_ENABLED = os.environ.get("MUSIC_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
 MAX_QUEUE = 50

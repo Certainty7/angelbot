@@ -4,6 +4,8 @@
 FROM python:3.12-slim-bookworm AS base
 
 ARG DENO_VERSION=v2.1.4
+ARG DENO_SHA256_AMD64=54a81939cccb2af114c4d0a68a554cf4a04b1f08728e70f663f83781de19d785
+ARG DENO_SHA256_ARM64=93ad8efe6f60da8566652dfd39cf2a23cb0e35d8c6d6faac7392a917d2b50039
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -20,11 +22,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Pinned Deno archive instead of piping an unverified install script.
 RUN ARCH="$(dpkg --print-architecture)" \
     && case "$ARCH" in \
-         amd64) DENO_ARCH="x86_64-unknown-linux-gnu" ;; \
-         arm64) DENO_ARCH="aarch64-unknown-linux-gnu" ;; \
+         amd64) DENO_ARCH="x86_64-unknown-linux-gnu"; DENO_SHA="$DENO_SHA256_AMD64" ;; \
+         arm64) DENO_ARCH="aarch64-unknown-linux-gnu"; DENO_SHA="$DENO_SHA256_ARM64" ;; \
          *) echo "Unsupported arch: $ARCH" >&2; exit 1 ;; \
        esac \
     && curl -fsSL "https://github.com/denoland/deno/releases/download/${DENO_VERSION}/deno-${DENO_ARCH}.zip" -o /tmp/deno.zip \
+    && echo "${DENO_SHA}  /tmp/deno.zip" | sha256sum -c - \
     && unzip -q /tmp/deno.zip -d /usr/local/bin \
     && rm -f /tmp/deno.zip \
     && chmod 0755 /usr/local/bin/deno \
@@ -45,4 +48,4 @@ RUN python -m compileall -q bot.py angel cogs tools \
 
 USER angel
 
-CMD ["sh", "-c", "python bot.py --checkpoint-db && python bot.py"]
+CMD ["sh", "-c", "python bot.py --checkpoint-db && exec python bot.py"]

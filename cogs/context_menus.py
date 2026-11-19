@@ -6,7 +6,7 @@ discord.py does not allow a `context_menu` inside a Cog, so these stay module-le
 import discord
 from discord import app_commands
 
-from angel.brain import AIServiceError
+from angel.brain import AI_ERRORS
 
 
 @app_commands.context_menu(name="تلخيص الرسالة")
@@ -23,7 +23,7 @@ async def _summarize(interaction: discord.Interaction, message: discord.Message)
     res = await interaction.client.ai.custom_prompt(interaction.user, prompt, harem_title=interaction.client.get_harem_title(interaction.user.id))
     embed = discord.Embed(title="📝 ملخص الرسالة", description=res[:4000], color=0x2B2D31)
     await interaction.followup.send(embed=embed, ephemeral=True)
-  except AIServiceError as err:
+  except AI_ERRORS as err:
     await interaction.followup.send(f"⚠️ {err}", ephemeral=True)
 
 
@@ -41,7 +41,7 @@ async def _translate(interaction: discord.Interaction, message: discord.Message)
     res = await interaction.client.ai.custom_prompt(interaction.user, prompt, harem_title=interaction.client.get_harem_title(interaction.user.id))
     embed = discord.Embed(title="🌐 ترجمة وتحليل الرسالة", description=res[:4000], color=0x2B2D31)
     await interaction.followup.send(embed=embed, ephemeral=True)
-  except AIServiceError as err:
+  except AI_ERRORS as err:
     await interaction.followup.send(f"⚠️ {err}", ephemeral=True)
 
 
@@ -63,7 +63,7 @@ async def _suggest(interaction: discord.Interaction, message: discord.Message):
     res = await interaction.client.ai.custom_prompt(interaction.user, prompt, harem_title=interaction.client.get_harem_title(interaction.user.id))
     embed = discord.Embed(title="💡 اقتراح رد واستخراج مهام", description=res[:4000], color=0x2B2D31)
     await interaction.followup.send(embed=embed, ephemeral=True)
-  except AIServiceError as err:
+  except AI_ERRORS as err:
     await interaction.followup.send(f"⚠️ {err}", ephemeral=True)
 
 

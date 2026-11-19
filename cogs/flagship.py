@@ -13,7 +13,6 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from angel.brain import AIServiceError
 from angel.config import FFMPEG_EXE, has_perm_or_mistress, is_mistress, is_server_staff
 from angel.dashboard import build_server_pulse_embed
 from angel.ui import AngelControlCenterView

@@ -5,9 +5,7 @@ import asyncio
 import base64
 import discord
 import io
-import ipaddress
 import re
-import socket
 import urllib.parse
 from typing import List, Optional, Tuple
 from .config import ARABIC_GIF_KEYWORDS, Image, is_romantic_gif

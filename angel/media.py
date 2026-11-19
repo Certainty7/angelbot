@@ -23,7 +23,6 @@ from .net import (
     is_allowed_hostname,
     read_bounded_stream,
     safe_fetch_response,
-    safe_fetch_text,
     validate_ig_shortcode,
 )
 from .downloader import _AUDIO_STREAM_CACHE, _KNOWN_PREVIEW_URLS, run_ytdlp_json
@@ -687,6 +686,11 @@ async def extract_instagram_media_items(
   shortcode_m = re.search(r"/(reel|reels|p|tv)/([A-Za-z0-9_\-]+)", clean_ig_url, re.IGNORECASE)
   url_kind = (shortcode_m.group(1).lower() if shortcode_m else "p")
   shortcode = shortcode_m.group(2) if shortcode_m else None
+  if shortcode:
+    try:
+      validate_ig_shortcode(shortcode)
+    except ValueError:
+      shortcode = None
   is_reel_url = url_kind in ("reel", "reels", "tv")
   session = await get_shared_http_session()
 
