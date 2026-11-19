@@ -40,6 +40,10 @@
           },
           "items": [
             {
+              "en": "The outgoing reply sanitiser no longer raises `bad escape \\\\u` on every reply: the `@everyone`/`@here` neutraliser builds a real zero-width space instead of passing a raw escape to `re.sub`, which had made the bot answer every message with the generic error notice. Regression tests cover the plain reply, both mentions and the length cap.",
+              "ar": "مُعقّم الردود الصادرة لم يعد يرفع `bad escape \\\\u` مع كل رد: مُحيّد `@everyone`/`@here` يبني مسافة صفرية حقيقية بدل تمرير escape خام إلى `re.sub`، وهو ما كان يجعل البوت يرد على كل رسالة بإشعار الخطأ العام. وأُضيفت اختبارات انحدار للرد العادي والمنشنين وحد الطول."
+            },
+            {
               "en": "`BoundedTTLCache.values()` no longer mis-unpacks entries; `None` values, TTL-aware `pop`, and control characters in untrusted lines are handled correctly.",
               "ar": "`BoundedTTLCache.values()` لم تعد تفكّ العناصر خطأً؛ وتُعالج قيم `None`، و`pop` الواعي بـ TTL، ومحارف التحكم في الأسطر غير الموثوقة."
             },
