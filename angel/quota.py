@@ -72,5 +72,14 @@ class QuotaGuard:
         wait_time = max(0.25, 60.0 - (now - self.recent_api_timestamps[0]) + 0.1)
         await asyncio.sleep(min(wait_time, 4.0))
 
-      self.recent_api_timestamps.append(time.monotonic())
+      stamp = time.monotonic()
+      self.recent_api_timestamps.append(stamp)
       self.total_api_calls += 1
+      return stamp
+
+  def release_api_timestamp(self, stamp: float) -> None:
+    """Remove this request's own tick, never another request's oldest tick."""
+    try:
+      self.recent_api_timestamps.remove(stamp)
+    except ValueError:
+      pass
