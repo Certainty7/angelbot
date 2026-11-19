@@ -77,7 +77,10 @@ class AngelBrainService:
 
   async def _post_with_retry(self, payload: dict, high_priority: bool = False,
                              cmd: str = "chat", user: Any = None) -> str:
-    timeout = aiohttp.ClientTimeout(total=22)
+    timeout = aiohttp.ClientTimeout(total=18)
+    # A user-facing reply must never wait through five slow fallbacks: bound the whole
+    # attempt chain, not just each request.
+    deadline = time.monotonic() + 28.0
 
     all_candidates = [self.active_model] + [
         m for m in self.models_list if m != self.active_model
@@ -85,15 +88,19 @@ class AngelBrainService:
     candidate_models = [m for m in all_candidates if m not in self._dead_models] or all_candidates
 
     for model_name in candidate_models:
+      if time.monotonic() >= deadline:
+        logger.warning("ai-deadline reached before model=%s", model_name)
+        break
       if self._is_cooling(model_name):
         logger.info("ai-skip model=%s reason=cooldown", model_name)
         continue
       endpoint = self._get_endpoint(model_name)
       payload_for_model = payload
       _gen = payload.get("generationConfig")
-      if isinstance(_gen, dict) and "thinkingConfig" not in _gen and ("gemini-4" in model_name or "gemini-3.1" in model_name):
-        # 4.x/3.1 spend the whole token budget thinking and return an empty answer without this.
-        # Copy instead of mutating the caller's payload: a 400 fallback must not leak across calls.
+      if isinstance(_gen, dict) and "thinkingConfig" not in _gen and ("gemini-4" in model_name or "gemini-3.1" in model_name or "gemini-3-flash-preview" in model_name):
+        # These models spend the whole token budget thinking and return an empty answer
+        # without this. Copy instead of mutating the caller's payload: a 400 fallback must
+        # not leak across calls.
         payload_for_model = {
             **payload,
             "generationConfig": {**_gen, "thinkingConfig": {"thinkingBudget": 0}},
@@ -132,11 +139,12 @@ class AngelBrainService:
                 usd = cost.cost_of(in_tok, out_tok)
                 if self.db is not None:
                   await self.db.add_usage(cost.local_day(), in_tok, out_tok, usd)
-                logger.info("ai-reply ms=%s model=%s usd=%.6f cmd=%s user=%s",
-                            elapsed_ms, model_name, usd, cmd, _user_tag(user))
+                logger.info("ai-reply ms=%s model=%s usd=%.6f cmd=%s user=%s in=%s out=%s",
+                            elapsed_ms, model_name, usd, cmd, _user_tag(user), in_tok, out_tok)
                 return visible_text
 
-              err_snip = (await response.text())[:160]
+              body_text = await response.text()
+              err_snip = body_text[:160]
               self.quota_guard.last_api_error = f"{model_name}: HTTP {response.status}"
               if response.status == 404:
                 logger.warning(f"Gemini model '{model_name}' returned 404 NotFound; marking inactive.")
@@ -146,7 +154,8 @@ class AngelBrainService:
                 break
               if response.status == 429:
                 logger.warning(f"Gemini model '{model_name}' hit 429 TooManyRequests; failing over to next model.")
-                self._cool(model_name)
+                # A daily free-tier exhaustion must not be retried every two minutes.
+                self._cool(model_name, 3600.0 if ("per day" in body_text or "per_day" in body_text) else 120.0)
                 self._rotate_key()
                 if self.quota_guard.recent_api_timestamps:
                   self.quota_guard.recent_api_timestamps.pop()
@@ -155,7 +164,12 @@ class AngelBrainService:
               if response.status in (500, 502, 503, 504):
                 logger.warning(f"Gemini model '{model_name}' HTTP {response.status}; switching/retrying.")
                 if response.status == 503:
-                  self._cool(model_name, 60.0)
+                  # A 503 on the fast model is usually a one-second spike, while the lite
+                  # fallbacks take 14–20 s: one quick retry is cheaper than failing over.
+                  if attempt < self.max_retries_per_model:
+                    await asyncio.sleep(0.8)
+                    continue
+                  self._cool(model_name, 300.0)
                   break  # retrying a cooled model just burns the attempt budget
                 if attempt < self.max_retries_per_model:
                   await asyncio.sleep(0.35)
@@ -300,7 +314,7 @@ class AngelBrainService:
     payload = {
         "system_instruction": {"parts": [{"text": system_text}]},
         "contents": contents,
-        "generationConfig": {"temperature": 0.75, "maxOutputTokens": 900},
+        "generationConfig": {"temperature": 0.75, "maxOutputTokens": 450},
     }
     return await self._post_with_retry(
         payload, high_priority=(is_mistress(user) or harem_title is not None),

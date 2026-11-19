@@ -116,7 +116,7 @@ GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY") or "").strip()
 # hits its quota the next call uses the other instead of failing the conversation.
 GEMINI_API_KEY_SECONDARY = (os.getenv("GEMINI_API_KEY_2") or "").strip()
 GEMINI_API_KEYS = [k for k in (GEMINI_API_KEY_SECONDARY, GEMINI_API_KEY) if k]
-RAW_ENV_MODEL = (os.getenv("GEMINI_MODEL") or "gemini-3.5-flash-lite").strip()
+RAW_ENV_MODEL = (os.getenv("GEMINI_MODEL") or "gemini-3-flash-preview").strip()
 
 # Sovereign owner identification. The owner id lives in the environment only:
 # MALAK_OWNER_ID (the name the systemd EnvironmentFile uses), with MISTRESS_USER_ID kept as
@@ -133,18 +133,19 @@ MISTRESS_INT_ID = int(MISTRESS_USER_ID)
 # forwarding incoming DMs to the owner) are off unless the host opts in explicitly.
 SOVEREIGN_TOOLS_ENABLED = (os.getenv("ENABLE_SOVEREIGN_TOOLS") or "0").strip().lower() in (
     "1", "true", "yes", "on")
-# Measured on this key 2026-11-12: gemini-4-hydrogen answers in ~5 s with natural Arabic but
-# occasionally returns 503 (high demand) and gemini-3.8-flash hangs past 45 s, so the chain
-# always ends on 3.5-flash-lite, the model that never failed.
+# Measured on this key 2026-11-19: gemini-3-flash-preview answers in 1.4–3.6 s with
+# thinking disabled and real Arabic quality; gemini-3.5/3.6/3.7-flash time out past 20 s
+# on this account, gemini-4-hydrogen mostly returns 503, and the flash-lite models answer
+# but take 14–20 s. The chain therefore leads with 3-flash-preview and keeps the lite
+# models as the safety net.
 DEFAULT_PRIMARY_MODEL = RAW_ENV_MODEL
 
 TEXT_VISION_MODELS = list(dict.fromkeys([
     DEFAULT_PRIMARY_MODEL,
-    "gemini-4-hydrogen",
-    "gemini-3.5-flash-lite",
+    "gemini-3-flash-preview",
     "gemini-3.1-flash-lite",
-    "gemini-flash-latest",
-    "gemini-2.5-flash-lite",
+    "gemini-3.5-flash-lite",
+    "gemini-4-hydrogen",
 ]))
 
 IMAGE_GEN_MODELS = [
