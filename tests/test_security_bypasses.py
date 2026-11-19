@@ -284,6 +284,19 @@ class TestSendersAndCaches(unittest.TestCase):
 
         asyncio.run(_run())
 
+    def test_long_message_is_capped_at_the_discord_limit(self):
+        async def _run():
+            channel = _FakeChannel(400, [])
+            sender = Sender(_FakeClient([channel]), rate_per_sec=50)
+            sender.start()
+            await sender.enqueue(SendJob(channel_id=400, content="x" * 2500))
+            await asyncio.sleep(0.1)
+            self.assertEqual(len(channel.sent), 1)
+            self.assertLessEqual(len(channel.sent[0]), 2000)
+            await sender.stop()
+
+        asyncio.run(_run())
+
     def test_bounded_ttl_cache_and_weak_locks(self):
         cache = BoundedTTLCache(maxsize=2, ttl_seconds=60)
         cache.set("a", 1)
