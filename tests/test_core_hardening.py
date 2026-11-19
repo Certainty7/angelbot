@@ -46,6 +46,15 @@ class TestGuildQuota(unittest.TestCase):
                 allowed, used = await db.consume_guild_ai_quota(1)
                 self.assertTrue(allowed)
                 self.assertEqual(used, 1)
+
+                # A configured limit of 0 means "no calls", not "fall back to 40".
+                async with db._connect() as conn:
+                    await conn.execute(
+                        "UPDATE guild_settings SET daily_ai_limit = 0 WHERE guild_id = 1")
+                    await conn.commit()
+                allowed, used = await db.consume_guild_ai_quota(1)
+                self.assertFalse(allowed)
+                self.assertEqual(used, 1)
             finally:
                 await db.close()
                 os.unlink(path)
@@ -74,6 +83,40 @@ class TestGuildQuota(unittest.TestCase):
                 os.unlink(path)
 
         asyncio.run(_run())
+
+    def test_afk_is_scoped_per_guild(self):
+        async def _run():
+            fd, path = tempfile.mkstemp(suffix=".db")
+            os.close(fd)
+            db = BotDatabase(path)
+            try:
+                await db.initialize()
+                await db.set_afk(1, 42, "busy")
+                await db.set_afk(2, 42, "other")
+                self.assertEqual((await db.get_afk(1, 42))[0], "busy")
+                self.assertEqual((await db.get_afk(2, 42))[0], "other")
+                self.assertIsNone(await db.remove_afk(3, 42))
+                await db.remove_afk(1, 42)
+                self.assertIsNone(await db.get_afk(1, 42))
+                self.assertEqual(len(await db.get_all_afk()), 1)
+            finally:
+                await db.close()
+                os.unlink(path)
+
+        asyncio.run(_run())
+
+    def test_bounded_dict_enforces_size_on_init_and_update(self):
+        from angel.cache import BoundedDict
+
+        data = BoundedDict(2, {"a": 1, "b": 2, "c": 3})
+        self.assertEqual(len(data), 2)
+        data.update({"d": 4, "e": 5})
+        self.assertEqual(len(data), 2)
+
+    def test_cost_rejects_negative_tokens(self):
+        from angel.cost import cost_of
+
+        self.assertEqual(cost_of(-10, -20), 0.0)
 
     def test_arabizi_scam_guard(self):
         self.assertTrue(is_suspicious_arabic_scam("اربح 500 دولار مجانا https://x.example"))

@@ -74,7 +74,7 @@ class AngelDiscordBot(commands.Bot):
     self.stickies_cache: Dict[int, Dict[str, Any]] = BoundedDict(5000)
     self.sticky_cooldowns: Dict[int, float] = cooldown_map()
     self.guard_modes_cache: Dict[int, str] = BoundedDict(5000)
-    self.afk_cache: Dict[int, Tuple[str, str]] = BoundedDict(10000)
+    self.afk_cache: Dict[Tuple[int, int], Tuple[str, str]] = BoundedDict(10000)
     self.modlog_cache: Dict[int, Optional[int]] = BoundedDict(5000)
     self.autorole_cache: Dict[int, Optional[int]] = BoundedDict(5000)
     self.spam_tracker: Dict[Tuple[int, int], deque] = BoundedDefaultDict(lambda: deque(maxlen=8), maxsize=10000)

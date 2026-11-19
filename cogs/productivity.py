@@ -28,6 +28,7 @@ class Productivity(commands.Cog):
       ]
   )
   @has_perm_or_mistress(manage_messages=True)
+  @app_commands.guild_only()
   async def sticky_cmd(
       self,
       interaction: discord.Interaction,
@@ -36,7 +37,7 @@ class Productivity(commands.Cog):
   ):
     cid = interaction.channel.id
     if mode == "remove":
-      await self.bot.db.remove_sticky(cid)
+      await self.bot.db.remove_sticky(cid, interaction.guild.id)
       self.bot.stickies_cache.pop(cid, None)
       await interaction.response.send_message("✅ تم إلغاء الرسالة المثبتة في أسفل القناة.", ephemeral=True)
       return

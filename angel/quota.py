@@ -7,16 +7,17 @@ import time
 from typing import Dict, Optional, Tuple
 from datetime import datetime, timezone
 from collections import defaultdict, deque
+from .cache import BoundedDict
 from .config import GLOBAL_MAX_RPM, HAREM_COOLDOWN_SECONDS, HAREM_DAILY_LIMIT, MORTAL_COOLDOWN_SECONDS, MORTAL_DAILY_LIMIT, is_mistress
 
 # 2. Smart Quota & Diagnostics Tracker
 class QuotaGuard:
 
   def __init__(self):
-    self.user_last_call: Dict[int, float] = {}
+    self.user_last_call: Dict[int, float] = BoundedDict(5000)
     self.user_daily_counts: Dict[int, int] = defaultdict(int)
     self.current_day: str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    self.recent_api_timestamps: deque = deque(maxlen=100)
+    self.recent_api_timestamps: deque = deque(maxlen=max(100, GLOBAL_MAX_RPM * 2))
     self.total_api_calls: int = 0
     self.model_usage_stats: Dict[str, int] = defaultdict(int)
     self.model_latency_ms: Dict[str, float] = {}
@@ -29,6 +30,7 @@ class QuotaGuard:
     if today != self.current_day:
       self.current_day = today
       self.user_daily_counts.clear()
+      self.user_last_call.clear()
 
   def check_user_allowed(
       self, user: discord.abc.User, is_harem: bool = False, dry_run: bool = False
@@ -50,7 +52,8 @@ class QuotaGuard:
         return False, f"💖 تمهلي **{wait_s} ثانية** فقط يا جميلة."
       return False, f"⚡ انتظر **{wait_s} ثانية** قبل إرسال رسالة أخرى."
 
-    if self.user_daily_counts[user.id] >= daily_cap:
+    used_today = self.user_daily_counts.get(user.id, 0)
+    if used_today >= daily_cap:
       return False, "⚡ انتهت حصتك اليومية من الرسائل."
 
     if not dry_run:
