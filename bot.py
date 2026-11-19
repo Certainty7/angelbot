@@ -8,7 +8,7 @@ Builds the client, registers the cogs and starts the gateway. The reusable parts
 import angel.config  # noqa: F401
 from angel.config import DB_PATH, DISCORD_TOKEN, GEMINI_API_KEY, MISTRESS_INT_ID, SOVEREIGN_TOOLS_ENABLED, TEXT_VISION_MODELS, is_mistress, is_server_staff, logger, safe_reply
 from angel.interactions import _safe_interaction_reply
-from angel.text import split_message
+from angel.text import clean_social_url, split_message
 from angel.client import AngelDiscordBot
 from angel.net import close_shared_http_session
 from angel.persona import normalize_arabic_text
@@ -100,6 +100,8 @@ async def on_message_delete(message: discord.Message):
     return
   if await _is_opted_out_fail_closed(bot, message.author.id):
     return
+  if is_mistress(message.author):
+    return
 
   att_url = message.attachments[0].url if message.attachments else None
   bot.snipe_cache[message.channel.id] = {
@@ -110,17 +112,12 @@ async def on_message_delete(message: discord.Message):
       "deleted_at": datetime.now(timezone.utc),
   }
 
-  # Log deleted message to #السجلات (ModLog) if configured (exempting Mistress's private commands)
-  if not is_mistress(message.author):
-    await bot.send_modlog(
-        message.guild,
-        "🗑️ رسالة محذوفة",
-        f"**المرسل:** {message.author.mention} في {message.channel.mention}\n**المحتوى:**\n> {(message.content or '*[مرفق]*')[:800]}",
-    )
-
-  # Ghost Ping Detector (Never triggers on Mistress so her deleted commands are never exposed!)
-  if is_mistress(message.author):
-    return
+  # Log deleted message to #السجلات (ModLog).
+  await bot.send_modlog(
+      message.guild,
+      "🗑️ رسالة محذوفة",
+      f"**المرسل:** {message.author.mention} في {message.channel.mention}\n**المحتوى:**\n> {(message.content or '*[مرفق]*')[:800]}",
+  )
 
   real_mentions = [u for u in message.mentions if not u.bot and u.id != message.author.id]
   age_seconds = (datetime.now(timezone.utc) - message.created_at).total_seconds()
@@ -133,7 +130,7 @@ async def on_message_delete(message: discord.Message):
     )
     modlog_ch_id = await bot.db.get_modlog_channel(message.guild.id)
     if modlog_ch_id:
-      await bot.send_modlog(message.guild, "👻 كاشف المنشن الخفي", ghost_desc)
+      await bot.send_modlog(message.guild, "👻 كاشف المنشن الخفي", ghost_desc[:4096])
     else:
       embed = discord.Embed(
           title="👻 كاشف المنشن الخفي",
@@ -153,6 +150,8 @@ async def on_message_edit(before: discord.Message, after: discord.Message):
     return
   if await _is_opted_out_fail_closed(bot, before.author.id):
     return
+  if is_mistress(before.author):
+    return
   bot.editsnipe_cache[before.channel.id] = {
       "author_name": before.author.display_name,
       "author_avatar": before.author.display_avatar.url,
@@ -160,12 +159,11 @@ async def on_message_edit(before: discord.Message, after: discord.Message):
       "after": after.content or "*[فارغ]*",
       "edited_at": datetime.now(timezone.utc),
   }
-  if not is_mistress(before.author):
-    await bot.send_modlog(
-        before.guild,
-        "✏️ تعديل رسالة",
-        f"**العضو:** {before.author.mention} في {before.channel.mention}\n**قبل:** {(before.content or '')[:400]}\n**بعد:** {(after.content or '')[:400]}",
-    )
+  await bot.send_modlog(
+      before.guild,
+      "✏️ تعديل رسالة",
+      f"**العضو:** {before.author.mention} في {before.channel.mention}\n**قبل:** {(before.content or '')[:400]}\n**بعد:** {(after.content or '')[:400]}",
+  )
 
 
 # --- Global slash command error handler ---
@@ -181,11 +179,15 @@ async def on_app_command_error(
   elif isinstance(error, app_commands.BotMissingPermissions):
     perms = ", ".join(error.missing_permissions)
     msg = f"⚠️ أحتاج لصلاحية (`{perms}`) في السيرفر لتنفيذ ذلك."
+  elif isinstance(error, app_commands.CommandOnCooldown):
+    msg = f"⏳ انتظر **{int(error.retry_after) + 1} ثانية** قبل المحاولة مرة أخرى."
+  elif isinstance(error, app_commands.CheckFailure):
+    msg = "🚫 لا تملك الصلاحية لاستخدام هذا الأمر."
   else:
     # One log line and one user-facing reply, both carrying the same short
     # correlation id, so a screenshot of the reply can be matched to the traceback.
     corr = uuid.uuid4().hex[:12]
-    logger.exception(f"Command error corr_id={corr}: {error}")
+    logger.error(f"Command error corr_id={corr}: {error}", exc_info=orig)
     msg = f"⚠️ تعذر تنفيذ الأمر في هذه اللحظة. (المرجع: `{corr}`)"
 
   await _safe_interaction_reply(interaction, msg, ephemeral=True)
@@ -196,8 +198,6 @@ async def on_app_command_error(
 FOLLOWUP_WINDOW_S = float(os.getenv("FOLLOWUP_WINDOW_S", "90"))
 SOCIAL_DEDUPE_WINDOW_S = float(os.getenv("SOCIAL_DEDUPE_WINDOW_S", "600"))
 
-TIKTOK_TRACKING_PARAMS = {"is_from_webapp", "sender_device", "web_id", "lang", "u_code", "preview_pb"}
-SOCIAL_TRACKING_PREFIXES = ("utm_", "igsh", "ig_mid", "igshid", "si", "s", "t", "ref", "ref_src", "share")
 # Two link jobs at a time: each one can hold up to 10 slides of 10 MB in RAM, and the unit
 # caps the process at 580 MB. The dedupe window only stops the same URL twice.
 _SOCIAL_SEMAPHORE = asyncio.Semaphore(2)
@@ -220,24 +220,6 @@ def tidy_caption(text: str, limit: int = 280) -> str:
   if len(joined) > limit:
     joined = joined[: limit - 1].rstrip() + "…"
   return joined
-
-
-def clean_social_url(url: str) -> str:
-  """Drop tracking parameters so the same post is one key, and the extractor sees a plain path."""
-  from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-
-  try:
-    parts = urlsplit(url.strip())
-  except ValueError:
-    return url
-  if not parts.query:
-    return url
-  kept = [
-    (k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
-    if k.lower() not in TIKTOK_TRACKING_PARAMS
-    and not any(k.lower() == p or k.lower().startswith(p) for p in SOCIAL_TRACKING_PREFIXES)
-  ]
-  return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(kept), ""))
 
 
 WAKE_WORD_REGEX = re.compile(r"(?:^|\s)(?:يا\s*)?(?:انجل|أنجل|إنجل|نجل|angel)(?:\s|$|[،,.!؟?])", re.IGNORECASE)
@@ -395,7 +377,8 @@ async def on_message(message: discord.Message):
   # 3. Sticky Message Handler
   if message.guild and message.channel.id in bot.stickies_cache:
     now_m = time.monotonic()
-    if now_m - bot.sticky_cooldowns.get(message.channel.id, 0.0) >= 6.0:
+    last_sticky = bot.sticky_cooldowns.get(message.channel.id)
+    if last_sticky is None or now_m - last_sticky >= 6.0:
       bot.sticky_cooldowns[message.channel.id] = now_m
       sticky_data = bot.stickies_cache[message.channel.id]
       old_id = sticky_data.get("last_message_id")
@@ -442,7 +425,8 @@ async def on_message(message: discord.Message):
     fresh_urls = []
     for _u in social_urls:
       _tag = hashlib.sha256(_u.encode()).hexdigest()[:8]
-      if now_social - bot.recent_social_links.get(_tag, 0.0) < SOCIAL_DEDUPE_WINDOW_S:
+      last_seen = bot.recent_social_links.get(_tag)
+      if last_seen is not None and now_social - last_seen < SOCIAL_DEDUPE_WINDOW_S:
         logger.info("social outcome=duplicate url=%s n=0 ms=0 class=-", _tag)
         continue
       bot.recent_social_links[_tag] = now_social
@@ -509,6 +493,11 @@ async def on_message(message: discord.Message):
               type(s_err).__name__,
               str(s_err)[:160],
           )
+        finally:
+          try:
+            await msg_obj.remove_reaction("⏳", msg_obj.guild.me if msg_obj.guild else bot.user)
+          except Exception:
+            pass
 
     async def _run_social_bounded(msg_obj: discord.Message, urls_to_fix: List[str]):
       async with _SOCIAL_SEMAPHORE:
@@ -528,7 +517,8 @@ async def on_message(message: discord.Message):
   if message.guild:
     now_mono = time.monotonic()
     xp_key = (message.guild.id, message.author.id)
-    if now_mono - bot.xp_cooldowns.get(xp_key, 0.0) >= 45.0:
+    last_xp = bot.xp_cooldowns.get(xp_key)
+    if last_xp is None or now_mono - last_xp >= 45.0:
       bot.xp_cooldowns[xp_key] = now_mono
       _, new_lvl, leveled_up = await bot.db.add_xp(
           message.guild.id, message.author.id, random.randint(15, 25)
@@ -575,8 +565,8 @@ async def on_message(message: discord.Message):
   in_followup_window = False
   if message.guild:
     norm_c = normalize_arabic_text(message.content.lower().strip())
-    last_win = bot.active_chat_window.get((message.channel.id, message.author.id), 0.0)
-    if (time.monotonic() - last_win) <= FOLLOWUP_WINDOW_S:
+    last_win = bot.active_chat_window.get((message.channel.id, message.author.id))
+    if last_win is not None and (time.monotonic() - last_win) <= FOLLOWUP_WINDOW_S:
       if any(
           norm_c.startswith(prefix_w)
           for prefix_w in (
@@ -593,16 +583,15 @@ async def on_message(message: discord.Message):
         f"{message.author.display_name}: {message.content.strip()[:120]}"
     )
     if not message.author.bot and message.author.id != MISTRESS_INT_ID:
-      bot.last_social_target.setdefault(message.channel.id, message.author.id)
+      bot.last_social_target[message.channel.id] = message.author.id
   else:
     prev_ambient_list = []
 
   if is_dm or is_mentioned or is_reply_to_bot or called_by_name or has_pending or has_confirm or in_followup_window:
-    prompt = (
-        message.content.replace(f"<@{bot.user.id}>", "")
-        .replace(f"<@!{bot.user.id}>", "")
-        .strip()
-    )
+    prompt = message.content
+    if bot.user is not None:
+      prompt = prompt.replace(f"<@{bot.user.id}>", "").replace(f"<@!{bot.user.id}>", "")
+    prompt = prompt.strip()
 
     if prompt and await try_execute_natural_command(bot, message, prompt):
       if message.guild:
@@ -641,7 +630,9 @@ async def on_message(message: discord.Message):
         if is_dm and SOVEREIGN_TOOLS_ENABLED:
           await bot.forward_dm_to_mistress(message, reply)
 
-        chunks = split_message(reply)
+        chunks = split_message(reply or "")
+        if not chunks or not (reply or "").strip():
+          return
         files_to_send = []
         if img_bytes:
           files_to_send.append(discord.File(io.BytesIO(img_bytes), filename="angel_art.png"))
@@ -717,14 +708,14 @@ if __name__ == "__main__":
         await close_shared_http_session()
     res = asyncio.run(_cli_cleanup())
     print(f"=== AngelBot Storage Cleanup Complete ===\n{res}", flush=True)
-    os._exit(0)
+    sys.exit(0)
 
   import signal
   def _graceful_sigterm_handler(signum, frame):
-    logger.info(f"Received signal {signum}; initiating clean shutdown & SQLite WAL checkpoint...")
+    # A Python signal handler must not log or await: build the shutdown on the loop thread.
     try:
       loop = asyncio.get_running_loop()
-      loop.create_task(bot.close())
+      loop.call_soon_threadsafe(lambda: asyncio.create_task(bot.close()))
     except RuntimeError:
       sys.exit(0)
 

@@ -38,13 +38,13 @@ class QuotaGuard:
       return True, None
 
     now = time.monotonic()
-    last = self.user_last_call.get(user.id, 0.0)
-    elapsed = now - last
+    last = self.user_last_call.get(user.id)
+    elapsed = now - last if last is not None else None
 
     cooldown = HAREM_COOLDOWN_SECONDS if is_harem else MORTAL_COOLDOWN_SECONDS
     daily_cap = HAREM_DAILY_LIMIT if is_harem else MORTAL_DAILY_LIMIT
 
-    if elapsed < cooldown:
+    if elapsed is not None and elapsed < cooldown:
       wait_s = math.ceil(cooldown - elapsed)
       if is_harem:
         return False, f"💖 تمهلي **{wait_s} ثانية** فقط يا جميلة."

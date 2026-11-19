@@ -35,9 +35,11 @@ def _ensure_dependencies():
       )
       return
     try:
-      subprocess.check_call(
-          [sys.executable, "-m", "pip", "install", "--user"] + missing
-      )
+      pip_args = [sys.executable, "-m", "pip", "install"]
+      # Inside a virtualenv `--user` installs outside the venv and is rejected by pip.
+      if sys.prefix == sys.base_prefix:
+        pip_args.append("--user")
+      subprocess.check_call(pip_args + missing)
       importlib.reload(site)
     except Exception as exc:
       print(f"Package bootstrap notice: {exc}")
@@ -219,7 +221,7 @@ ARABIC_GIF_KEYWORDS = {
     "بوسة في الخدود": "cheek_kiss", "بوسه في الخدود": "cheek_kiss",
     "بوسة خدود": "cheek_kiss", "بوسه خدود": "cheek_kiss", "بوسة خد": "cheek_kiss", "بوسه خد": "cheek_kiss",
     "بوسة عفيفة": "cheek_kiss", "بوسه عفيفه": "cheek_kiss", "بوسة بريئة": "cheek_kiss", "بوسه على الخد": "cheek_kiss",
-    "بوسة على الخد": "cheek_kiss", "cheek kiss": "cheek_kiss", "peck": "cheek_kiss",
+    "بوسة على الخد": "cheek_kiss", "cheek kiss": "cheek_kiss", "peck": "peck",
     "حضن بنات": "yuri_hug", "عناق بنات": "yuri_hug", "yuri hug": "yuri_hug",
     "دلال بنات": "yuri_cuddle", "yuri cuddle": "yuri_cuddle",
     "بوسة": "kiss", "بوسه": "kiss", "بوسيني": "kiss", "قبلة": "kiss", "قبله": "kiss", "kiss": "kiss",
@@ -309,6 +311,15 @@ def check_staff_action_permission(
   if p.administrator:
     return True
   act = action_key.upper().strip()
+  if act in {
+      "VOLUME", "STOP_MUSIC", "SKIP_MUSIC", "PAUSE_MUSIC", "RESUME_MUSIC", "LOOP_MUSIC",
+      "LEAVE_VOICE", "JOIN_VOICE", "STAY_VOICE", "PLAY_MUSIC", "FILTER_AUDIO",
+  }:
+    channel = getattr(getattr(user, "voice", None), "channel", None)
+    if channel is None:
+      return False
+    voice_perms = channel.permissions_for(user)
+    return bool(voice_perms.connect and voice_perms.speak)
   perm_map = {
       "SET_MODLOG": p.manage_guild,
       "GUARD_MODE": p.manage_guild,
@@ -453,7 +464,10 @@ def has_perm_or_mistress(**perms: bool):
       return True
     if not interaction.guild or not isinstance(interaction.user, discord.Member):
       return False
-    user_perms = interaction.channel.permissions_for(interaction.user)
+    if interaction.channel is None:
+      user_perms = interaction.user.guild_permissions
+    else:
+      user_perms = interaction.channel.permissions_for(interaction.user)
     missing = [p for p, req in perms.items() if getattr(user_perms, p, False) != req]
     if missing:
       raise app_commands.MissingPermissions(missing)
@@ -486,8 +500,21 @@ async def safe_reply(
 
   try:
     return await message.reply(mention_author=False, **kwargs)
-  except discord.HTTPException:
+  except discord.HTTPException as exc:
+    # 50035 = the referenced message was deleted. Any other HTTP error (403, 404,
+    # rate limit) will fail on channel.send too, so do not hide it.
+    if getattr(exc, "code", None) != 50035:
+      logger.warning("safe_reply failed: %s: %s", type(exc).__name__, exc)
+      return None
+    for attached in ([file] if file is not None else []) + (files or []):
+      fp = getattr(attached, "fp", None)
+      if fp is not None:
+        try:
+          fp.seek(0)
+        except Exception:
+          pass
     try:
       return await message.channel.send(**kwargs)
-    except Exception:
+    except discord.HTTPException as channel_exc:
+      logger.warning("safe_reply channel fallback failed: %s: %s", type(channel_exc).__name__, channel_exc)
       return None

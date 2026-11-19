@@ -183,8 +183,8 @@ class Flagship(commands.Cog):
       await interaction.response.send_message("⚠️ لا يمكنك منح نقاط سمعة لنفسك أو لبوت.", ephemeral=True)
       return
     now_m = time.monotonic()
-    last_rep = self.bot.rep_cooldowns.get(interaction.user.id, 0.0)
-    if now_m - last_rep < 3600 and not is_mistress(interaction.user):
+    last_rep = self.bot.rep_cooldowns.get(interaction.user.id)
+    if last_rep is not None and now_m - last_rep < 3600 and not is_mistress(interaction.user):
       rem_m = int((3600 - (now_m - last_rep)) // 60) + 1
       await interaction.response.send_message(f"⏳ يمكنك منح نقطة سمعة جديدة بعد **{rem_m} دقيقة**.", ephemeral=True)
       return

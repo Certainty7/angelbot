@@ -85,7 +85,8 @@ class AutonomyEngine:
         continue
       if now - float(sp.get("ts") or 0) > ACTIVITY_WINDOW:
         continue
-      if now - self.last_target.get(uid, 0.0) < MIN_GAP_TARGET:
+      last_target_at = self.last_target.get(uid)
+      if last_target_at is not None and now - last_target_at < MIN_GAP_TARGET:
         continue
       pool.append(sp)
     if len(pool) < MIN_SPEAKERS:
@@ -138,12 +139,14 @@ class AutonomyEngine:
           continue
         if guard.is_silent(guild.id, channel_id):
           continue
-        if now - self.last_channel.get(channel_id, 0.0) < MIN_GAP_CHANNEL:
+        last_channel_at = self.last_channel.get(channel_id)
+        if last_channel_at is not None and now - last_channel_at < MIN_GAP_CHANNEL:
           continue
         last_activity = max((float(s.get("ts") or 0) for s in speakers), default=0.0)
         if not last_activity or now - last_activity > ACTIVITY_WINDOW:
           continue
-        if now - getattr(get_bot(), "angel_last_spoke", {}).get(channel_id, 0.0) < MIN_GAP_CHANNEL:
+        last_spoke_at = getattr(get_bot(), "angel_last_spoke", {}).get(channel_id)
+        if last_spoke_at is not None and now - last_spoke_at < MIN_GAP_CHANNEL:
           continue
 
         target = self._pick_target(list(speakers), guild)
@@ -160,7 +163,7 @@ class AutonomyEngine:
             called_by_name=False,
             topic_hits=topic_hits,
             mood=float(getattr(get_bot(), "mood", 0.55)),
-            seconds_since_last_reply=now - getattr(get_bot(), "angel_last_spoke", {}).get(channel_id, 0.0),
+            seconds_since_last_reply=(now - last_spoke_at) if last_spoke_at is not None else 10**9,
             has_media=bool(recent_items and ("http" in str(recent_items[-1].get("text", "")))),
         )
         p = scoring.reply_probability(signals)

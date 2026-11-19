@@ -148,9 +148,10 @@ async def touch(guild_id: int, user_id: int, display_name: str, text: str = "") 
   if get_bot() is None:
     return
   now = time.monotonic()
-  if now - _last_touch.get(user_id, 0.0) < TOUCH_COOLDOWN_SECONDS:
+  last_touch = _last_touch.get((guild_id, user_id))
+  if last_touch is not None and now - last_touch < TOUCH_COOLDOWN_SECONDS:
     return
-  _last_touch[user_id] = now
+  _last_touch[(guild_id, user_id)] = now
   try:
     topic = ", ".join(keywords(text, 3))
     await get_bot().db.touch_user_index(guild_id, user_id, display_name, topic)
