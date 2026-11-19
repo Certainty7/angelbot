@@ -141,7 +141,7 @@ jobs:
           fi
 
       # actions/setup-node v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         if: steps.detect.outputs.present == 'true' && hashFiles('website/package-lock.json') != ''
         with:
           node-version: "22"
@@ -151,7 +151,7 @@ jobs:
       # Same runtime without the cache when no lockfile is committed yet, so `build.sh` fails with
       # its own message (missing lockfile) instead of a caching error.
       # actions/setup-node v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         if: steps.detect.outputs.present == 'true' && hashFiles('website/package-lock.json') == ''
         with:
           node-version: "22"
