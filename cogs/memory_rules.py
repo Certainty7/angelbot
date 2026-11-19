@@ -161,7 +161,7 @@ class MemoryRules(commands.Cog):
     for channel_id, target in list(getattr(self.bot, "last_social_target", {}).items()):
       if target == uid:
         self.bot.last_social_target.pop(channel_id, None)
-    for key in list(getattr(self.bot, "active_chat_window", {})):
+    for key in list(getattr(self.bot, "active_chat_window", {}).items()):
       if isinstance(key, tuple) and key[-1] == uid:
         self.bot.active_chat_window.pop(key, None)
     for cache in (getattr(self.bot, "pending_step", {}), getattr(self.bot, "pending_confirm", {})):

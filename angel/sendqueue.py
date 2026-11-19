@@ -138,6 +138,22 @@ class Sender:
             if self._workers.get(worker.channel_id) is worker:
                 self._workers.pop(worker.channel_id, None)
 
+    def _requeue(self, worker: "_ChannelWorker", job: SendJob):
+        # Never block the worker that is re-queueing: a full queue means the channel is
+        # backed up, so drop the oldest waiting job and keep the newest one.
+        try:
+            worker.queue.put_nowait(job)
+        except asyncio.QueueFull:
+            try:
+                worker.queue.get_nowait()
+                worker.queue.task_done()
+            except Exception:
+                pass
+            try:
+                worker.queue.put_nowait(job)
+            except asyncio.QueueFull:
+                self.dead_letters.append(job)
+
     async def _deliver(self, worker: _ChannelWorker, job: SendJob):
         channel = self.client.get_channel(job.channel_id)
         if channel is None:
@@ -159,13 +175,13 @@ class Sender:
                 # Only THIS channel's worker sleeps; every other channel keeps flowing.
                 await asyncio.sleep(max(0.5, retry_after) if getattr(exc, "status", 0) == 429
                                     else min(8.0, 1.5 * job.attempts))
-                await worker.queue.put(job)
+                self._requeue(worker, job)
                 return
             self.dead_letters.append(job)
         except Exception:
             job.attempts += 1
             if job.attempts <= self.max_attempts:
-                await worker.queue.put(job)
+                self._requeue(worker, job)
             else:
                 self.dead_letters.append(job)
 

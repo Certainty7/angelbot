@@ -241,6 +241,17 @@ class TestSendersAndCaches(unittest.TestCase):
 
         asyncio.run(_run())
 
+    def test_requeue_never_blocks_on_full_queue(self):
+        from angel import sendqueue as sq
+
+        sender = sq.Sender(_FakeClient([]), max_queue=1)
+        worker = sq._ChannelWorker(sender, 77)
+        worker.queue.put_nowait(SendJob(channel_id=77, content="old"))
+        # The worker calls this from inside _deliver after a 429; blocking here deadlocks it.
+        sender._requeue(worker, SendJob(channel_id=77, content="new"))
+        self.assertEqual(worker.queue.qsize(), 1)
+        self.assertEqual(worker.queue.get_nowait().content, "new")
+
     def test_bounded_ttl_cache_and_weak_locks(self):
         cache = BoundedTTLCache(maxsize=2, ttl_seconds=60)
         cache.set("a", 1)
@@ -249,6 +260,8 @@ class TestSendersAndCaches(unittest.TestCase):
         self.assertEqual(len(cache), 2)
         self.assertIsNone(cache.get("a"))
         self.assertEqual(cache.get("c"), 3)
+        # Iterating must yield keys; `/data delete` purges caches this way.
+        self.assertEqual(sorted(iter(cache)), ["b", "c"])
         locks = WeakLockMap()
         self.assertIs(locks.get("x"), locks.get("x"))
 

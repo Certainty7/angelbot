@@ -17,12 +17,19 @@ class TestGuildQuota(unittest.TestCase):
             try:
                 await db.initialize()
                 await db.upsert_guild_settings(
-                    guild_id=1, dialect="egyptian", guard_level="strict",
+                    guild_id=1, dialect="egyptian", guard_level="active",
                     social_fixer_enabled=False)
                 settings = await db.get_guild_settings(1)
                 self.assertEqual(settings["dialect"], "egyptian")
-                self.assertEqual(settings["guard_level"], "strict")
+                self.assertEqual(settings["guard_level"], "active")
                 self.assertEqual(int(settings["social_fixer_enabled"]), 0)
+
+                # A partial update must not reset the fields it did not touch.
+                await db.upsert_guild_settings(guild_id=1, social_fixer_enabled=True)
+                settings = await db.get_guild_settings(1)
+                self.assertEqual(settings["dialect"], "egyptian")
+                self.assertEqual(settings["guard_level"], "active")
+                self.assertEqual(int(settings["social_fixer_enabled"]), 1)
 
                 # Lower the limit to one and race two calls: exactly one may pass.
                 async with db._connect() as conn:

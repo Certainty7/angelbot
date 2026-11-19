@@ -96,6 +96,8 @@ class AngelDiscordBot(commands.Bot):
     # url hash -> monotonic timestamp, so a re-posted link is not downloaded twice
     self.recent_social_links: Dict[str, float] = BoundedDict(512)
     self.angel_last_spoke: Dict[int, float] = BoundedDict(5000)
+    self.guild_dialects: Dict[int, str] = BoundedDict(5000)
+    self.social_fixer_cache: Dict[int, bool] = BoundedDict(5000)
     # Merged from the Malak build: evolving mood/settings, listening mode, send queue
     self.mood: float = 0.55
     self.settings: Dict[str, float] = {"verbosity": 0.4, "emoji_rate": 0.05, "typo_rate": 0.01, "curiosity": 0.55}
@@ -116,6 +118,9 @@ class AngelDiscordBot(commands.Bot):
       self.modlog_cache[gid] = srow.get("modlog_channel_id")
       self.autorole_cache[gid] = srow.get("autorole_id")
       self.guard_modes_cache[gid] = srow.get("guard_mode") or "off"
+      self.guild_dialects[gid] = srow.get("dialect") or "gulf"
+      _fixer = srow.get("social_fixer_enabled")
+      self.social_fixer_cache[gid] = True if _fixer is None else bool(_fixer)
     self.add_view(TicketPanelView(self))
     self.add_view(TicketCloseView(self))
     self.add_view(GiveawayJoinView(self.db))
@@ -434,7 +439,10 @@ class AngelDiscordBot(commands.Bot):
           profile_facts=profile_facts,
           cmd=cmd,
           culture=await persona_notes.current(getattr(getattr(user, "guild", None), "id", None)),
-          rhythm_hint=reply_directives(detect_reply_rhythm(prompt)),
+          rhythm_hint=reply_directives(
+              detect_reply_rhythm(prompt),
+              self.guild_dialects.get(getattr(getattr(message_Context, "guild", None), "id", 0)),
+          ),
       )
 
       clean_reply, gif_action, image_prompt, exec_cmds = parse_ai_special_tags(

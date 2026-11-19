@@ -1054,20 +1054,26 @@ class BotDatabase:
       guard_level: Optional[str] = None,
       social_fixer_enabled: Optional[bool] = None,
   ) -> None:
+    """Update only the fields that were supplied; omitted fields keep their value."""
     from datetime import datetime, timezone
-    now = datetime.now(timezone.utc).isoformat()
+    fields = []
+    params: list = []
+    if dialect is not None:
+      fields.append("dialect = ?")
+      params.append(dialect)
+    if guard_level is not None:
+      fields.append("guard_mode = ?")
+      params.append(guard_level)
+    if social_fixer_enabled is not None:
+      fields.append("social_fixer_enabled = ?")
+      params.append(int(bool(social_fixer_enabled)))
     async with self._connect() as db:
-      await db.execute(
-          "INSERT INTO guild_settings (guild_id, dialect, guard_mode, social_fixer_enabled, updated_at) "
-          "VALUES (?, COALESCE(?, 'gulf'), COALESCE(?, 'off'), COALESCE(?, 1), ?) "
-          "ON CONFLICT(guild_id) DO UPDATE SET "
-          "dialect = COALESCE(excluded.dialect, guild_settings.dialect), "
-          "guard_mode = COALESCE(excluded.guard_mode, guild_settings.guard_mode), "
-          "social_fixer_enabled = COALESCE(excluded.social_fixer_enabled, guild_settings.social_fixer_enabled), "
-          "updated_at = excluded.updated_at",
-          (guild_id, dialect, guard_level,
-           None if social_fixer_enabled is None else int(bool(social_fixer_enabled)), now),
-      )
+      await db.execute("INSERT OR IGNORE INTO guild_settings (guild_id) VALUES (?)", (guild_id,))
+      if fields:
+        fields.append("updated_at = ?")
+        params.extend([datetime.now(timezone.utc).isoformat(), guild_id])
+        await db.execute(
+            f"UPDATE guild_settings SET {', '.join(fields)} WHERE guild_id = ?", params)
       await db.commit()
 
   async def consume_guild_ai_quota(self, guild_id: int) -> Tuple[bool, int]:

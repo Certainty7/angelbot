@@ -33,6 +33,10 @@ class MediaTools(commands.Cog):
   @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
   @app_commands.describe(url="رابط الفيديو أو البوست")
   async def fix_cmd(self, interaction: discord.Interaction, url: str):
+    if interaction.guild and not self.bot.social_fixer_cache.get(interaction.guild.id, True):
+      await interaction.response.send_message(
+          "⚙️ مصلّح الروابط معطّل في هذا السيرفر. فعّليه من `/setup`.", ephemeral=True)
+      return
     now = time.monotonic()
     if now - _FIX_LAST_AT.get(interaction.user.id, 0.0) < _FIX_COOLDOWN_S:
       await interaction.response.send_message("⏳ انتظر بضع ثوانٍ قبل الرابط التالي.", ephemeral=True)

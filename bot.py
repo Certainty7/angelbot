@@ -453,7 +453,7 @@ async def on_message(message: discord.Message):
           bot.recent_social_links.pop(_k, None)
     social_urls = fresh_urls
 
-  if social_urls:
+  if social_urls and (not message.guild or bot.social_fixer_cache.get(message.guild.id, True)):
     async def _handle_social_links_bg(msg_obj: discord.Message, urls_to_fix: List[str]):
       max_b = (
           min(getattr(msg_obj.guild, "filesize_limit", 10 * 1024 * 1024), 25 * 1024 * 1024)
@@ -549,10 +549,13 @@ async def on_message(message: discord.Message):
       await safe_reply(message, triggers[lower_content])
 
   # Prefix commands (!help, !sync ...) must work in DMs and when the bot is mentioned too;
-  # before this they were skipped by every early return above.
+  # before this they were skipped by every early return above. An unknown `!word` falls
+  # through to the normal AI path instead of being silently swallowed.
   if message.content.startswith("!") and len(message.content) > 1 and message.content[1].isalpha():
-    await bot.process_commands(message)
-    return
+    ctx = await bot.get_context(message)
+    if ctx.valid:
+      await bot.invoke(ctx)
+      return
 
   # 7. Detect Conversation, Follow-up Window, or Pending Step Trigger
   is_dm = isinstance(message.channel, discord.DMChannel)

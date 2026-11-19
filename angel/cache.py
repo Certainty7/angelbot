@@ -114,6 +114,10 @@ class BoundedTTLCache(Generic[T]):
     self.prune()
     return len(self._store)
 
+  def __iter__(self):
+    self.prune()
+    return iter(list(self._store))
+
 
 class WeakLockMap:
   """Per-key locks that disappear when no coroutine holds them."""

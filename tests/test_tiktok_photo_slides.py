@@ -3,7 +3,7 @@
 Fixture in -> slide list out, through the real `extract_tiktok_media_items` with a
 fake HTTP session. Guards three behaviours the live CDN made expensive to discover:
   * a slide the CDN refuses is retried from a fresh TikWM quote instead of dropped
-  * a post is capped at TikTok's own limit of 35 slides
+  * a post is capped at 10 slides to protect the 1 GB host
   * chunk_slides sends every batch (10 attachments per Discord message)
 
 Run: venv/bin/python tests/test_tiktok_photo_slides.py
@@ -109,10 +109,10 @@ async def main():
     files, _, _ = await _extract(fake)
     assert len(files) == 3 and fake.quotes == 1, f"unexpected requote or missed slide: {len(files)} {fake.quotes}"
 
-    # 3. TikTok allows 35 photos per post; more than that is not requested.
+    # 3. The downloader caps a post at 10 slides / 25 MB to protect the small host.
     fake = FakeTikTok(slides=40)
     files, _, _ = await _extract(fake)
-    assert len(files) == 35, f"expected the 35-slide cap, got {len(files)}"
+    assert len(files) == 10, f"expected the 10-slide cap, got {len(files)}"
 
     # 4. Sending: every batch goes out, 10 attachments per message.
     slides = [(b"x", f"tiktok_{i}.jpg") for i in range(1, 36)]
@@ -120,7 +120,12 @@ async def main():
     assert len(media.chunk_slides(slides)[0]) == 10, "Discord takes 10 attachments per message"
     assert media.chunk_slides([]) == [], "an empty post must not send a message"
 
-    print("[PASS] tiktok-photo-slides: 10/10 slides recovered, 35 cap, 4 send batches")
+    print("[PASS] tiktok-photo-slides: 10/10 slides recovered, 10 cap, 4 send batches")
+
+
+def test_tiktok_photo_slides():
+    """Pytest entry point; the assertions live in main() for direct runs."""
+    asyncio.run(main())
 
 
 if __name__ == "__main__":

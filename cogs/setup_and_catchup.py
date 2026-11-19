@@ -11,6 +11,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from angel.cache import sanitize_untrusted_line
+from angel.config import logger
 from angel.output_filter import redact_secrets
 
 
@@ -44,13 +45,13 @@ class DialectSelect(discord.ui.Select):
 
 
 class GuardLevelSelect(discord.ui.Select):
-  def __init__(self, current: str = "balanced") -> None:
+  def __init__(self, current: str = "off") -> None:
     options = [
-        discord.SelectOption(label="خفيف (Light)", value="light", default=(current == "light")),
-        discord.SelectOption(label="متوازن (Balanced)", value="balanced", default=(current == "balanced")),
-        discord.SelectOption(label="صارم (Strict)", value="strict", default=(current == "strict")),
+        discord.SelectOption(label="متوقف (Off)", value="off", default=(current == "off")),
+        discord.SelectOption(label="مراقبة فقط (Dry-run)", value="dry_run", default=(current == "dry_run")),
+        discord.SelectOption(label="نشط (Active)", value="active", default=(current == "active")),
     ]
-    super().__init__(placeholder="اختاري مستوى الحماية...", min_values=1, max_values=1, options=options)
+    super().__init__(placeholder="اختاري وضع الحماية...", min_values=1, max_values=1, options=options)
 
   async def callback(self, interaction: discord.Interaction) -> None:
     self.view.selected_guard = self.values[0]  # type: ignore[attr-defined]
@@ -65,7 +66,7 @@ class SetupWizardView(discord.ui.View):
       guild_id: int,
       save_callback: Callable[[int, str, str, bool], Awaitable[None]],
       current_dialect: str = "gulf",
-      current_guard: str = "balanced",
+      current_guard: str = "off",
       social_fixer: bool = True,
   ) -> None:
     super().__init__(timeout=180.0)
@@ -126,13 +127,17 @@ class SetupAndCatchup(commands.Cog):
       await self.bot.db.upsert_guild_settings(
           guild_id=gid, dialect=dialect, guard_level=guard, social_fixer_enabled=social
       )
+      # Keep the live caches in step so the next message honours the new settings.
+      self.bot.guard_modes_cache[gid] = guard
+      self.bot.guild_dialects[gid] = dialect
+      self.bot.social_fixer_cache[gid] = social
 
     view = SetupWizardView(
         owner_user_id=interaction.user.id,
         guild_id=interaction.guild.id,
         save_callback=_save,
         current_dialect=existing.get("dialect") or "gulf",
-        current_guard=existing.get("guard_level") or "balanced",
+        current_guard=existing.get("guard_level") or "off",
         social_fixer=bool(existing.get("social_fixer_enabled", 1)),
     )
     embed = discord.Embed(
@@ -202,7 +207,15 @@ class SetupAndCatchup(commands.Cog):
       )
       return
 
-    summary = await self.bot.ai.summarize_catchup(build_safe_catchup_payload(lines))
+    try:
+      summary = await self.bot.ai.summarize_catchup(build_safe_catchup_payload(lines))
+    except Exception as exc:
+      logger.warning("catchup summary failed: %s: %s", type(exc).__name__, exc)
+      await interaction.followup.send(
+          "⚠️ تعذّر تلخيص الرسائل الآن. حاولي بعد قليل.",
+          allowed_mentions=discord.AllowedMentions.none(),
+      )
+      return
     embed = discord.Embed(
         title="ملخص «وش فاتني؟»",
         description=redact_secrets(summary or "")[:4000],
