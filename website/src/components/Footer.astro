@@ -1,6 +1,7 @@
 ---
 import { nav, ui, href, site, type Lang } from '../i18n/ui';
 import invite from '../data/invite.json';
+import facts from '../data/site.json';
 import markMono from '../assets/brand/angel-mark-mono.svg?raw';
 
 interface Props {
@@ -45,7 +46,9 @@ const trust = nav.slice(4);
       <div class="site-footer__col">
         <h2 class="site-footer__heading">{ui.footerRepo[lang]}</h2>
         <ul role="list">
-          <li><a href={site.repository} rel="noopener">Certainty7/angelbot</a></li>
+          <li><a href={facts.repository} rel="noopener">Certainty7/angelbot</a></li>
+          <li><a href={href(lang, 'changelog')}>v{facts.version}</a></li>
+          <li><a href={facts.license_url} rel="noopener">MIT</a></li>
           <li><a href={invite.invite_url}>{ui.inviteShort[lang]}</a></li>
           <li><a href={href(lang === 'ar' ? 'en' : 'ar')} lang={lang === 'ar' ? 'en' : 'ar'} hreflang={lang === 'ar' ? 'en' : 'ar'}>{ui.language[lang]}</a></li>
         </ul>

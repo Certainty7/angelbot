@@ -80,7 +80,7 @@ const localHref = (value: string): string =>
     case 'permissions':
       return <PermissionTable lang={lang} />;
     case 'changelog':
-      return <ChangelogList />;
+      return <ChangelogList lang={lang} />;
     case 'faq':
       return <FaqList lang={lang} items={block.items} />;
     case 'cta':

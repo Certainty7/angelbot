@@ -6,6 +6,7 @@ import '../styles/site.css';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 import { site, ui, type Lang } from '../i18n/ui';
+import facts from '../data/site.json';
 
 interface Props {
   lang: Lang;
@@ -44,15 +45,14 @@ const ogAlt = lang === 'ar' ? 'بطاقة أنجل: علامة اللؤلؤة د
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <!-- The static host does not send response headers, so the policy travels in the document. -->
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; form-action 'none'; base-uri 'none'; object-src 'none'"
-    />
+    <!-- Response headers (CSP, HSTS, XFO, COOP, Permissions-Policy) come from
+         public/_headers on Cloudflare Pages; a meta copy would only diverge from them. -->
     <meta name="referrer" content="strict-origin-when-cross-origin" />
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
+    <meta name="generator" content={`Angel v${facts.version}`} />
+    <link rel="license" href={facts.license_url} />
     {noindex && <meta name="robots" content="noindex, follow" />}
 
     <link rel="alternate" hreflang="ar" href={lang === 'ar' ? canonical : alternate} />

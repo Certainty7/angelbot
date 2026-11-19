@@ -4,10 +4,20 @@ import Hero from '../components/Hero.astro';
 import Blocks from '../components/Blocks.astro';
 import StatBand from '../components/StatBand.astro';
 import { home } from '../i18n/content';
+import site from '../data/site.json';
 ---
 <Base lang="ar" title={home.title.ar} description={home.description.ar} slug="">
   <Hero lang="ar" />
   <StatBand lang="ar" />
+  {site.latest_release && (
+    <div class="container">
+      <p class="release-banner">
+        <span class="release-banner__tag">v{site.latest_release.version}</span>
+        <span>{site.latest_release.summary.ar}</span>
+        <a href="/changelog/">سجل التغييرات</a>
+      </p>
+    </div>
+  )}
   <div class="container page-body">
     <Blocks blocks={home.blocks} lang="ar" />
   </div>

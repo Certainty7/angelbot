@@ -142,12 +142,56 @@ class CatalogueTest(unittest.TestCase):
                  "options", "description_en"},
             )
 
+    def test_changelog_carries_no_host_paths_or_modules(self):
+        text = (DATA / "changelog.json").read_text(encoding="utf-8")
+        for marker in ("cogs/", "angel/", ".py:", "/home/", "/opt/", "/root/", "/srv/"):
+            with self.subTest(marker=marker):
+                self.assertNotIn(marker, text)
+
     def test_generated_files_are_fresh(self):
         result = subprocess.run(
             [sys.executable, str(GENERATOR), "--check"],
             cwd=REPO, capture_output=True, text=True,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_site_facts_match_the_repository(self):
+        facts = json.loads((DATA / "site.json").read_text(encoding="utf-8"))
+        init = (REPO / "angel" / "__init__.py").read_text(encoding="utf-8")
+        version = init.split('__version__ = "', 1)[1].split('"', 1)[0]
+        self.assertEqual(facts["version"], version)
+        self.assertEqual(facts["license"], "MIT")
+        self.assertTrue(facts["license_url"].endswith("/LICENSE"))
+        self.assertEqual(facts["repository"], "https://github.com/Certainty7/angelbot")
+        platforms = len(list((REPO / "tests" / "fixtures" / "gallery").glob("*.case.json")))
+        self.assertEqual(facts["media_platforms"], platforms)
+        self.assertIn("version", facts["latest_release"])
+
+    def test_changelog_is_bilingual_and_release_based(self):
+        data = json.loads((DATA / "changelog.json").read_text(encoding="utf-8"))
+        facts = json.loads((DATA / "site.json").read_text(encoding="utf-8"))
+        self.assertTrue(data["releases"], "changelog must contain at least one release")
+        latest = data["releases"][0]
+        self.assertEqual(latest["version"], facts["version"])
+        self.assertRegex(latest["date"], r"^\d{4}-\d{2}-\d{2}$")
+        self.assertTrue(latest["summary"]["ar"].strip())
+        self.assertTrue(latest["summary"]["en"].strip())
+        self.assertTrue(latest["sections"])
+        for section in latest["sections"]:
+            self.assertTrue(section["title"]["ar"].strip())
+            self.assertTrue(section["title"]["en"].strip())
+            self.assertTrue(section["items"])
+            for item in section["items"]:
+                self.assertTrue(item["ar"].strip())
+                self.assertTrue(item["en"].strip())
+
+    def test_components_do_not_hardcode_catalogue_counts(self):
+        stat_band = (REPO / "website" / "src" / "components" / "StatBand.astro").read_text(encoding="utf-8")
+        self.assertIn("commands.totals.all", stat_band)
+        self.assertIn("commands.totals.categories", stat_band)
+        self.assertIn("facts.media_platforms", stat_band)
+        self.assertNotRegex(stat_band, r"value:\s*69\b")
+        self.assertNotRegex(stat_band, r"value:\s*13\b")
 
 
 if __name__ == "__main__":

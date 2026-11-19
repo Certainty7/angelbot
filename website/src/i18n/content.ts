@@ -105,8 +105,8 @@ export const home: PageDef = {
           en: 'Direct messages are logged for the bot owner and forwarded to them; members should be told before messaging the bot.',
         },
         {
-          ar: 'لا نسخة احتياطية خارج الخادم بعد: اللقطات محلية، تُنشأ بـ `sqlite3 .backup` وتُحفظ بصلاحية `600`.',
-          en: 'There is no off-server backup yet: snapshots are local, made with `sqlite3 .backup` and stored with `600` permissions.',
+          ar: 'لا نسخة احتياطية خارج الخادم بعد: اللقطات محلية عبر `scripts/backup_db.sh`، تُفحص بـ `PRAGMA integrity_check` وتُحفظ بصلاحية `600` لمدة `14` يوماً.',
+          en: 'There is no off-server backup yet: snapshots are local via `scripts/backup_db.sh`, verified with `PRAGMA integrity_check`, stored with `600` permissions and kept for `14` days.',
         },
       ],
     },
@@ -129,8 +129,8 @@ export const pages: PageDef[] = [
       {
         kind: 'text',
         text: {
-          ar: 'كل ميزة هنا مذكورة في المستودع ومغطاة بفحص محلي. وما لا يفعله أنجل مكتوب في آخر الصفحة، لا مخفيًا.',
-          en: 'Every feature here exists in the repository and is covered by a local check. What Angel does not do is written at the end of the page, not hidden.',
+          ar: 'كل ميزة هنا مذكورة في المستودع، وكل رقم في الموقع مولّد من الشيفرة. وما لا يفعله أنجل مكتوب في آخر الصفحة، لا مخفيًا.',
+          en: 'Every feature here exists in the repository, and every number on the site is generated from the code. What Angel does not do is written at the end of the page, not hidden.',
         },
       },
       {
@@ -179,6 +179,27 @@ export const pages: PageDef[] = [
             },
           },
           {
+            title: { ar: 'إعداد لكل سيرفر وحصة يومية', en: 'Per-server setup and a daily quota' },
+            body: {
+              ar: '`/setup` يحفظ لهجة السيرفر ومستوى الحماية وحالة مصلّح الروابط، ويتيح `/catchup` تلخيص ما فات العضو من الرسائل مع استبعاد المنسحبين قبل صرف الحصة. حصة الذكاء الاصطناعي اليومية لكل سيرفر تُحسب ذريًا في `SQLite`.',
+              en: '`/setup` stores the server dialect, guard level and social-fixer state; `/catchup` summarises what a member missed while dropping opted-out authors before spending quota. Each server’s daily AI quota is accounted atomically in `SQLite`.',
+            },
+          },
+          {
+            title: { ar: 'شبكة صادرة محمية', en: 'A guarded outbound network' },
+            body: {
+              ar: 'كل طلب خارجي يمر عبر طبقة واحدة ترفض العناوين الخاصة وloopback وبيانات metadata، وتعيد التحقق من كل قفزة إعادة توجيه وعند الاتصال نفسه؛ و`yt-dlp` وFFmpeg مقيّدان بقائمة بروتوكولات.',
+              en: 'Every outbound request goes through one layer that rejects private addresses, loopback and cloud metadata, re-checks every redirect hop and the connection itself; `yt-dlp` and FFmpeg are constrained by a protocol allowlist.',
+            },
+          },
+          {
+            title: { ar: 'مفتوح المصدر', en: 'Open source' },
+            body: {
+              ar: 'الرخصة `MIT`، والنشر عبر Docker أو Windows أو systemd موثّق في المستودع؛ ويمكنك قراءة الشيفرة كاملة قبل إضافة البوت.',
+              en: 'The license is `MIT`, and Docker, Windows and systemd deployment are documented in the repository; you can read the whole source before adding the bot.',
+            },
+          },
+          {
             title: { ar: 'استقلالية اختيارية', en: 'Optional autonomy' },
             body: {
               ar: 'رسائل يبدأها البوت، مع ساعات هادئة، وحدود ساعية ويومية، وحد أدنى لعدد المتحدثين، وفاصل لكل قناة — تُضبط من البيئة لا من الشيفرة.',
@@ -188,8 +209,8 @@ export const pages: PageDef[] = [
           {
             title: { ar: 'ضوابط تشغيل', en: 'Operational controls' },
             body: {
-              ar: 'وحدة `systemd`، وبوابة فحص محلية تعمل قبل كل بدء، ولقطة مقاييس، ومؤقّت نسخ احتياطي.',
-              en: 'A `systemd` unit, a local check gate that runs before every start, a metrics snapshot and a backup timer.',
+              ar: 'وحدة `systemd`، وبوابة فحص محلية تعمل قبل كل بدء، ولقطة مقاييس، وسكربت نسخ احتياطي موثّق يمكن جدولته من الخادم.',
+              en: 'A `systemd` unit, a local check gate that runs before every start, a metrics snapshot and a verified backup script that can be scheduled on the host.',
             },
           },
         ],
@@ -207,12 +228,12 @@ export const pages: PageDef[] = [
             en: 'There is no off-server backup yet.',
           },
           {
-            ar: 'فلتر المخرجات نسخة أولى: يلتقط الحالات الواضحة، لا كل صياغة.',
-            en: 'The output filter is a first version: it catches the clear cases, not every phrasing.',
+            ar: 'فلتر المخرجات طبقة كشف heuristic: يلتقط الحالات الواضحة، ولا يضمن كل صياغة.',
+            en: 'The output filter is a heuristic layer: it catches the clear cases, not every phrasing.',
           },
           {
-            ar: 'يحتاج تشغيل يوتيوب إلى ملف cookies و`Deno`، وبدونهما يعود البحث إلى `SoundCloud` فقط.',
-            en: 'YouTube playback needs a cookies file and `Deno`; without both, search falls back to `SoundCloud` only.',
+            ar: 'قد يحتاج تشغيل يوتيوب إلى ملف cookies و`Deno`، ويمكن تعطيل يوتيوب أو الوحدة كاملة من البيئة.',
+            en: 'YouTube playback may need a cookies file and `Deno`; YouTube or the whole cog can be disabled from the environment.',
           },
           {
             ar: 'الذاكرة مرتبطة بالمستخدم لا بالسيرفر: حقيقة عُرفت في سيرفر تظهر في سيرفر آخر. أما الأرشيف فمحدود بالسيرفر.',
@@ -370,17 +391,17 @@ export const pages: PageDef[] = [
             },
           },
           {
-            title: { ar: 'مؤقّتات مستقلة', en: 'Independent timers' },
+            title: { ar: 'مهام صيانة قابلة للجدولة', en: 'Schedulable maintenance' },
             body: {
-              ar: 'التعلّم من محادثات اليوم، وتحديث ملاحظات الثقافة، ونسخة احتياطية من `SQLite`، ولقطة مقاييس اختيارية.',
-              en: 'Learning from the day’s conversations, refreshing culture notes, a `SQLite` backup, and an optional metrics snapshot.',
+              ar: 'التعلّم من محادثات اليوم، وتحديث ملاحظات الثقافة، والنسخ الاحتياطي، ولقطة المقاييس: سكربتات في المستودع تُشغَّل من مؤقّت على الخادم، لا مهام مخفية داخل العملية.',
+              en: 'Learning from the day’s conversations, refreshing culture notes, backups and the metrics snapshot are scripts in the repository, run from a host timer — not hidden tasks inside the process.',
             },
           },
           {
-            title: { ar: 'نسخ احتياطي محلي', en: 'Local backups' },
+            title: { ar: 'نسخ احتياطي موثّق', en: 'Verified backups' },
             body: {
-              ar: 'لقطات محلية تُنشأ بـ `sqlite3 .backup` وتُحفظ بصلاحية `600`؛ تحتوي الرسائل والذاكرة، ولا نسخة خارج الخادم بعد.',
-              en: 'Local snapshots made with `sqlite3 .backup` and stored with `600` permissions; they contain messages and memory, and there is no off-server copy yet.',
+              ar: '`scripts/backup_db.sh` ينشئ نسخة متسقة بـ `sqlite3 .backup`، يتحقق منها بـ `PRAGMA integrity_check`، يحفظها بصلاحية `600` ويحتفظ بها `14` يومًا. لا نسخة خارج الخادم بعد.',
+              en: '`scripts/backup_db.sh` writes a consistent copy with `sqlite3 .backup`, verifies it with `PRAGMA integrity_check`, stores it `600` and keeps it for `14` days. There is no off-host copy yet.',
             },
           },
         ],
@@ -427,6 +448,27 @@ export const pages: PageDef[] = [
             body: {
               ar: 'تُسجَّل الرسائل الخاصة لأجل المالكة: اسم المرسل والنص وروابط المرفقات ورد أنجل في جدول `dm_logs`، وتُحوَّل الرسالة إلى خاص المالكة. ينبغي إخبار الأعضاء بذلك قبل مراسلة البوت.',
               en: 'Direct messages are logged for the owner — sender name, text, attachment links and Angel’s reply in the `dm_logs` table — and forwarded to the owner’s DMs. Members should be told before messaging the bot.',
+            },
+          },
+          {
+            title: { ar: 'شبكة صادرة محمية', en: 'A guarded outbound network' },
+            body: {
+              ar: 'طلبات الوسائط تمر عبر طبقة واحدة: صيغة رابط صارمة، رفض العناوين الخاصة وloopback و`169.254.169.254` وIPv6 المحمّلة، تحقق DNS من كل عنوان، وإعادة تحقق عند الاتصال وعند كل قفزة إعادة توجيه. و`yt-dlp` لا يستقبل هدفًا يبدأ بـ`-`، وFFmpeg مقيّد بقائمة بروتوكولات.',
+              en: 'Media requests go through one layer: strict URL syntax, rejection of private addresses, loopback, `169.254.169.254` and wrapped IPv6, DNS validation of every address, and re-checks at connect time and on every redirect hop. `yt-dlp` never receives a target beginning with `-`, and FFmpeg is constrained by a protocol allowlist.',
+            },
+          },
+          {
+            title: { ar: 'انسحاب مغلق افتراضيًا', en: 'Opt-out fails closed' },
+            body: {
+              ar: 'من يستخدم `/data delete` يبقى منسحبًا. أي خطأ في قراءة التفضيل يُعامل كانسحاب، فلا تُسجَّل رسالته ولا تظهر في `snipe` أو سجل الإشراف أو سياق المحادثة أو أهداف الاستقلالية.',
+              en: 'Anyone who runs `/data delete` stays opted out. Any failure while reading the preference is treated as opted out, so their message is not logged and does not reach `snipe`, the modlog, ambient context or autonomy targets.',
+            },
+          },
+          {
+            title: { ar: 'تنقيح الأسرار', en: 'Secret redaction' },
+            body: {
+              ar: 'فلتر المخرجات يحجب رموز Discord وGitHub وBearer ومفاتيح `AIza` و`sk-` وصيغ `TOKEN=...` قبل الإرسال، ويبطل منشنات الرتب و`@everyone`.',
+              en: 'The output filter redacts Discord, GitHub and Bearer tokens, `AIza`/`sk-` keys and `TOKEN=...` lines before sending, and neutralises role mentions and `@everyone`.',
             },
           },
           {
@@ -515,8 +557,8 @@ export const pages: PageDef[] = [
           {
             title: { ar: 'النسخ الاحتياطية', en: 'Backups' },
             body: {
-              ar: 'لقطات ليلية من قاعدة البيانات تُنشأ بـ `sqlite3 .backup` وتُحفظ بصلاحية `600`، ويُحتفظ بها `14` يوماً ثم تُحذف. تحتوي الرسائل والذاكرة، ولا تُنسخ خارج الخادم. الحذف يصل إلى هذه اللقطات خلال دورة الاحتفاظ نفسها.',
-              en: 'Nightly database snapshots made with `sqlite3 .backup`, stored with `600` permissions and kept for `14` days before deletion. They contain messages and memory, and are never copied off the host. Deletions reach these snapshots within that retention window.',
+              ar: 'لقطات دورية من قاعدة البيانات تُنشأ بـ `scripts/backup_db.sh` وتُحفظ بصلاحية `600`، ويُحتفظ بها `14` يوماً ثم تُحذف. تحتوي الرسائل والذاكرة، ولا تُنسخ خارج الخادم. الحذف يصل إلى هذه اللقطات خلال دورة الاحتفاظ نفسها.',
+              en: 'Periodic database snapshots made with `scripts/backup_db.sh`, stored with `600` permissions and kept for `14` days before deletion. They contain messages and memory, and are never copied off the host. Deletions reach these snapshots within that retention window.',
             },
           },
           {
@@ -634,24 +676,29 @@ export const pages: PageDef[] = [
   {
     slug: 'changelog',
     eyebrow: { ar: 'سجل التغييرات', en: 'Changelog' },
-    h1: { ar: 'ما تغيّر، كما هو مسجَّل.', en: 'What changed, as recorded.' },
+    h1: { ar: 'ما تغيّر، إصدارًا بعد إصدار.', en: 'What changed, release by release.' },
     title: { ar: 'سجل التغييرات — أنجل', en: 'Changelog — Angel' },
     description: {
-      ar: 'إيداعات حقيقية من سجل git في مستودع المشروع، دون صياغة تسويقية.',
-      en: 'Real commits from the project’s git history, without marketing copy.',
+      ar: 'الإصدارات المنشورة، مولّدة من ملف سجل التغييرات في المستودع بالعربية والإنجليزية.',
+      en: 'Published releases, generated from the repository changelog in Arabic and English.',
     },
     blocks: [
       {
         kind: 'text',
         text: {
-          ar: 'كل صف هنا إيداع حقيقي في المستودع، بالنص الذي كتبه صاحبه. الصفحة لا تُولّد إصدارات ولا تُعيد صياغة التاريخ؛ أحدث الإيداعات أولًا.',
-          en: 'Every row here is a real commit in the repository, with the text its author wrote. The page invents no releases and rewrites no history; newest first.',
+          ar: 'كل إصدار هنا مأخوذ من `CHANGELOG.md` و`CHANGELOG.ar.md` في المستودع نفسه؛ لا تُكتب الإصدارات بيد في هذه الصفحة. وأي تغيير في الملفين يُحدّث الصفحة عند البناء.',
+          en: 'Every release here comes from `CHANGELOG.md` and `CHANGELOG.ar.md` in the repository itself; the page does not invent releases. A change to either file updates the page at build time.',
         },
       },
       { kind: 'changelog' },
       {
         kind: 'link',
-        label: { ar: 'سجل الإيداعات الكامل على GitHub', en: 'The full commit history on GitHub' },
+        label: { ar: 'كل الإصدارات على GitHub', en: 'All releases on GitHub' },
+        href: 'https://github.com/Certainty7/angelbot/releases',
+      },
+      {
+        kind: 'link',
+        label: { ar: 'سجل الإيداعات الكامل', en: 'The full commit history' },
         href: 'https://github.com/Certainty7/angelbot/commits/master',
       },
     ],

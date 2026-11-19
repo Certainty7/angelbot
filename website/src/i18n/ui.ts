@@ -54,8 +54,8 @@ export const ui = {
     en: 'A static site with no tracking and no ads. Fonts and assets are self-hosted.',
   },
   copyright: {
-    ar: 'أنجل — جميع الحقوق محفوظة.',
-    en: 'Angel — all rights reserved.',
+    ar: 'أنجل — مفتوح المصدر تحت رخصة MIT.',
+    en: 'Angel — open source under the MIT license.',
   },
   browse: { ar: 'تصفّح الأوامر', en: 'Browse the commands' },
   heroNote: { ar: 'مفتوح للإضافة — لا حساب مطلوب.', en: 'Open to invite — no account needed.' },
