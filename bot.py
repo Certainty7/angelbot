@@ -17,7 +17,7 @@ from angel.database import BotDatabase
 from angel.media import SOCIAL_URL_REGEX, chunk_slides, perform_storage_cleanup, process_social_media_url_multi
 from angel.audio_source import ResolveError, parse_play_request
 from angel.images import extract_message_media
-from angel.brain import AIServiceError, AngelBrainService
+from angel.brain import AI_ERRORS, AngelBrainService
 from angel import guard, memory
 from angel.nl_router import try_execute_custom_action_trigger, try_execute_natural_command
 import asyncio
@@ -658,7 +658,7 @@ async def on_message(message: discord.Message):
         for chunk in chunks[1:]:
           await message.channel.send(content=chunk)
 
-      except AIServiceError as err:
+      except AI_ERRORS as err:
         await safe_reply(message, f"⚠️ {err}")
       except Exception as exc:
         logger.exception(f"Unexpected error in on_message: {exc}")

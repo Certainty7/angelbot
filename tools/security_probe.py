@@ -15,8 +15,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-import discord
-
 from angel.config import _ALLOWED_OWNER_IDS, check_staff_action_permission, is_mistress
 from angel.images import parse_ai_special_tags
 from angel.nl_router import _CONFIRM_REQUIRED, _EXEC_INTENT_GUARDS

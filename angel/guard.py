@@ -4,7 +4,7 @@
 """
 import random
 import re
-from typing import Any, Optional
+from typing import Optional
 
 from .config import is_mistress, logger
 from .registry import get_bot

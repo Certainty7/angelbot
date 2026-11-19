@@ -8,6 +8,21 @@ DB_PATH="${ANGEL_DB_PATH:-/opt/angelbot/data/angel.db}"
 BACKUP_DIR="${ANGEL_BACKUP_DIR:-/opt/angelbot/backups}"
 RETENTION_DAYS="${ANGEL_BACKUP_RETENTION_DAYS:-14}"
 
+if ! [[ "$RETENTION_DAYS" =~ ^[0-9]+$ ]] || [[ "$RETENTION_DAYS" -lt 1 ]]; then
+  echo "[ERROR] ANGEL_BACKUP_RETENTION_DAYS must be a positive integer" >&2
+  exit 1
+fi
+
+if [[ "$DB_PATH" == *"'"* ]] || [[ "$BACKUP_DIR" == *"'"* ]] || [[ "$BACKUP_DIR" == *$'\n'* ]]; then
+  echo "[ERROR] Paths must not contain single quotes or newlines" >&2
+  exit 1
+fi
+
+if ! command -v sqlite3 >/dev/null 2>&1; then
+  echo "[ERROR] sqlite3 CLI is required (apt install sqlite3)" >&2
+  exit 1
+fi
+
 if [[ ! -f "$DB_PATH" ]]; then
   echo "[ERROR] Database file not found: $DB_PATH" >&2
   exit 1
@@ -23,8 +38,8 @@ OUT_FILE="${BACKUP_DIR}/angel_${STAMP}.db"
 sqlite3 -cmd ".timeout 10000" "$DB_PATH" ".backup '${OUT_FILE}'"
 chmod 600 "$OUT_FILE"
 
-# 2. Verify the copy directly in read-only URI mode (never copy into /tmp).
-INTEGRITY="$(sqlite3 "file:${OUT_FILE}?mode=ro" 'PRAGMA integrity_check;')"
+# 2. Verify the copy in read-only mode (no URI query string, so ?/# in a path is harmless).
+INTEGRITY="$(sqlite3 -readonly "$OUT_FILE" 'PRAGMA integrity_check;')"
 if [[ "$INTEGRITY" != "ok" ]]; then
   echo "[ERROR] Backup integrity check failed: $INTEGRITY" >&2
   rm -f "$OUT_FILE"

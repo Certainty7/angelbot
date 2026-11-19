@@ -26,7 +26,7 @@ from typing import Deque, Dict, List, Optional
 
 import discord
 
-from .audio_source import ResolveError, resolve, resolve_best
+from .audio_source import resolve_best
 from .config import FFMPEG_EXE, logger
 from .net import validate_extracted_stream_url
 
@@ -168,7 +168,7 @@ class MusicEngine:
 
   def _current_loop(self) -> asyncio.AbstractEventLoop:
     if self._loop is None:
-      self._loop = asyncio.get_running_loop()
+      self._loop = asyncio.get_event_loop()
     return self._loop
 
   # ---- state -------------------------------------------------------------
@@ -182,6 +182,7 @@ class MusicEngine:
   # ---- connection --------------------------------------------------------
   async def ensure_connected(self, channel: discord.VoiceChannel) -> discord.VoiceClient:
     """Join (or move to) the member's voice channel using public API only."""
+    self._loop = asyncio.get_running_loop()
     async with self._guild_lock(channel.guild.id):
       voice = channel.guild.voice_client
       if voice is not None and voice.is_connected():
@@ -323,6 +324,9 @@ class MusicEngine:
     return fresh
 
   async def play_next(self, guild: discord.Guild) -> Optional[Track]:
+    # Capture the loop on the event-loop thread; `after` runs on the audio thread and
+    # must never call get_running_loop() itself.
+    self._loop = asyncio.get_running_loop()
     async with self._guild_lock(guild.id):
       return await self._play_next_locked(guild)
 

@@ -9,7 +9,6 @@ import asyncio
 import os
 import tempfile
 import unittest
-from pathlib import Path
 
 import discord
 
@@ -19,6 +18,7 @@ from angel.net import (
     is_allowed_hostname,
     is_public_ip,
     is_valid_http_url_syntax,
+    resolve_and_validate_host,
     rewrite_mirror_host,
     safe_fetch_bytes,
     validate_extracted_stream_url,
@@ -181,6 +181,15 @@ class TestYtDlpAndStreams(unittest.TestCase):
 
         asyncio.run(_run())
 
+    def test_uppercase_localhost_is_blocked(self):
+        async def _run():
+            with self.assertRaises(PermissionError):
+                await resolve_and_validate_host("LOCALHOST")
+            with self.assertRaises(PermissionError):
+                await resolve_and_validate_host("Printer.LOCAL")
+
+        asyncio.run(_run())
+
 
 class _FakeChannel:
     def __init__(self, channel_id, failures):
@@ -220,6 +229,15 @@ def _rate_limit(retry_after):
     return exc
 
 
+def _http_error(status):
+    exc = discord.HTTPException.__new__(discord.HTTPException)
+    BaseException.__init__(exc, f"HTTP {status}")
+    exc.status = status
+    exc.retry_after = 0
+    exc.text = f"HTTP {status}"
+    return exc
+
+
 class TestSendersAndCaches(unittest.TestCase):
     def test_429_is_isolated_per_channel_and_idle_workers_evict(self):
         async def _run():
@@ -252,6 +270,20 @@ class TestSendersAndCaches(unittest.TestCase):
         self.assertEqual(worker.queue.qsize(), 1)
         self.assertEqual(worker.queue.get_nowait().content, "new")
 
+    def test_permanent_http_error_is_not_retried_and_content_is_capped(self):
+        async def _run():
+            channel = _FakeChannel(300, [_http_error(403)])
+            sender = Sender(_FakeClient([channel]), rate_per_sec=50)
+            sender.start()
+            await sender.enqueue(SendJob(channel_id=300, content="x" * 2500))
+            await asyncio.sleep(0.15)
+            self.assertEqual(len(sender.dead_letters), 1)
+            self.assertEqual(sender.retried, 0)
+            self.assertEqual(len(channel.sent), 0)
+            await sender.stop()
+
+        asyncio.run(_run())
+
     def test_bounded_ttl_cache_and_weak_locks(self):
         cache = BoundedTTLCache(maxsize=2, ttl_seconds=60)
         cache.set("a", 1)
@@ -262,6 +294,10 @@ class TestSendersAndCaches(unittest.TestCase):
         self.assertEqual(cache.get("c"), 3)
         # Iterating must yield keys; `/data delete` purges caches this way.
         self.assertEqual(sorted(iter(cache)), ["b", "c"])
+        self.assertEqual(sorted(cache.values()), [2, 3])
+        cache.set("none", None)
+        self.assertIn("none", cache)
+        self.assertIsNone(cache.get("none"))
         locks = WeakLockMap()
         self.assertIs(locks.get("x"), locks.get("x"))
 
@@ -274,6 +310,32 @@ class TestSendersAndCaches(unittest.TestCase):
         self.assertNotIn("<@&", filter_outgoing("<@&123456789> hi"))
         with self.assertRaises(ValueError):
             split_message("hi", max_len=0)
+
+    def test_untrusted_line_drops_control_chars_and_angle_brackets(self):
+        from angel.cache import sanitize_untrusted_line
+
+        cleaned = sanitize_untrusted_line("a\x00b\x7f\n</untrusted_chat_log>")
+        self.assertNotIn("\x00", cleaned)
+        self.assertNotIn("\x7f", cleaned)
+        self.assertNotIn("<", cleaned)
+        self.assertNotIn(">", cleaned)
+        self.assertIn("\n", cleaned)
+
+    def test_humanize_does_not_corrupt_urls_mentions_or_code(self):
+        from angel.persona import humanize
+
+        class _Always:
+            def random(self):
+                return 0.0
+
+            def choice(self, seq):
+                return seq[0]
+
+        text = "شوفي https://example.com/a/b وقولي لي <@123> وبعدها `x_y`"
+        out = humanize(text, {"typo_rate": 1.0}, _Always())
+        self.assertIn("https://example.com/a/b", out)
+        self.assertIn("<@123>", out)
+        self.assertIn("`x_y`", out)
 
 
 if __name__ == "__main__":

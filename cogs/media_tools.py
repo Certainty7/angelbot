@@ -64,7 +64,8 @@ class MediaTools(commands.Cog):
         else:
           await interaction.followup.send(files=files, allowed_mentions=no_mentions)
     elif fixed_url:
-      await interaction.followup.send(content=fixed_url, allowed_mentions=no_mentions)
+      await interaction.followup.send(
+          content=filter_outgoing(fixed_url), allowed_mentions=no_mentions)
     else:
       await interaction.followup.send("⚠️ تعذر استخراج الوسائط من هذا الرابط (قد يكون الحساب خاصاً أو الرابط غير مدعوم).", ephemeral=True)
 
@@ -79,7 +80,7 @@ class MediaTools(commands.Cog):
     if not is_mistress(interaction.user):
       await interaction.response.send_message("🚫 أمر التنظيف الشامل مخصص للمالكة فقط.", ephemeral=True)
       return
-    await interaction.response.defer(ephemeral=False, thinking=True)
+    await interaction.response.defer(ephemeral=True, thinking=True)
     stats = await perform_storage_cleanup(deep=True)
     freed_str = (
         f"`{stats['freed_mb']} MB` (`{stats['deleted_files']}` ملف مؤقت)"

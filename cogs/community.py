@@ -8,7 +8,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from angel.config import has_perm_or_mistress, is_mistress
+from angel.config import has_perm_or_mistress
 from angel.interactions import _safe_interaction_reply
 from angel.ui import GiveawayJoinView, TicketPanelView
 

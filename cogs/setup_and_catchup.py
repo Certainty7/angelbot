@@ -121,7 +121,13 @@ class SetupAndCatchup(commands.Cog):
             and interaction.user.guild_permissions.manage_guild):
       await interaction.response.send_message("🚫 تحتاج صلاحية إدارة السيرفر.", ephemeral=True)
       return
-    existing = await self.bot.db.get_guild_settings(interaction.guild.id) or {}
+    try:
+      existing = await self.bot.db.get_guild_settings(interaction.guild.id) or {}
+    except Exception as exc:
+      logger.warning("setup settings read failed: %s: %s", type(exc).__name__, exc)
+      await interaction.response.send_message(
+          "⚠️ تعذّر قراءة إعدادات السيرفر الآن. حاولي بعد قليل.", ephemeral=True)
+      return
 
     async def _save(gid: int, dialect: str, guard: str, social: bool) -> None:
       await self.bot.db.upsert_guild_settings(
@@ -131,7 +137,6 @@ class SetupAndCatchup(commands.Cog):
       self.bot.guard_modes_cache[gid] = guard
       self.bot.guild_dialects[gid] = dialect
       self.bot.social_fixer_cache[gid] = social
-
     view = SetupWizardView(
         owner_user_id=interaction.user.id,
         guild_id=interaction.guild.id,
@@ -168,10 +173,18 @@ class SetupAndCatchup(commands.Cog):
       return
 
     await interaction.response.defer(thinking=True)
-    raw_msgs = [
-        m async for m in interaction.channel.history(limit=int(count))
-        if not m.author.bot and m.content.strip()
-    ]
+    try:
+      raw_msgs = [
+          m async for m in interaction.channel.history(limit=int(count))
+          if not m.author.bot and m.content.strip()
+      ]
+    except (discord.Forbidden, discord.HTTPException) as exc:
+      logger.warning("catchup history failed: %s: %s", type(exc).__name__, exc)
+      await interaction.followup.send(
+          "⚠️ لا أستطيع قراءة سجل هذه القناة. تأكدي من صلاحية «قراءة سجل الرسائل» للبوت.",
+          allowed_mentions=discord.AllowedMentions.none(),
+      )
+      return
     opted_out = set()
     for uid in {m.author.id for m in raw_msgs}:
       try:
@@ -199,10 +212,15 @@ class SetupAndCatchup(commands.Cog):
       return
 
     # Spend the guild quota only after real, non-opted-out messages exist.
-    allowed, used = await self.bot.db.consume_guild_ai_quota(interaction.guild.id)
+    try:
+      allowed, used = await self.bot.db.consume_guild_ai_quota(interaction.guild.id)
+    except Exception as exc:
+      logger.warning("catchup quota failed: %s: %s", type(exc).__name__, exc)
+      allowed, used = False, 0
     if not allowed:
       await interaction.followup.send(
-          f"وصل السيرفر للحد اليومي لطلبات الذكاء الاصطناعي ({used}).",
+          f"وصل السيرفر للحد اليومي لطلبات الذكاء الاصطناعي ({used})." if used else
+          "⚠️ تعذّر التحقق من حصة السيرفر الآن. حاولي بعد قليل.",
           allowed_mentions=discord.AllowedMentions.none(),
       )
       return
@@ -211,6 +229,10 @@ class SetupAndCatchup(commands.Cog):
       summary = await self.bot.ai.summarize_catchup(build_safe_catchup_payload(lines))
     except Exception as exc:
       logger.warning("catchup summary failed: %s: %s", type(exc).__name__, exc)
+      try:
+        await self.bot.db.refund_guild_ai_quota(interaction.guild.id)
+      except Exception:
+        pass
       await interaction.followup.send(
           "⚠️ تعذّر تلخيص الرسائل الآن. حاولي بعد قليل.",
           allowed_mentions=discord.AllowedMentions.none(),

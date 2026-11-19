@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.0.1 — 2026-11-19
+
+Correctness and hardening fixes after the first independent audit of v1.0.0.
+
+### Security
+
+- Gemini responses can no longer fall back to hidden `thought` parts, and a rejected key
+  rotates to the backup key on `401`/`403`.
+- Display names are sanitised before they enter the system prompt; `[SYSTEM]`/`[INST]`
+  and angle brackets are stripped from untrusted context.
+- Typo injection skips URLs, code spans, mentions and control tags.
+
+### Fixes
+
+- `BoundedTTLCache.values()` no longer mis-unpacks entries; `None` values, TTL-aware
+  `pop`, and control characters in untrusted lines are handled correctly.
+- `/catchup` survives a forbidden history read, and refunds the guild quota when the
+  summary call fails.
+- Permanent Discord `4xx` send errors go to dead letters instead of retrying forever;
+  long messages are capped at 2000 characters and missing channels are fetched.
+- The voice engine captures the event loop before the audio callback can need it.
+- `resolve_and_validate_host` lowercases the hostname before its blocklist checks.
+- Image generation honours the daily budget, key rotation and URL-safe prompt encoding.
+
+### Operations
+
+- Docker stops via `exec` so `SIGTERM` reaches Python; the Deno archive is SHA-256 checked.
+- The Windows launcher verifies Python 3.12 and every install/checkpoint exit code.
+- The backup script validates retention and handles paths without URI/quote pitfalls.
+- CI quotes changed filenames for ruff and no longer hides pip-audit failures.
+- The failing TypeScript 7 dependency PR was closed.
+
+### Website
+
+- The website is rebuilt from the repository and shows v1.0.1 with the corrected
+  changelog.
+
 ## 1.0.0 — 2026-11-19
 
 First open-source release after the security and stability hardening pass.

@@ -1105,6 +1105,19 @@ class BotDatabase:
       await db.commit()
     return bool(allowed), int(used_row[0]) if used_row else 0
 
+  async def refund_guild_ai_quota(self, guild_id: int) -> None:
+    """Give back one reserved call when the provider failed before answering."""
+    from datetime import datetime, timezone
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    async with self._connect() as db:
+      await db.execute(
+          "UPDATE guild_daily_usage "
+          "SET ai_calls = CASE WHEN ai_calls > 0 THEN ai_calls - 1 ELSE 0 END "
+          "WHERE guild_id = ? AND day_utc = ?",
+          (guild_id, day),
+      )
+      await db.commit()
+
   # --- Leveling & XP ---
   async def add_xp(self, guild_id: int, user_id: int, xp_gain: int) -> Tuple[int, int, bool]:
     async with self._connect() as db:

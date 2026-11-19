@@ -8,7 +8,7 @@ import asyncio
 import time
 import weakref
 from collections import OrderedDict, deque
-from typing import Any, Callable, Dict, Generic, Optional, TypeVar
+from typing import Any, Callable, Generic, Optional, TypeVar
 
 T = TypeVar("T")
 
@@ -77,24 +77,32 @@ class BoundedTTLCache(Generic[T]):
     return value
 
   def __getitem__(self, key: Any) -> T:
-    value = self.get(key)
-    if value is None and key not in self._store:
+    sentinel = object()
+    value = self.get(key, sentinel)  # type: ignore[arg-type]
+    if value is sentinel:
       raise KeyError(key)
     return value  # type: ignore[return-value]
 
   def __contains__(self, key: Any) -> bool:
-    return self.get(key) is not None
+    sentinel = object()
+    return self.get(key, sentinel) is not sentinel  # type: ignore[arg-type]
 
   def pop(self, key: Any, default: Optional[T] = None) -> Optional[T]:
-    item = self._store.pop(key, None)
-    return default if item is None else item[1]
+    item = self._store.get(key)
+    if item is None:
+      return default
+    expires_at, value = item
+    self._store.pop(key, None)
+    if time.monotonic() > expires_at:
+      return default
+    return value
 
   def items(self):
     self.prune()
     return [(k, v) for k, (_exp, v) in self._store.items()]
 
   def values(self):
-    return [v for _k, (_exp, v) in self.items()]
+    return [v for _k, v in self.items()]
 
   def clear(self) -> None:
     self._store.clear()
@@ -149,8 +157,11 @@ class WeakLockMap:
 
 
 def sanitize_untrusted_line(text: str) -> str:
-  """Neutralise angle brackets so chat text cannot close a prompt delimiter tag."""
-  cleaned = "".join(ch for ch in (text or "") if ch == "\n" or ch >= " ")
+  """Neutralise angle brackets and control characters in untrusted chat text."""
+  cleaned = "".join(
+      ch for ch in (text or "")
+      if ch in ("\n", "\t") or ch.isprintable()
+  )
   return cleaned.replace("<", "\u2039").replace(">", "\u203a")
 
 

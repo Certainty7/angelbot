@@ -17,7 +17,7 @@ from .config import (ARABIC_GIF_KEYWORDS, GEMINI_API_KEYS, GIF_ACTION_ENDPOINT, 
                      SUPPORTED_GIF_ACTIONS, YURI_ANIME_WHITELIST, _safe_gc_collect, is_mistress,
                      is_romantic_gif, logger)
 from .net import get_shared_http_session, read_bounded_stream
-from .persona import PROBE_PATTERNS, build_angel_system_prompt, humanize, normalize_arabic_text, trim_emoji
+from .persona import PROBE_PATTERNS, build_angel_system_prompt, normalize_arabic_text
 from .quota import QuotaGuard
 from .images import remove_bottom_watermark_async, strip_all_control_tags
 from .registry import get_bot
@@ -27,6 +27,10 @@ from .registry import get_bot
 
 class AIServiceError(Exception):
   pass
+
+
+# Budget exhaustion and provider failures are both shown to the user as a clean message.
+AI_ERRORS = (AIServiceError, cost.BudgetExhausted)
 
 
 def _user_tag(user: Any) -> str:
@@ -85,23 +89,28 @@ class AngelBrainService:
         logger.info("ai-skip model=%s reason=cooldown", model_name)
         continue
       endpoint = self._get_endpoint(model_name)
+      payload_for_model = payload
       _gen = payload.get("generationConfig")
       if isinstance(_gen, dict) and "thinkingConfig" not in _gen and ("gemini-4" in model_name or "gemini-3.1" in model_name):
-        # 4.x/3.1 spend the whole token budget thinking and return an empty answer without this
-        _gen["thinkingConfig"] = {"thinkingBudget": 0}
+        # 4.x/3.1 spend the whole token budget thinking and return an empty answer without this.
+        # Copy instead of mutating the caller's payload: a 400 fallback must not leak across calls.
+        payload_for_model = {
+            **payload,
+            "generationConfig": {**_gen, "thinkingConfig": {"thinkingBudget": 0}},
+        }
       for attempt in range(1, self.max_retries_per_model + 1):
         if await self.budget_blocked(user):
           logger.info("ai-guard reason=budget")
           if self.db is not None:
             await self.db.add_usage(cost.local_day(), 0, 0, 0.0, blocked=True)
-          raise cost.BudgetExhausted("daily budget reached (95%): listening mode")
+          raise cost.BudgetExhausted("وصل البوت للحد اليومي للميزانية — وضع الاستماع.")
         await self.quota_guard.pace_global_rpm(high_priority)
         t0 = time.monotonic()
         # Rebuild headers every attempt so a rotated GEMINI_API_KEY_2 actually takes effect.
         headers = {"x-goog-api-key": self._active_key(), "Content-Type": "application/json"}
         try:
           session = await get_shared_http_session()
-          async with session.post(endpoint, headers=headers, json=payload, timeout=timeout) as response:
+          async with session.post(endpoint, headers=headers, json=payload_for_model, timeout=timeout) as response:
               if response.status == 200:
                 elapsed_ms = round((time.monotonic() - t0) * 1000.0, 1)
                 self.quota_guard.model_latency_ms[model_name] = elapsed_ms
@@ -113,12 +122,10 @@ class AngelBrainService:
                 if not candidates or "content" not in candidates[0]:
                   raise AIServiceError("أترفع عن الرد على هذا الكلام.")
                 parts = candidates[0]["content"].get("parts", [])
-                # Exclude internal thinking parts ('thought': True) on Gemini 3.x/2.5 models
+                # Never expose hidden reasoning: only parts the model marked as visible.
                 visible_text = "".join(
                     p.get("text", "") for p in parts if "text" in p and not p.get("thought")
                 ).strip()
-                if not visible_text and parts:
-                  visible_text = "".join(p.get("text", "") for p in parts if "text" in p).strip()
                 usage = data.get("usageMetadata") or {}
                 in_tok = int(usage.get("promptTokenCount") or 0)
                 out_tok = int(usage.get("candidatesTokenCount") or 0)
@@ -149,15 +156,31 @@ class AngelBrainService:
                 logger.warning(f"Gemini model '{model_name}' HTTP {response.status}; switching/retrying.")
                 if response.status == 503:
                   self._cool(model_name, 60.0)
+                  break  # retrying a cooled model just burns the attempt budget
                 if attempt < self.max_retries_per_model:
                   await asyncio.sleep(0.35)
                   continue
                 break
-              if response.status == 400 and isinstance(payload.get("generationConfig"), dict) \
-                      and "thinkingConfig" in payload["generationConfig"]:
-                payload["generationConfig"].pop("thinkingConfig", None)
+              if response.status == 400 and isinstance(payload_for_model.get("generationConfig"), dict) \
+                      and "thinkingConfig" in payload_for_model["generationConfig"]:
+                payload_for_model = {
+                    **payload_for_model,
+                    "generationConfig": {
+                        k: v for k, v in payload_for_model["generationConfig"].items()
+                        if k != "thinkingConfig"
+                    },
+                }
                 continue
               if response.status in (400, 401, 403):
+                if response.status in (401, 403) and len(self._keys) > 1 \
+                        and attempt < self.max_retries_per_model:
+                  logger.warning(
+                      "gemini key rejected (HTTP %s) on '%s'; rotating and retrying",
+                      response.status, model_name,
+                  )
+                  self._rotate_key()
+                  await asyncio.sleep(0.2)
+                  continue
                 logger.error(f"Gemini API error HTTP {response.status} on '{model_name}': {err_snip}")
                 raise AIServiceError("حدث خلل داخلي أثناء معالجة الطلب.")
               break
@@ -200,7 +223,7 @@ class AngelBrainService:
   async def check_api_models_health(self) -> Tuple[bool, int, str]:
     """Query Google's models endpoint for Angel Diagnostics."""
     url = "https://generativelanguage.googleapis.com/v1beta/models"
-    headers = {"x-goog-api-key": self.api_key}
+    headers = {"x-goog-api-key": self._active_key()}
     t0 = time.monotonic()
     try:
       session = await get_shared_http_session()
@@ -321,7 +344,10 @@ class AngelBrainService:
     raw = await self._post_with_retry(payload, high_priority=is_mistress(user), cmd="custom", user=user)
     return strip_all_control_tags(raw)
 
-  async def generate_image_bytes(self, prompt: str, style_Preset: str = "anime") -> Tuple[bytes, str]:
+  async def generate_image_bytes(self, prompt: str, style_Preset: str = "anime",
+                                 user: Any = None) -> Tuple[bytes, str]:
+    if await self.budget_blocked(user):
+      raise cost.BudgetExhausted("وصل البوت للحد اليومي للميزانية — وضع الاستماع.")
     english_prompt = prompt
     if re.search(r"[\u0600-\u06FF]", prompt):
       try:
@@ -337,7 +363,8 @@ class AngelBrainService:
             }],
             "generationConfig": {"temperature": 0.35, "maxOutputTokens": 150},
         }
-        translated = await self._post_with_retry(trans_payload, high_priority=True, cmd="image-translate")
+        translated = await self._post_with_retry(
+            trans_payload, high_priority=True, cmd="image-translate", user=user)
         if translated:
           english_prompt = strip_all_control_tags(translated).strip('"')
       except Exception:
@@ -350,12 +377,12 @@ class AngelBrainService:
     }.get(style_Preset, "anime art style, masterpiece, highly detailed, soft lighting")
 
     full_prompt = f"{english_prompt}, {style_suffix}"
-    headers = {"x-goog-api-key": self.api_key, "Content-Type": "application/json"}
     timeout_fast = aiohttp.ClientTimeout(total=18)
 
     session = await get_shared_http_session()
     for img_model in IMAGE_GEN_MODELS:
       endpoint = self._get_endpoint(img_model)
+      headers = {"x-goog-api-key": self._active_key(), "Content-Type": "application/json"}
       payload = {
           "contents": [{"role": "user", "parts": [{"text": full_prompt}]}],
           "generationConfig": {"responseModalities": ["TEXT", "IMAGE"]},
@@ -374,7 +401,7 @@ class AngelBrainService:
         pass
 
     seed = random.randint(1000, 9999999)
-    encoded = urllib.parse.quote(full_prompt)
+    encoded = urllib.parse.quote(full_prompt, safe="")
     fallback_urls = [
         f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=1024&seed={seed}&model=flux&nologo=true",
         f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=1024&seed={seed}&nologo=true",

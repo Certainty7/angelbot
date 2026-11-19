@@ -50,7 +50,7 @@ jobs:
           else
             files=$(git diff --name-only HEAD~1 -- '*.py' || true)
           fi
-          if [ -n "$files" ]; then ruff check $files; else echo "no changed Python files"; fi
+          if [ -n "$files" ]; then printf '%s\n' "$files" | xargs -r -d '\n' ruff check; else echo "no changed Python files"; fi
 
       - name: Pytest
         run: python -m pytest -q
@@ -80,7 +80,7 @@ jobs:
       - name: pip-audit (advisory)
         run: |
           pip install pip-audit
-          pip-audit -r requirements.txt || true
+          pip-audit -r requirements.txt
 
   website-data:
     runs-on: ubuntu-latest
