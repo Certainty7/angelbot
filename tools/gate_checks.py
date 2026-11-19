@@ -315,16 +315,16 @@ def error_correlation_id():
     boom = RuntimeError("forced failure /srv/angelbot/secret/path.py line 42")
     wrapper = bot_mod.app_commands.CommandInvokeError(bot_mod.bot.tree.get_command("help"), boom)
     captured = []
-    real_exc = bot_mod.logger.exception
+    real_error = bot_mod.logger.error
 
     def spy(msg, *_a, **_kw):
         captured.append(str(msg))
 
-    bot_mod.logger.exception = spy
+    bot_mod.logger.error = spy
     try:
         asyncio.run(bot_mod.on_app_command_error(inter, wrapper))
     finally:
-        bot_mod.logger.exception = real_exc
+        bot_mod.logger.error = real_error
 
     user_msg = (inter.response.sent or [""])[0] or ""
     logs = " ".join(captured)

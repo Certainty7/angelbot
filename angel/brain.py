@@ -47,6 +47,16 @@ def _looks_like_raster_image(data: bytes) -> bool:
   return data.startswith(b"RIFF") and data[8:12] == b"WEBP"
 
 
+def _seconds_until_pacific_midnight() -> float:
+  """Free-tier RPD resets at midnight Pacific; cooling past that is cheaper than hourly retries."""
+  from datetime import datetime, timedelta
+  from zoneinfo import ZoneInfo
+
+  now = datetime.now(ZoneInfo("America/Los_Angeles"))
+  tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+  return max(60.0, (tomorrow - now).total_seconds())
+
+
 class AngelBrainService:
 
   def __init__(self, api_key: str, models_list: List[str], quota_guard: QuotaGuard):
@@ -164,7 +174,10 @@ class AngelBrainService:
               if response.status == 429:
                 logger.warning(f"Gemini model '{model_name}' hit 429 TooManyRequests; failing over to next model.")
                 # A daily free-tier exhaustion must not be retried every two minutes.
-                self._cool(model_name, 3600.0 if ("per day" in body_text or "per_day" in body_text) else 120.0)
+                if "per day" in body_text or "per_day" in body_text:
+                  self._cool(model_name, _seconds_until_pacific_midnight())
+                else:
+                  self._cool(model_name, 120.0)
                 await self._rotate_key()
                 self.quota_guard.release_api_timestamp(stamp)
                 await asyncio.sleep(0.25)

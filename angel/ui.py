@@ -242,19 +242,19 @@ class AngelControlCenterView(discord.ui.View):
     embed = discord.Embed(title="🧠 خزنة الذاكرة (Memory Vault)", color=0x2B2D31)
     embed.add_field(
         name="📌 التفضيلات المثبتة",
-        value=prefs.get("pinned_facts") or "*لا توجد ملاحظات مثبتة بعد (`/memory action:pin`).*",
+        value=(prefs.get("pinned_facts") or "*لا توجد ملاحظات مثبتة بعد (`/memory action:pin`).*")[:1024],
         inline=False,
     )
     embed.add_field(
         name="📝 ملخص المحادثات",
-        value=summary or "*لا يوجد ملخص مسجل بعد.*",
+        value=(summary or "*لا يوجد ملخص مسجل بعد.*")[:1024],
         inline=False,
     )
-    embed.add_field(name="🎭 نمط الأسلوب", value=f"`{prefs.get('style_mode', 'realistic')}`", inline=True)
+    embed.add_field(name="🎭 نمط الأسلوب", value=f"`{prefs.get('style_mode', 'realistic')}`"[:1024], inline=True)
     try:
       await interaction.followup.send(embed=embed, ephemeral=True)
-    except Exception:
-      pass
+    except discord.HTTPException as exc:
+      logger.warning("memory vault send failed: %s: %s", type(exc).__name__, exc)
 
   @discord.ui.button(label="📊 نبض السيرفر", style=discord.ButtonStyle.secondary)
   async def pulse_btn(self, interaction: discord.Interaction, button: discord.ui.Button):

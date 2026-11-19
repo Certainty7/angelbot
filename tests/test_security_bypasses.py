@@ -295,6 +295,22 @@ class TestSendersAndCaches(unittest.TestCase):
         sender._requeue(worker, SendJob(channel_id=77, content="new"))
         self.assertEqual(worker.queue.qsize(), 1)
         self.assertEqual(worker.queue.get_nowait().content, "new")
+        self.assertEqual([j.content for j in sender.dead_letters], ["old"])
+
+    def test_enqueue_on_closed_client_is_dead_lettered(self):
+        class _ClosedClient(_FakeClient):
+            def is_closed(self):
+                return True
+
+        async def _run():
+            sender = Sender(_ClosedClient([]), rate_per_sec=50)
+            sender.start()
+            await sender.enqueue(SendJob(channel_id=1, content="late"))
+            self.assertEqual([j.content for j in sender.dead_letters], ["late"])
+            self.assertEqual(sender._workers, {})
+            await sender.stop()
+
+        asyncio.run(_run())
 
     def test_permanent_http_error_is_not_retried_and_content_is_capped(self):
         async def _run():

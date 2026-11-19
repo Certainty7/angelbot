@@ -6,6 +6,100 @@
   ],
   "releases": [
     {
+      "version": "1.0.3",
+      "date": "2026-11-19",
+      "summary": {
+        "en": "Full hardening pass from an independent 45-finding audit, verified against this tree.",
+        "ar": "جولة تقوية شاملة مبنية على تدقيق مستقل من 45 ملاحظة، تم التحقق منها مقابل شجرة الكود الحالية."
+      },
+      "sections": [
+        {
+          "title": {
+            "en": "Security and authorization",
+            "ar": "الأمان والصلاحيات"
+          },
+          "items": [
+            {
+              "en": "Custom HTTP sessions must use `SafeAsyncResolver`; TikWM media and cached stream URLs are revalidated through the bounded redirect path.",
+              "ar": "جلسات HTTP المخصصة يجب أن تستخدم `SafeAsyncResolver`؛ وسائط TikWM وروابط البث المخزنة يُعاد التحقق منها عبر مسار redirect محدود."
+            },
+            {
+              "en": "Owner `toggle_role` is behind `SOVEREIGN_TOOLS_ENABLED` with role/permission checks. Ticket ownership uses an exact ID match plus a per-user lock; image-studio rerolls are author-only.",
+              "ar": "`toggle_role` خلف `SOVEREIGN_TOOLS_ENABLED` مع فحص الرتب والصلاحيات. ملكية التذكرة بمطابقة ID دقيقة وقفل لكل مستخدم؛ وإعادة توليد الصور لصاحب الطلب فقط."
+            },
+            {
+              "en": "Context menus, music skip/playlist, moderation hierarchy, snipe, AFK and stickies now enforce their scope. AFK is per guild, and sticky deletion requires the matching guild.",
+              "ar": "قوائم السياق، تخطي الموسيقى، هرمية الإشراف، snipe، AFK والرسائل المثبتة تفرض نطاقها. AFK أصبح لكل سيرفر، وحذف التثبيت يتطلب نفس السيرفر."
+            },
+            {
+              "en": "Prompt context is sanitised as untrusted data; image fallbacks verify raster magic bytes; response bodies and Pollinations prompts are bounded.",
+              "ar": "سياق النموذج يُعامل كبيانات غير موثوقة؛ صور fallback تُفحص بالـ magic bytes؛ وأحجام الردود وروابط Pollinations محدودة."
+            }
+          ]
+        },
+        {
+          "title": {
+            "en": "Reliability",
+            "ar": "الموثوقية"
+          },
+          "items": [
+            {
+              "en": "Per-event-loop semaphores, per-guild DAVE state, FFmpeg cleanup on failed play, and a locked music `start()`.",
+              "ar": "Semaphores لكل event loop، حالة DAVE لكل سيرفر، تنظيف FFmpeg عند فشل التشغيل، وقفل `start()`."
+            },
+            {
+              "en": "Autonomy flags load from SQLite before the gateway; BoundedDict/cache types survive refreshes; giveaway failures no longer retry forever; shutdown cancels background tasks.",
+              "ar": "أعلام autonomy تُقرأ من SQLite قبل الاتصال؛ أنواع الكاش تبقى محدودة؛ فشل السحوبات لا يعيد المحاولة للأبد؛ والإغلاق يلغي المهام الخلفية."
+            },
+            {
+              "en": "`safe_reply` retries only a deleted-reference (50035) and rewinds files; zero-width characters no longer bypass the Arabic scam filter; `split_message` never emits an empty chunk.",
+              "ar": "`safe_reply` يعيد المحاولة فقط عند 50035 ويعيد مؤشر الملفات؛ المحارف الصفرية لا تتجاوز فلتر الاحتيال؛ و`split_message` لا ينتج مقطعًا فارغًا."
+            },
+            {
+              "en": "SendQueue caps `retry_after`, records dropped jobs, and rejects sends after close.",
+              "ar": "طابور الإرسال يحدّ `retry_after` ويسجل المهام المسقطة ويرفض الإرسال بعد الإغلاق."
+            }
+          ]
+        },
+        {
+          "title": {
+            "en": "Data and AI",
+            "ar": "البيانات والذكاء"
+          },
+          "items": [
+            {
+              "en": "A zero daily AI limit is honoured; LIKE wildcards are escaped; maintenance no longer VACUUMs under the shared DB lock.",
+              "ar": "حد الذكاء اليومي = 0 يُحترم؛ أحرف LIKE تُهرب؛ الصيانة لا تستخدم VACUUM تحت قفل قاعدة البيانات."
+            },
+            {
+              "en": "Key rotation is locked, the RPM tick is released per request, and a per-day 429 cools until midnight Pacific instead of retrying hourly.",
+              "ar": "تدوير المفاتيح مقفل، وعدّاد RPM يُحرر لكل طلب، و429 اليومي يبرد حتى منتصف ليل المحيط الهادئ."
+            },
+            {
+              "en": "Summaries, profile facts and ambient prompts validate types and cap response size; unclosed control tags are stripped; questions are not stored as profile facts.",
+              "ar": "الملخصات وملف الحقائق والسياق تتحقق من الأنواع وتحد من حجم الرد؛ الوسوم غير المغلقة تُزال؛ والأسئلة لا تُخزن كحقائق."
+            },
+            {
+              "en": "The model chain remains free-tier only: `gemini-3-flash-preview`, `gemini-3.1-flash-lite`, `gemini-3.5-flash-lite`, `gemini-4-hydrogen` (Google AI Studio pricing, 2026-11-19).",
+              "ar": "سلسلة النماذج مجانية بالكامل: `gemini-3-flash-preview`، `gemini-3.1-flash-lite`، `gemini-3.5-flash-lite`، `gemini-4-hydrogen` (أسعار Google AI Studio، 2026-11-19)."
+            }
+          ]
+        },
+        {
+          "title": {
+            "en": "Website and docs",
+            "ar": "الموقع والتوثيق"
+          },
+          "items": [
+            {
+              "en": "TypeScript is pinned to `~6.0.3` because Astro 7 requires `<7`; Dependabot ignores TS majors until Astro supports TypeScript 7.",
+              "ar": "تثبيت TypeScript على `~6.0.3` لأن Astro 7 يتطلب `<7`؛ وDependabot يتجاهل الإصدارات الرئيسية حتى يدعم Astro الإصدار 7."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.0.2",
       "date": "2026-11-19",
       "summary": {

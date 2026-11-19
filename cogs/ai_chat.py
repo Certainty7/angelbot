@@ -48,7 +48,13 @@ class AiChat(commands.Cog):
           interaction.user, message, media_items=media_items, cmd="chat"
       )
 
-      chunks = split_message(reply)
+      chunks = split_message(reply or "")
+      if not chunks or not (reply or "").strip():
+        await interaction.followup.send(
+            "⚠️ لم أستطع توليد رد الآن.", ephemeral=True,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
+        return
       files_to_send = []
       if img_bytes:
         files_to_send.append(discord.File(io.BytesIO(img_bytes), filename="angel_art.png"))
@@ -62,13 +68,22 @@ class AiChat(commands.Cog):
         gif_embed.set_image(url=gif_url)
 
       if gif_embed:
-        await interaction.followup.send(content=first_msg, embed=gif_embed, files=files_to_send)
+        await interaction.followup.send(
+            content=first_msg, embed=gif_embed, files=files_to_send,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
       else:
-        await interaction.followup.send(content=first_msg, files=files_to_send)
+        await interaction.followup.send(
+            content=first_msg, files=files_to_send,
+            allowed_mentions=discord.AllowedMentions.none(),
+        )
       for chunk in chunks[1:]:
-        await interaction.followup.send(content=chunk)
+        await interaction.followup.send(
+            content=chunk, allowed_mentions=discord.AllowedMentions.none()
+        )
     except AI_ERRORS as err:
-      await interaction.followup.send(f"⚠️ {err}", ephemeral=True)
+      logger.warning("chat AI error: %s: %s", type(err).__name__, err)
+      await interaction.followup.send("⚠️ تعذر إكمال الطلب الآن.", ephemeral=True)
     except Exception as exc:
       logger.exception(f"Error in /chat: {exc}")
       await interaction.followup.send("⚠️ حدث خطأ غير متوقع.", ephemeral=True)
@@ -84,18 +99,27 @@ class AiChat(commands.Cog):
   ):
     await interaction.response.defer(thinking=True)
     try:
-      prompt = f"ترجمي النص التالي بدقة إلى ({target_language}) بدون أي مقدمات أو أوسمة:\n\n{text}"
+      prompt = (
+          f"ترجمي النص التالي بدقة إلى ({target_language[:80]}) بدون أي مقدمات أو أوسمة:\n\n"
+          f"<untrusted_text>\n{text[:6000]}\n</untrusted_text>"
+      )
       translation = await self.bot.ai.custom_prompt(
           interaction.user, prompt, harem_title=self.bot.get_harem_title(interaction.user.id)
       )
       embed = discord.Embed(
-          title=f"🌐 الترجمة ({target_language})",
+          title=f"🌐 الترجمة ({target_language[:80]})"[:256],
           description=translation[:4000],
           color=0x2B2D31,
       )
-      await interaction.followup.send(embed=embed)
+      await interaction.followup.send(
+          embed=embed, allowed_mentions=discord.AllowedMentions.none()
+      )
     except AI_ERRORS as err:
-      await interaction.followup.send(f"⚠️ {err}", ephemeral=True)
+      logger.warning("translate AI error: %s: %s", type(err).__name__, err)
+      await interaction.followup.send("⚠️ تعذر إكمال الترجمة الآن.", ephemeral=True)
+    except Exception as exc:
+      logger.exception(f"Error in /translate: {exc}")
+      await interaction.followup.send("⚠️ حدث خطأ غير متوقع.", ephemeral=True)
 
 
   @app_commands.command(name="imagine", description="تصميم أو رسم صورة فنية عبر استوديو أنجل")
@@ -122,30 +146,41 @@ class AiChat(commands.Cog):
     try:
       img_bytes, _ = await self.bot.ai.generate_image_bytes(
           prompt, style_Preset=style, user=interaction.user)
+      if not img_bytes:
+        await interaction.followup.send("⚠️ تعذر توليد الصورة الآن.", ephemeral=True)
+        return
       mistress = is_mistress(interaction.user)
-      caption = f"🪽 **{prompt}**"
+      caption = f"🪽 **{prompt[:3800]}**"
 
       file = discord.File(io.BytesIO(img_bytes), filename="angel_creation.png")
       embed = discord.Embed(
-          description=caption,
+          description=caption[:4000],
           color=0xD4AF37 if (mistress or harem_title) else 0x2B2D31,
           timestamp=datetime.now(timezone.utc),
       )
       embed.set_image(url="attachment://angel_creation.png")
-      await interaction.followup.send(embed=embed, file=file, view=ArtStudioView(prompt, self.bot, interaction.user.id))
+      await interaction.followup.send(
+          embed=embed, file=file, view=ArtStudioView(prompt, self.bot, interaction.user.id),
+          allowed_mentions=discord.AllowedMentions.none(),
+      )
     except AI_ERRORS as err:
-      await interaction.followup.send(f"⚠️ {err}", ephemeral=True)
+      logger.warning("imagine AI error: %s: %s", type(err).__name__, err)
+      await interaction.followup.send("⚠️ تعذر توليد الصورة الآن.", ephemeral=True)
+    except Exception as exc:
+      logger.exception(f"Error in /imagine: {exc}")
+      await interaction.followup.send("⚠️ حدث خطأ غير متوقع.", ephemeral=True)
 
 
-  @app_commands.command(name="summarize_channel", description="قراءة وتلخيص محادثات القناة بدقة (حتى 500 رسالة)")
+  @app_commands.command(name="summarize_channel", description="قراءة وتلخيص محادثات القناة بدقة (حتى 200 رسالة)")
+  @app_commands.guild_only()
   @app_commands.describe(
-      limit="عدد الرسائل (10 إلى 500)",
+      limit="عدد الرسائل (10 إلى 200)",
       question="سؤال محدد عن المحادثة (اختياري)",
   )
   async def summarize_channel_cmd(
       self,
       interaction: discord.Interaction,
-      limit: app_commands.Range[int, 10, 500] = 100,
+      limit: app_commands.Range[int, 10, 200] = 100,
       question: Optional[str] = None,
   ):
     if interaction.guild and isinstance(interaction.user, discord.Member) and not is_mistress(interaction.user):
@@ -164,21 +199,28 @@ class AiChat(commands.Cog):
         wait_s = int(120.0 - (now_m - last_sum)) + 1
         await interaction.response.send_message(f"⏳ انتظر **{wait_s} ثانية** قبل تلخيص آخر.", ephemeral=True)
         return
-      self.bot.summarize_cooldowns[interaction.user.id] = now_m
     await interaction.response.defer(thinking=True)
     try:
       report = await analyze_channel_history_deep(
           self.bot,
           interaction.channel, interaction.user, limit=limit, focus_query=question or ""
       )
+      if not is_mistress(interaction.user):
+        self.bot.summarize_cooldowns[interaction.user.id] = time.monotonic()
       embed = discord.Embed(
           title=f"📝 ملخص المحادثة (آخر {limit} رسالة)",
           description=report[:4000],
           color=0x2B2D31,
       )
-      await interaction.followup.send(embed=embed)
+      await interaction.followup.send(
+          embed=embed, allowed_mentions=discord.AllowedMentions.none()
+      )
     except AI_ERRORS as err:
-      await interaction.followup.send(f"⚠️ {err}", ephemeral=True)
+      logger.warning("summarize AI error: %s: %s", type(err).__name__, err)
+      await interaction.followup.send("⚠️ تعذر تلخيص المحادثة الآن.", ephemeral=True)
+    except (discord.Forbidden, discord.HTTPException) as exc:
+      logger.warning("summarize history failed: %s: %s", type(exc).__name__, exc)
+      await interaction.followup.send("⚠️ تعذر قراءة سجل هذه القناة.", ephemeral=True)
 
 
 def install(bot) -> None:

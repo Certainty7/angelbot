@@ -1,5 +1,46 @@
 # Changelog
 
+## 1.0.3 — 2026-11-19
+
+Full hardening pass from an independent 45-finding audit, verified against this tree.
+
+### Security and authorization
+
+- Custom HTTP sessions must use `SafeAsyncResolver`; TikWM media and cached stream URLs are
+  revalidated through the bounded redirect path.
+- Owner `toggle_role` is behind `SOVEREIGN_TOOLS_ENABLED` with role/permission checks. Ticket
+  ownership uses an exact ID match plus a per-user lock; image-studio rerolls are author-only.
+- Context menus, music skip/playlist, moderation hierarchy, snipe, AFK and stickies now enforce
+  their scope. AFK is per guild, and sticky deletion requires the matching guild.
+- Prompt context is sanitised as untrusted data; image fallbacks verify raster magic bytes;
+  response bodies and Pollinations prompts are bounded.
+
+### Reliability
+
+- Per-event-loop semaphores, per-guild DAVE state, FFmpeg cleanup on failed play, and a locked
+  music `start()`.
+- Autonomy flags load from SQLite before the gateway; BoundedDict/cache types survive refreshes;
+  giveaway failures no longer retry forever; shutdown cancels background tasks.
+- `safe_reply` retries only a deleted-reference (50035) and rewinds files; zero-width characters
+  no longer bypass the Arabic scam filter; `split_message` never emits an empty chunk.
+- SendQueue caps `retry_after`, records dropped jobs, and rejects sends after close.
+
+### Data and AI
+
+- A zero daily AI limit is honoured; LIKE wildcards are escaped; maintenance no longer VACUUMs
+  under the shared DB lock.
+- Key rotation is locked, the RPM tick is released per request, and a per-day 429 cools until
+  midnight Pacific instead of retrying hourly.
+- Summaries, profile facts and ambient prompts validate types and cap response size; unclosed
+  control tags are stripped; questions are not stored as profile facts.
+- The model chain remains free-tier only: `gemini-3-flash-preview`, `gemini-3.1-flash-lite`,
+  `gemini-3.5-flash-lite`, `gemini-4-hydrogen` (Google AI Studio pricing, 2026-11-19).
+
+### Website and docs
+
+- TypeScript is pinned to `~6.0.3` because Astro 7 requires `<7`; Dependabot ignores TS majors
+  until Astro supports TypeScript 7.
+
 ## 1.0.2 — 2026-11-19
 
 Latency and model-quality pass driven by measured behaviour on this deployment.

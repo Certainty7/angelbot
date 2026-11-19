@@ -88,7 +88,7 @@ class Sender:
         self._stopped = False
 
     async def enqueue(self, job: SendJob):
-        if self._stopped:
+        if self._stopped or self.client.is_closed():
             self.dead_letters.append(job)
             return
         worker = self._workers.get(job.channel_id)
@@ -145,8 +145,9 @@ class Sender:
             worker.queue.put_nowait(job)
         except asyncio.QueueFull:
             try:
-                worker.queue.get_nowait()
+                dropped = worker.queue.get_nowait()
                 worker.queue.task_done()
+                self.dead_letters.append(dropped)
             except Exception:
                 pass
             try:
@@ -186,13 +187,21 @@ class Sender:
             self.retried += 1
             if job.attempts <= self.max_attempts:
                 # Only THIS channel's worker sleeps; every other channel keeps flowing.
-                await asyncio.sleep(max(0.5, retry_after) if status == 429
-                                    else min(8.0, 1.5 * job.attempts))
+                if status == 429:
+                    if retry_after > 60.0:
+                        # A multi-minute Retry-After means the channel is unusable now.
+                        self.dead_letters.append(job)
+                        return
+                    delay = max(0.5, retry_after)
+                else:
+                    delay = min(8.0, 1.5 * job.attempts)
+                await asyncio.sleep(delay)
                 self._requeue(worker, job)
                 return
             self.dead_letters.append(job)
         except Exception:
             job.attempts += 1
+            self.retried += 1
             if job.attempts <= self.max_attempts:
                 self._requeue(worker, job)
             else:

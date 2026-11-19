@@ -1121,13 +1121,14 @@ async def try_execute_natural_command(
       await safe_reply(message, "⚠️ ما تقدرين تعطين سمعة لنفسك أو لبوت!")
       return True
     now_m = time.monotonic()
-    last_rep = bot.rep_cooldowns.get(author.id)
+    rep_key = (guild.id, author.id)
+    last_rep = bot.rep_cooldowns.get(rep_key)
     if last_rep is not None and now_m - last_rep < 3600 and not mistress:
       rem_m = int((3600 - (now_m - last_rep)) // 60) + 1
       await safe_reply(message, f"⏳ تقدرين تعطين نقطة سمعة جديدة بعد **{rem_m} دقيقة**.")
       return True
-    bot.rep_cooldowns[author.id] = now_m
     new_rep = await bot.db.add_rep(guild.id, target_member.id)
+    bot.rep_cooldowns[rep_key] = now_m
     await safe_reply(message, f"🌟 {author.mention} منحت نقطة سمعة إلى {target_member.mention}! (إجمالي السمعة: **`+{new_rep}`**)")
     return True
 

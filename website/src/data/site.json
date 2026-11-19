@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "1.0.2",
+  "version": "1.0.3",
   "license": "MIT",
   "license_url": "https://github.com/Certainty7/angelbot/blob/master/LICENSE",
   "repository": "https://github.com/Certainty7/angelbot",
@@ -8,11 +8,11 @@
   "default_branch": "master",
   "media_platforms": 14,
   "latest_release": {
-    "version": "1.0.2",
+    "version": "1.0.3",
     "date": "2026-11-19",
     "summary": {
-      "en": "Latency and model-quality pass driven by measured behaviour on this deployment.",
-      "ar": "جولة على سرعة الرد وجودة النموذج، مبنية على قياسات حقيقية على هذا النشر."
+      "en": "Full hardening pass from an independent 45-finding audit, verified against this tree.",
+      "ar": "جولة تقوية شاملة مبنية على تدقيق مستقل من 45 ملاحظة، تم التحقق منها مقابل شجرة الكود الحالية."
     }
   }
 }

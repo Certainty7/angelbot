@@ -598,7 +598,7 @@
     },
     {
       "name": "summarize_channel",
-      "description": "قراءة وتلخيص محادثات القناة بدقة (حتى 500 رسالة)",
+      "description": "قراءة وتلخيص محادثات القناة بدقة (حتى 200 رسالة)",
       "module": "cogs.ai_chat",
       "type": "Command",
       "default_permissions": [],

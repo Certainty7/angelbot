@@ -1,6 +1,7 @@
 """Community utilities: snipe, edit snipe, AFK, reminders, info cards, polls, ping and the
 auto-reply board.
 """
+import math
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -68,11 +69,10 @@ class Community(commands.Cog):
 
 
   @app_commands.command(name="serverinfo", description="عرض معلومات السيرفر")
+  @app_commands.guild_only()
   async def serverinfo_cmd(self, interaction: discord.Interaction):
     guild = interaction.guild
-    if not guild:
-      return
-    embed = discord.Embed(title=f"🏰 {guild.name}", color=0x2B2D31, timestamp=datetime.now(timezone.utc))
+    embed = discord.Embed(title=f"🏰 {guild.name}"[:256], color=0x2B2D31, timestamp=datetime.now(timezone.utc))
     if guild.icon:
       embed.set_thumbnail(url=guild.icon.url)
     embed.add_field(name="المالك", value=f"<@{guild.owner_id}>", inline=True)
@@ -86,7 +86,7 @@ class Community(commands.Cog):
   @app_commands.describe(member="اختر العضو")
   async def userinfo_cmd(self, interaction: discord.Interaction, member: Optional[discord.Member] = None):
     target = member or interaction.user
-    embed = discord.Embed(title=f"👤 {target.display_name}", color=0x2B2D31)
+    embed = discord.Embed(title=f"👤 {target.display_name}"[:256], color=0x2B2D31)
     embed.set_thumbnail(url=target.display_avatar.url)
     embed.add_field(name="الحساب", value=f"`{target.name}`", inline=True)
     embed.add_field(name="المعرف", value=f"`{target.id}`", inline=True)
@@ -108,6 +108,7 @@ class Community(commands.Cog):
 
 
   @app_commands.command(name="poll", description="إنشاء تصويت في القناة")
+  @app_commands.guild_only()
   @app_commands.describe(question="السؤال", option1="الخيار 1", option2="الخيار 2", option3="الخيار 3", option4="الخيار 4")
   async def poll_cmd(
       self,
@@ -118,10 +119,10 @@ class Community(commands.Cog):
       option3: Optional[str] = None,
       option4: Optional[str] = None,
   ):
-    options = [o for o in (option1, option2, option3, option4) if o]
+    options = [o[:200] for o in (option1, option2, option3, option4) if o]
     emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣"]
     desc = "\n\n".join(f"{emojis[i]} {opt}" for i, opt in enumerate(options))
-    embed = discord.Embed(title=f"📊 {question}", description=desc, color=0x2B2D31)
+    embed = discord.Embed(title=f"📊 {question}"[:256], description=desc[:4096], color=0x2B2D31)
     await interaction.response.send_message(embed=embed)
     poll_msg = await interaction.original_response()
     for i in range(len(options)):
@@ -133,14 +134,17 @@ class Community(commands.Cog):
     uptime = datetime.now(timezone.utc) - self.bot.start_time
     h, rem = divmod(int(uptime.total_seconds()), 3600)
     m, s = divmod(rem, 60)
+    latency = self.bot.latency
+    latency_text = f"{round(latency * 1000)}ms" if math.isfinite(latency) else "—"
     embed = discord.Embed(title="🪽 Angel", color=0x2B2D31)
-    embed.add_field(name="الاستجابة", value=f"`{round(self.bot.latency * 1000)}ms`", inline=True)
+    embed.add_field(name="الاستجابة", value=f"`{latency_text}`", inline=True)
     embed.add_field(name="مدة التواجد", value=f"`{h}h {m}m {s}s`", inline=True)
     await interaction.response.send_message(embed=embed)
 
 
   @app_commands.command(name="auto_reply", description="إدارة الردود التلقائية النصية في السيرفر")
   @app_commands.default_permissions(manage_guild=True)
+  @app_commands.guild_only()
   @app_commands.describe(action="العملية", trigger="الكلمة", response="الرد")
   @app_commands.choices(
       action=[
@@ -170,20 +174,21 @@ class Community(commands.Cog):
       if not trigger or not response:
         await interaction.response.send_message("⚠️ أكملي الحقول المطلوبة.", ephemeral=True)
         return
-      await self.bot.db.set_auto_trigger(gid, trigger, response)
+      await self.bot.db.set_auto_trigger(gid, trigger[:100], response[:1000])
       self.bot.auto_triggers_cache[gid] = await self.bot.db.get_auto_triggers(gid)
-      await interaction.response.send_message(f"✅ تم حفظ الرد للكلمة `{trigger}`.", ephemeral=True)
+      await interaction.response.send_message(f"✅ تم حفظ الرد للكلمة `{trigger[:100]}`.", ephemeral=True)
     elif action == "remove":
       if not trigger:
         await interaction.response.send_message("⚠️ حددي الكلمة.", ephemeral=True)
         return
-      deleted = await self.bot.db.remove_auto_trigger(gid, trigger)
+      deleted = await self.bot.db.remove_auto_trigger(gid, trigger[:100])
       self.bot.auto_triggers_cache[gid] = await self.bot.db.get_auto_triggers(gid)
       await interaction.response.send_message("✅ تم الحذف." if deleted else "⚠️ غير موجودة.", ephemeral=True)
 
 
   @app_commands.command(name="giveaway", description="بدء سحب تفاعلي في القناة")
   @app_commands.default_permissions(manage_guild=True)
+  @app_commands.guild_only()
   @app_commands.describe(minutes="المدة بالدقائق", winners="عدد الفائزين", prize="الجائزة")
   @has_perm_or_mistress(manage_guild=True)
   async def giveaway_cmd(
@@ -196,23 +201,24 @@ class Community(commands.Cog):
     end_time = datetime.now(timezone.utc) + timedelta(minutes=minutes)
     end_str = end_time.strftime("%Y-%m-%d %H:%M:%S")
     embed = discord.Embed(
-        title=f"🎉 سحب: {prize}",
+        title=f"🎉 سحب: {prize}"[:256],
         description=(
             f"اضغط على الزر بالأسفل للمشاركة!\n\n"
             f"👑 **المقدم:** {interaction.user.mention}\n"
             f"🏆 **عدد الفائزين:** `{winners}`\n"
             f"⏳ **ينتهي:** {discord.utils.format_dt(end_time, style='R')}"
-        ),
+        )[:4096],
         color=0x2B2D31,
         timestamp=end_time,
     )
     await interaction.response.send_message(embed=embed, view=GiveawayJoinView(self.bot.db))
     msg = await interaction.original_response()
-    await self.bot.db.create_giveaway(msg.id, interaction.channel.id, interaction.guild.id, prize, winners, end_str)
+    await self.bot.db.create_giveaway(msg.id, interaction.channel.id, interaction.guild.id, prize[:200], winners, end_str)
 
 
   @app_commands.command(name="ticket_panel", description="نشر لوحة فتح التذاكر الخاصة")
   @app_commands.default_permissions(manage_channels=True)
+  @app_commands.guild_only()
   @app_commands.describe(title="العنوان", description="الوصف")
   @has_perm_or_mistress(manage_channels=True)
   async def ticket_panel_cmd(
@@ -221,7 +227,7 @@ class Community(commands.Cog):
       title: str = "🎫 التذاكر الخاصة",
       description: str = "اضغط على الزر بالأسفل لفتح تذكرة خاصة.",
   ):
-    embed = discord.Embed(title=title, description=description, color=0x2B2D31)
+    embed = discord.Embed(title=title[:256], description=description[:4096], color=0x2B2D31)
     await interaction.channel.send(embed=embed, view=TicketPanelView(self.bot))
     await interaction.response.send_message("✅ تم نشر اللوحة.", ephemeral=True)
 
