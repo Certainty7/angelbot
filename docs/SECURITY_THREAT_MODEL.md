@@ -50,7 +50,7 @@ server-side processing is the build.
 | T-07 | Member data published by mistake | the site publishes no member names, ids, message content or counts; `website/src/data/*.json` is generated from command metadata only | `website/src/data/*.json` scan, `tools/website-data-generator/` |
 | T-08 | Privilege escalation inside a guild through role commands | permission re-checked at execution; owner-only commands marked as such in the catalogue copy | `cogs/admin.py`, `descriptions_ar.json` («للمالكة فقط») |
 | T-09 | Denial of service by resource exhaustion on a small VM | the unit caps memory and CPU, and `tools/selftest.py` runs as a deploy gate before restart | `deploy/angelbot.service` |
-| T-10 | Malicious content served from the CDN | CSP with `default-src 'none'` on the portal, self-hosted fonts and assets, no third-party scripts | portal `public/_headers`, website headers at cutover |
+| T-10 | Malicious content served from the CDN | Cloudflare Pages applies `website/public/_headers`: CSP with `frame-ancestors 'none'`, HSTS, `nosniff`, COOP and Permissions-Policy; self-hosted fonts and assets, no third-party scripts | `website/public/_headers`, `docs/WEBSITE_SECURITY.md` |
 
 ## 4. Out of scope
 
