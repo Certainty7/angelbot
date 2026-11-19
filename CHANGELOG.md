@@ -14,6 +14,10 @@ Correctness and hardening fixes after the first independent audit of v1.0.0.
 
 ### Fixes
 
+- The outgoing reply sanitiser no longer raises `bad escape \\u` on every reply: the
+  `@everyone`/`@here` neutraliser builds a real zero-width space instead of passing a raw
+  escape to `re.sub`, which had made the bot answer every message with the generic error
+  notice. Regression tests cover the plain reply, both mentions and the length cap.
 - `BoundedTTLCache.values()` no longer mis-unpacks entries; `None` values, TTL-aware
   `pop`, and control characters in untrusted lines are handled correctly.
 - `/catchup` survives a forbidden history read, and refunds the guild quota when the
