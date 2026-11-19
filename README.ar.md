@@ -205,6 +205,28 @@ sudo systemctl enable --now angelbot.service
 journalctl -u angelbot -n 30 --no-pager
 ```
 
+### Docker
+
+```bash
+cp .env.example .env      # املأ DISCORD_TOKEN وMALAK_OWNER_ID وGEMINI_API_KEY
+docker compose up -d --build
+docker compose logs -f angelbot
+```
+
+يعمل الحاوِز بمستخدم غير جذري `angel`، والمسار الوحيد القابل للكتابة هو وحدة التخزين
+`angel_data` المركّبة على `/app/data`، ويحفظ `ANGEL_DB_PATH=/app/data/angel.db` قاعدة SQLite
+داخلها. لا يُضمَّن `.env` ولا `cookies.txt` في الصورة.
+
+### ويندوز
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_windows.ps1
+```
+
+ينشئ السكربت `.venv` ويثبّت المتطلبات وينسخ `.env.example` إلى `.env` عند أول تشغيل، ثم يفحص قاعدة
+البيانات ويشغّل البوت. يلزم FFmpeg للموسيقى والفيديو، ويمكن تثبيته بالأمر
+`winget install Gyan.FFmpeg`.
+
 <p align="center"><img src="docs/screenshots/deploy-gate.png" alt="مخرجات بوابة الفحص" width="820"></p>
 <p align="center"><sub>بوابة الفحص: 50/50 فحصًا قبل بدء الخدمة.</sub></p>
 
@@ -220,9 +242,17 @@ journalctl -u angelbot -n 30 --no-pager
 نسخة خارج الخادم.
 
 ```bash
+# نسخة موثّقة ومفحوصة (من مؤقت أو cron بمستخدم يملك كتابة مجلد النسخ)
+ANGEL_DB_PATH=/opt/angelbot/data/angel.db ANGEL_BACKUP_DIR=/opt/angelbot/backups \
+  scripts/backup_db.sh
+
 journalctl -u angelbot -f
 python tools/metrics.py
 ```
+
+الاستعادة عكسها: أوقف الخدمة، انسخ أحدث `angel_*.db` فوق قاعدة البيانات الحية، ثم شغّل الخدمة
+وتأكد من نجاح `python bot.py --verify-db`. عملية البوت نفسها لا تستطيع الكتابة في مجلد النسخ لأنه
+خارج `ReadWritePaths`.
 
 ### التحديث
 
@@ -288,13 +318,13 @@ journalctl -u angelbot -n 30 --no-pager
 
 ## الحالة
 
-يعمل أنجل في الإنتاج على خادم واحد، والتطوير متوقف حاليًا، فتُجاب البلاغات وطلبات السحب على قدر
-الاستطاعة.
+يعمل أنجل في الإنتاج على خادم واحد. المستودع عام ومفتوح المصدر، والبلاغات وطلبات السحب مرحّب بها
+وتُراجَع على قدر الاستطاعة.
 
 ## المساهمة
 
-المساهمات بالدعوة. اقرأ [CONTRIBUTING.md](CONTRIBUTING.md) قبل فتح طلب سحب؛ فهو يذكر الأوامر الواجب
-تشغيلها وصيغة رسائل الإيداع. وتُوجَّه البلاغات والأسئلة إلى متتبّع البلاغات.
+اقرأ [CONTRIBUTING.md](CONTRIBUTING.md) قبل فتح طلب سحب؛ فهو يذكر الأوامر الواجب تشغيلها وصيغة رسائل
+الإيداع. وتُوجَّه البلاغات والأسئلة إلى متتبّع البلاغات.
 
 ## المشرف
 
@@ -304,7 +334,7 @@ journalctl -u angelbot -n 30 --no-pager
 
 ## الترخيص
 
-جميع الحقوق محفوظة. لا يُمنح أي ترخيص لإعادة التوزيع أو الاستخدام التجاري.
+MIT — راجع [LICENSE](LICENSE).
 
 ## شكر وتقدير
 
