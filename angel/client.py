@@ -107,9 +107,12 @@ class AngelDiscordBot(commands.Bot):
 
   async def setup_hook(self):
     await self.db.initialize()
-    self.harem_cache = await self.db.get_all_harem_members()
-    self.stickies_cache = await self.db.get_all_stickies()
-    self.afk_cache = await self.db.get_all_afk()
+    self.harem_cache.clear()
+    self.harem_cache.update(await self.db.get_all_harem_members() or {})
+    self.stickies_cache.clear()
+    self.stickies_cache.update(await self.db.get_all_stickies() or {})
+    self.afk_cache.clear()
+    self.afk_cache.update(await self.db.get_all_afk() or {})
     g_settings = await self.db.get_all_guild_settings_map()
     for gid, srow in g_settings.items():
       self.modlog_cache[gid] = srow.get("modlog_channel_id")
@@ -131,10 +134,7 @@ class AngelDiscordBot(commands.Bot):
     self.event_loop_lag_monitor.start()
     try:
       self.silent_cache = await self.db.get_silent_map()
-      self.autonomy_guilds = set()
-      for _g in self.guilds:
-        if (await self.db.get_flag(f"autonomy:{_g.id}", "1")) != "0":
-          self.autonomy_guilds.add(_g.id)
+      await self._load_autonomy_guilds()
       self._autonomy_task = asyncio.create_task(autonomy.engine.run_forever())
     except Exception as silence_err:
       logger.warning(f"Interaction state init notice: {silence_err}")
@@ -164,18 +164,43 @@ class AngelDiscordBot(commands.Bot):
         task.cancel()
     except Exception:
       pass
+    pending = [t for t in self._bg_tasks if not t.done()]
+    for task in pending:
+      task.cancel()
     try:
       if self.sender is not None:
         await self.sender.stop()
     except Exception:
       pass
-    await close_shared_http_session()
-    await self.db.close()
-    await super().close()
+    try:
+      if pending:
+        await asyncio.gather(*pending, return_exceptions=True)
+    finally:
+      try:
+        await close_shared_http_session()
+      finally:
+        try:
+          await self.db.close()
+        finally:
+          await super().close()
 
   def get_harem_title(self, user_id: int) -> Optional[str]:
     info = self.harem_cache.get(user_id)
-    return info["custom_title"] if info else None
+    return info.get("custom_title") if info else None
+
+  async def _load_autonomy_guilds(self) -> None:
+    """Load autonomy flags from SQLite; `self.guilds` is empty inside setup_hook()."""
+    flags = await self.db.get_flags_with_prefix("autonomy:")
+    enabled = set()
+    for key, value in flags.items():
+      guild_id = key.split(":", 1)[1]
+      if guild_id.isdigit() and value != "0":
+        enabled.add(int(guild_id))
+    # Guilds with no explicit flag keep the historical default: autonomy on.
+    for guild in self.guilds:
+      if f"autonomy:{guild.id}" not in flags:
+        enabled.add(guild.id)
+    self.autonomy_guilds = enabled
 
   @tasks.loop(seconds=45)
   async def background_scheduler(self):
@@ -206,9 +231,12 @@ class AngelDiscordBot(commands.Bot):
                 color=0xD4AF37,
             )
             await channel.send(content=f"🎉 مبروك {winners_mentions}!", embed=embed)
-          await self.db.mark_giveaway_ended(gw["message_id"])
         except Exception:
           pass
+        finally:
+          # Mark it closed even when the send failed: a closed channel must not retry
+          # the same giveaway every 45 seconds forever.
+          await self.db.mark_giveaway_ended(gw["message_id"])
     except Exception as exc:
       self.quota.last_scheduler_error = str(exc)[:120]
 
@@ -218,10 +246,18 @@ class AngelDiscordBot(commands.Bot):
       # Prune stale cooldowns and locks to prevent memory creep over days of uptime
       if len(self.xp_cooldowns) > 2000:
         cutoff = now_mono - 120.0
-        self.xp_cooldowns = {k: v for k, v in self.xp_cooldowns.items() if v > cutoff}
+        fresh_xp = cooldown_map()
+        for key, stamp in self.xp_cooldowns.items():
+          if stamp > cutoff:
+            fresh_xp[key] = stamp
+        self.xp_cooldowns = fresh_xp
       if len(self.rep_cooldowns) > 1000:
         cutoff_rep = now_mono - 3600.0
-        self.rep_cooldowns = {k: v for k, v in self.rep_cooldowns.items() if v > cutoff_rep}
+        fresh_rep = cooldown_map()
+        for key, stamp in self.rep_cooldowns.items():
+          if stamp > cutoff_rep:
+            fresh_rep[key] = stamp
+        self.rep_cooldowns = fresh_rep
       if len(self.user_locks) > 500:
         unlocked = [uid for uid, lk in self.user_locks.items() if not lk.locked()]
         for uid in unlocked[:400]:
@@ -275,6 +311,7 @@ class AngelDiscordBot(commands.Bot):
   async def on_ready(self):
     if not self._InitialSyncDone:
       self._InitialSyncDone = True
+      await self._load_autonomy_guilds()
       await self.sync_all_commands_cleanly()
 
     await self.change_presence(
@@ -297,11 +334,11 @@ class AngelDiscordBot(commands.Bot):
     role_id = self.autorole_cache.get(member.guild.id)
     if role_id:
       role = member.guild.get_role(role_id)
-      if role and role < member.guild.me.top_role:
+      if role and role < member.guild.me.top_role and member.guild.me.guild_permissions.manage_roles:
         try:
           await member.add_roles(role, reason="Auto-Role on Join")
-        except Exception:
-          pass
+        except (discord.Forbidden, discord.HTTPException) as exc:
+          logger.warning("autorole failed guild=%s: %s: %s", member.guild.id, type(exc).__name__, exc)
     await self.send_modlog(
         member.guild,
         "📥 انضمام عضو جديد",
@@ -379,7 +416,10 @@ class AngelDiscordBot(commands.Bot):
       except Exception:
         channel = None
     if isinstance(channel, discord.abc.Messageable):
-      embed = discord.Embed(title=title, description=description, color=color, timestamp=datetime.now(timezone.utc))
+      embed = discord.Embed(
+          title=title[:256], description=description[:4096], color=color,
+          timestamp=datetime.now(timezone.utc),
+      )
       try:
         await channel.send(embed=embed)
       except Exception:

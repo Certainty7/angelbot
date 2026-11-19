@@ -244,7 +244,8 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
   if not confirmed and action_name in _CONFIRM_REQUIRED:
     now_c = time.monotonic()
     for _key, _val in list(bot.pending_confirm.items()):
-      if now_c - _val.get("ts", 0.0) > _CONFIRM_TTL:
+      _ts = _val.get("ts")
+      if _ts is None or now_c - _ts > _CONFIRM_TTL:
         bot.pending_confirm.pop(_key, None)
     bot.pending_confirm[(guild.id, author.id)] = {
         "cmd": cmd_str,
@@ -619,7 +620,8 @@ async def try_execute_natural_command(
   confirm_key = (guild.id, author.id) if guild else None
   if confirm_key and confirm_key in bot.pending_confirm:
     pending = bot.pending_confirm[confirm_key]
-    if time.monotonic() - pending.get("ts", 0.0) > _CONFIRM_TTL:
+    pending_ts = pending.get("ts")
+    if pending_ts is None or time.monotonic() - pending_ts > _CONFIRM_TTL:
       bot.pending_confirm.pop(confirm_key, None)
     elif cmd_lower in _CONFIRM_WORDS:
       bot.pending_confirm.pop(confirm_key, None)
@@ -636,7 +638,9 @@ async def try_execute_natural_command(
   if pending_key and pending_key in bot.pending_step:
     step_data = bot.pending_step.pop(pending_key)
     step_type = step_data["type"] if isinstance(step_data, dict) else str(step_data)
-    created_at = step_data.get("created_at", 0.0) if isinstance(step_data, dict) else time.monotonic()
+    created_at = step_data.get("created_at") if isinstance(step_data, dict) else time.monotonic()
+    if created_at is None:
+      created_at = 0.0
     if time.monotonic() - created_at <= 90.0:
       if cmd_lower in ("الغاء", "إلغاء", "كنسل", "cancel"):
         await safe_reply(message, "✅ تم إلغاء عملية إنشاء الروم.")
@@ -951,8 +955,8 @@ async def try_execute_natural_command(
     if not mistress:
       limit_msgs = min(limit_msgs, 200)
       now_m = time.monotonic()
-      last_sum = bot.summarize_cooldowns.get(author.id, 0.0)
-      if now_m - last_sum < 120.0:
+      last_sum = bot.summarize_cooldowns.get(author.id)
+      if last_sum is not None and now_m - last_sum < 120.0:
         await safe_reply(message, f"⏳ انتظر **{int(120.0 - (now_m - last_sum)) + 1} ثانية** قبل تلخيص آخر.")
         return True
       bot.summarize_cooldowns[author.id] = now_m
@@ -1116,8 +1120,8 @@ async def try_execute_natural_command(
       await safe_reply(message, "⚠️ ما تقدرين تعطين سمعة لنفسك أو لبوت!")
       return True
     now_m = time.monotonic()
-    last_rep = bot.rep_cooldowns.get(author.id, 0.0)
-    if now_m - last_rep < 3600 and not mistress:
+    last_rep = bot.rep_cooldowns.get(author.id)
+    if last_rep is not None and now_m - last_rep < 3600 and not mistress:
       rem_m = int((3600 - (now_m - last_rep)) // 60) + 1
       await safe_reply(message, f"⏳ تقدرين تعطين نقطة سمعة جديدة بعد **{rem_m} دقيقة**.")
       return True

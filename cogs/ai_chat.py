@@ -149,6 +149,9 @@ class AiChat(commands.Cog):
       question: Optional[str] = None,
   ):
     if interaction.guild and isinstance(interaction.user, discord.Member) and not is_mistress(interaction.user):
+      if interaction.channel is None:
+        await interaction.response.send_message("🚫 هذا الأمر يحتاج قناة نصية.", ephemeral=True)
+        return
       perms = interaction.channel.permissions_for(interaction.user)
       if not (perms.read_messages and perms.read_message_history):
         await interaction.response.send_message("🚫 لا تملك صلاحية قراءة سجل هذه القناة (`Read Message History`).", ephemeral=True)
@@ -156,8 +159,9 @@ class AiChat(commands.Cog):
       # A 500-message summary is a real model call; keep a member from making it a loop.
       limit = min(limit, 200)
       now_m = time.monotonic()
-      if now_m - self.bot.summarize_cooldowns.get(interaction.user.id, 0.0) < 120.0:
-        wait_s = int(120.0 - (now_m - self.bot.summarize_cooldowns.get(interaction.user.id, 0.0))) + 1
+      last_sum = self.bot.summarize_cooldowns.get(interaction.user.id)
+      if last_sum is not None and now_m - last_sum < 120.0:
+        wait_s = int(120.0 - (now_m - last_sum)) + 1
         await interaction.response.send_message(f"⏳ انتظر **{wait_s} ثانية** قبل تلخيص آخر.", ephemeral=True)
         return
       self.bot.summarize_cooldowns[interaction.user.id] = now_m

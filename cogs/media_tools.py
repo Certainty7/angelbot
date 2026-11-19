@@ -38,7 +38,8 @@ class MediaTools(commands.Cog):
           "⚙️ مصلّح الروابط معطّل في هذا السيرفر. فعّليه من `/setup`.", ephemeral=True)
       return
     now = time.monotonic()
-    if now - _FIX_LAST_AT.get(interaction.user.id, 0.0) < _FIX_COOLDOWN_S:
+    last_fix = _FIX_LAST_AT.get(interaction.user.id)
+    if last_fix is not None and now - last_fix < _FIX_COOLDOWN_S:
       await interaction.response.send_message("⏳ انتظر بضع ثوانٍ قبل الرابط التالي.", ephemeral=True)
       return
     # Prune only expired entries; clearing the whole map on size lets a loop of

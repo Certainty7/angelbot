@@ -6,6 +6,7 @@ import unittest
 
 from angel.database import BotDatabase
 from angel.guard import is_suspicious_arabic_scam
+from angel.text import clean_social_url
 
 
 class TestGuildQuota(unittest.TestCase):
@@ -78,6 +79,16 @@ class TestGuildQuota(unittest.TestCase):
         self.assertTrue(is_suspicious_arabic_scam("اربح 500 دولار مجانا https://x.example"))
         self.assertTrue(is_suspicious_arabic_scam("نيتـرو مجاني هدية"))
         self.assertFalse(is_suspicious_arabic_scam("السلام عليكم كيف حالكم اليوم"))
+
+    def test_clean_social_url_keeps_meaningful_params(self):
+        cleaned = clean_social_url(
+            "https://www.facebook.com/story.php?story_fbid=123&id=9&tab=timeline"
+            "&type=3&sort=top&utm_source=x&si=abc&fbclid=z"
+        )
+        for kept in ("story_fbid=123", "tab=timeline", "type=3", "sort=top"):
+            self.assertIn(kept, cleaned)
+        for dropped in ("utm_source", "si=abc", "fbclid"):
+            self.assertNotIn(dropped, cleaned)
 
     def test_display_name_cannot_inject_prompt_lines(self):
         import types

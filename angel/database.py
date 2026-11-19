@@ -1570,6 +1570,15 @@ class BotDatabase:
         row = await cur.fetchone()
         return str(row["flag_value"]) if row else default
 
+  async def get_flags_with_prefix(self, prefix: str) -> Dict[str, str]:
+    """All flags whose key starts with `prefix`, without a LIKE wildcard injection surface."""
+    async with self._connect() as db:
+      async with db.execute(
+          "SELECT flag_key, flag_value FROM bot_flags WHERE substr(flag_key, 1, ?) = ?",
+          (len(prefix), prefix),
+      ) as cur:
+        return {r["flag_key"]: str(r["flag_value"]) async for r in cur}
+
   async def set_flag(self, key: str, value: str):
     async with self._connect() as db:
       await db.execute(
