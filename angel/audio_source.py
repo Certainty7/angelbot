@@ -16,14 +16,19 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from .config import BASE_DIR, logger
-from .net import _YTDLP_SEMAPHORE
+from .net import _YTDLP_SEMAPHORE, is_allowed_hostname, is_valid_http_url_syntax, validate_extracted_stream_url
 from .images import _is_safe_public_http_url
+from .downloader import read_bounded_subprocess_stdout
 
 YTDLP = os.path.join(BASE_DIR, "venv", "bin", "yt-dlp")
 COOKIES = os.path.join(BASE_DIR, "cookies.txt")
 DENO = "/usr/local/bin/deno"
 DEFAULT_TIMEOUT = 30.0
 MAX_DURATION = 6 * 3600  # a 6-hour stream is a mistake, not a request
+MAX_YTDLP_STDOUT_BYTES = 2 * 1024 * 1024
+
+# Cookies are operator credentials: only the YouTube media pages ever receive them.
+_COOKIE_DOMAINS = ("youtube.com", "youtu.be", "music.youtube.com")
 
 # Search order: SoundCloud, then a direct URL, then YouTube.
 SEARCH_SOURCES: Tuple[Tuple[str, str], ...] = (("SoundCloud", "scsearch"), ("YouTube", "ytsearch"))
@@ -33,19 +38,18 @@ SEARCH_SOURCES: Tuple[Tuple[str, str], ...] = (("SoundCloud", "scsearch"), ("You
 YOUTUBE_ENABLED = os.environ.get("MUSIC_YOUTUBE", "1").strip().lower() not in {"0", "false", "no", "off"}
 
 
-def _common_args() -> List[str]:
-  """Flags shared by every call: cookies when the owner supplied them, deno when installed."""
-  args = ["--no-warnings", "--no-playlist"]
-  if os.path.exists(COOKIES):
-    args += ["--cookies", COOKIES]
+def _build_args(target: str, *, json_flag: str = "-j", extra: Optional[List[str]] = None) -> List[str]:
+  """Hardened yt-dlp argv: ignore user config, no generic extractor, `--`, scoped cookies."""
+  args = [json_flag, "--ignore-config", "--no-warnings", "--no-playlist",
+          "--use-extractors", "default,-generic", "-S", "proto:https"]
   if os.path.exists(DENO):
     args += ["--js-runtimes", f"deno:{DENO}"]
+  if extra:
+    args += list(extra)
+  if os.path.exists(COOKIES) and is_valid_http_url_syntax(target) and is_allowed_hostname(target, _COOKIE_DOMAINS):
+    args += ["--cookies", COOKIES]
+  args += ["--", target]
   return args
-
-
-def _base_args() -> List[str]:
-  """Single-video extraction: `-j` plus the shared flags."""
-  return ["-j"] + _common_args()
 
 
 class ResolveError(RuntimeError):
@@ -120,14 +124,13 @@ async def _run_ytdlp(args: List[str], timeout: float) -> str:
         stderr=asyncio.subprocess.PIPE,
     )
     try:
-      out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+      out = await read_bounded_subprocess_stdout(proc, max_bytes=MAX_YTDLP_STDOUT_BYTES, timeout=timeout)
     except asyncio.TimeoutError:
-      proc.kill()
-      await proc.wait()
       raise ResolveError(f"timed out after {timeout:.0f}s")
+    except ValueError:
+      raise ResolveError("extractor output too large")
   if proc.returncode != 0:
-    lines = (err or b"").decode("utf-8", "replace").strip().splitlines()
-    raise ResolveError(lines[-1][:180] if lines else f"yt-dlp exit {proc.returncode}")
+    raise ResolveError(f"yt-dlp exit {proc.returncode}")
   return (out or b"").decode("utf-8", "replace")
 
 
@@ -152,8 +155,9 @@ async def resolve(query: str, *, timeout: float = DEFAULT_TIMEOUT) -> Dict[str, 
   for label, source in targets:
     target = build_target(text, source)
     try:
-      payload = await _run_ytdlp(_base_args() + ["-f", "ba/b", target], timeout)
+      payload = await _run_ytdlp(_build_args(target, extra=["-f", "ba/b"]), timeout)
       info = parse_info(payload)
+      await validate_extracted_stream_url(info["stream_url"])
     except json.JSONDecodeError:
       # yt-dlp printed something that is not JSON: an extractor handshake failure, not a
       # user-facing error. Keep the raw parser text out of the reply.
@@ -297,7 +301,7 @@ def _entry_url(entry: Dict[str, Any]) -> str:
 
 async def _search_entries(source: str, query: str, limit: int, timeout: float) -> List[Dict[str, Any]]:
   payload = await _run_ytdlp(
-      _common_args() + ["--flat-playlist", "-J", f"{source}{limit}:{query}"], timeout
+      _build_args(f"{source}{limit}:{query}", json_flag="-J", extra=["--flat-playlist"]), timeout
   )
   data = json.loads(payload)
   entries = data.get("entries") if isinstance(data, dict) else None
@@ -353,8 +357,10 @@ async def _collect_source(label: str, source: str, search_text: str, limit: int,
 
 async def _resolve_target(target: str, timeout: float) -> Dict[str, Any]:
   """Extract one explicit yt-dlp target (search pseudo-URL or video URL) directly."""
-  payload = await _run_ytdlp(_base_args() + ["-f", "ba/b", target], timeout)
-  return parse_info(payload)
+  payload = await _run_ytdlp(_build_args(target, extra=["-f", "ba/b"]), timeout)
+  info = parse_info(payload)
+  await validate_extracted_stream_url(info["stream_url"])
+  return info
 
 
 async def resolve_best(query: str, *, timeout: float = DEFAULT_TIMEOUT) -> Dict[str, Any]:

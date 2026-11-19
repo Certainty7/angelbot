@@ -71,19 +71,11 @@ def _resolve_working_ffmpeg_exe() -> str:
   for std_p in ("/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg"):
     if os.path.isfile(std_p) and std_p not in candidates:
       candidates.append(std_p)
-  if not candidates and sys.platform.startswith("linux") and os.environ.get("ANGEL_AUTO_INSTALL") == "1":
-    try:
-      subprocess.run(
-          ["sudo", "-n", "apt-get", "install", "-y", "ffmpeg"],
-          stdout=subprocess.DEVNULL,
-          stderr=subprocess.DEVNULL,
-          timeout=25,
-      )
-      sys_ff_after = shutil.which("ffmpeg") or ("/usr/bin/ffmpeg" if os.path.isfile("/usr/bin/ffmpeg") else "")
-      if sys_ff_after:
-        candidates.append(sys_ff_after)
-    except Exception:
-      pass
+  if not candidates and sys.platform.startswith("linux"):
+    print(
+        "ffmpeg is missing. Install it on the host (sudo apt install ffmpeg) or set "
+        "FFMPEG_PATH; the bot never escalates to root."
+    )
   try:
     import imageio_ffmpeg
     img_ff = imageio_ffmpeg.get_ffmpeg_exe()

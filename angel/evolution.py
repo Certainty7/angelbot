@@ -1,7 +1,10 @@
 """Self-evolution inside hard numeric ranges (mood + behaviour settings)."""
 from .cost import local_day
+import asyncio
 import random
 from typing import Dict
+
+_STEP_LOCK: asyncio.Lock = asyncio.Lock()
 
 MOOD_RANGE = (0.15, 0.85)
 MOOD_BASELINE = 0.55
@@ -49,8 +52,9 @@ async def daily_step(db, rng: random.Random = None) -> Dict[str, object]:
 
 async def maybe_daily_step(db):
     """Run at most once per local day; returns the new state or None."""
-    day = local_day()
-    if (await db.get_state_value("evolution_day", "")) == day:
-        return None
-    await db.set_state_value("evolution_day", day)
-    return await daily_step(db)
+    async with _STEP_LOCK:
+        day = local_day()
+        if (await db.get_state_value("evolution_day", "")) == day:
+            return None
+        await db.set_state_value("evolution_day", day)
+        return await daily_step(db)

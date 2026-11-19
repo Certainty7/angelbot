@@ -73,7 +73,6 @@ class AngelBrainService:
 
   async def _post_with_retry(self, payload: dict, high_priority: bool = False,
                              cmd: str = "chat", user: Any = None) -> str:
-    headers = {"x-goog-api-key": self._active_key(), "Content-Type": "application/json"}
     timeout = aiohttp.ClientTimeout(total=22)
 
     all_candidates = [self.active_model] + [
@@ -93,10 +92,13 @@ class AngelBrainService:
       for attempt in range(1, self.max_retries_per_model + 1):
         if await self.budget_blocked(user):
           logger.info("ai-guard reason=budget")
-          await self.db.add_usage(cost.local_day(), 0, 0, 0.0, blocked=True)
+          if self.db is not None:
+            await self.db.add_usage(cost.local_day(), 0, 0, 0.0, blocked=True)
           raise cost.BudgetExhausted("daily budget reached (95%): listening mode")
         await self.quota_guard.pace_global_rpm(high_priority)
         t0 = time.monotonic()
+        # Rebuild headers every attempt so a rotated GEMINI_API_KEY_2 actually takes effect.
+        headers = {"x-goog-api-key": self._active_key(), "Content-Type": "application/json"}
         try:
           session = await get_shared_http_session()
           async with session.post(endpoint, headers=headers, json=payload, timeout=timeout) as response:
@@ -138,6 +140,7 @@ class AngelBrainService:
               if response.status == 429:
                 logger.warning(f"Gemini model '{model_name}' hit 429 TooManyRequests; failing over to next model.")
                 self._cool(model_name)
+                self._rotate_key()
                 if self.quota_guard.recent_api_timestamps:
                   self.quota_guard.recent_api_timestamps.pop()
                 await asyncio.sleep(0.25)
@@ -226,6 +229,7 @@ class AngelBrainService:
       profile_facts: Optional[List[Dict]] = None,
       cmd: str = "chat",
       culture: Optional[str] = None,
+      rhythm_hint: Optional[str] = None,
   ) -> str:
     norm_prompt = normalize_arabic_text(user_prompt or "")
     if (PROBE_PATTERNS.search(user_prompt or "") or PROBE_PATTERNS.search(norm_prompt)) and not is_mistress(user):
@@ -247,6 +251,8 @@ class AngelBrainService:
         settings=getattr(get_bot(), "settings", None),
         culture=culture,
     )
+    if rhythm_hint:
+      system_text += "\n" + rhythm_hint
     contents = [
         {
             "role": msg["role"],
@@ -294,6 +300,14 @@ class AngelBrainService:
         "generationConfig": {"temperature": 0.3, "maxOutputTokens": 600},
     }
     return await self._post_with_retry(payload, high_priority=True, cmd="summary")
+
+  async def summarize_catchup(self, payload_text: str) -> str:
+    """Summarise a bounded, pre-sanitised chat log; cost accounting is unchanged."""
+    payload = {
+        "contents": [{"role": "user", "parts": [{"text": payload_text}]}],
+        "generationConfig": {"temperature": 0.3, "maxOutputTokens": 800},
+    }
+    return await self._post_with_retry(payload, high_priority=True, cmd="catchup")
 
   async def custom_prompt(
       self, user: discord.abc.User, prompt_text: str, harem_title: Optional[str] = None, max_tokens: int = 1200

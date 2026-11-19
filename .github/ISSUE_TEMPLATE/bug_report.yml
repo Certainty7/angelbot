@@ -1,0 +1,31 @@
+name: Bug Report / الإبلاغ عن خطأ
+description: أبلغي عن خطأ برمجي أو سلوك غير متوقع في AngelBot
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: ما الذي حدث؟ (What happened?)
+      placeholder: صفي المشكلة والأمر المستخدم...
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: بيئة التشغيل (Windows / Docker / Linux / Cloud)
+      placeholder: "مثال: Windows 11, Python 3.12"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: السجلات (تأكدي من إزالة أي توكن أو مفاتيح سرية)
+      render: shell
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: تأكيد الخصوصية
+      options:
+        - label: أزلت التوكنات والمفاتيح والرسائل الخاصة من التقرير
+          required: true

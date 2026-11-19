@@ -122,7 +122,7 @@ test.describe('without JavaScript', () => {
 
     // The catalogue is server-rendered, never fetched by the client.
     await page.goto('/commands/');
-    await expect(page.locator('[data-command]')).toHaveCount(69);
+    await expect(page.locator('[data-command]')).toHaveCount(71);
   });
 });
 

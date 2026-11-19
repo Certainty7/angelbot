@@ -66,8 +66,8 @@ class BotDatabase:
     self._lock = asyncio.Lock()
 
   async def _ensure_conn(self) -> aiosqlite.Connection:
-    conn_alive = self._conn is not None and getattr(self._conn, "_running", True) and getattr(self._conn, "_connection", True) is not None
-    if not conn_alive:
+    # Public state only: `close()` sets this to None, so a closed database is reopened.
+    if self._conn is None:
       self._conn = await aiosqlite.connect(self.db_path)
       self._conn.row_factory = aiosqlite.Row
       await self._conn.execute("PRAGMA journal_mode=WAL")
@@ -90,8 +90,8 @@ class BotDatabase:
         try:
           await self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
           await self._conn.close()
-        except Exception:
-          pass
+        except Exception as exc:
+          logger.warning("database close failed: %s: %s", type(exc).__name__, exc)
         self._conn = None
 
   async def initialize(self):
@@ -173,11 +173,24 @@ class BotDatabase:
           "ALTER TABLE guild_settings ADD COLUMN autorole_id INTEGER",
           "ALTER TABLE guild_settings ADD COLUMN guard_mode TEXT DEFAULT 'off'",
           "ALTER TABLE guild_settings ADD COLUMN stay_voice_channel_id INTEGER",
+          "ALTER TABLE guild_settings ADD COLUMN dialect TEXT DEFAULT 'gulf'",
+          "ALTER TABLE guild_settings ADD COLUMN social_fixer_enabled INTEGER DEFAULT 1",
+          "ALTER TABLE guild_settings ADD COLUMN daily_ai_limit INTEGER DEFAULT 40",
+          "ALTER TABLE guild_settings ADD COLUMN updated_at TEXT",
       ):
         try:
           await db.execute(col_sql)
         except Exception:
           pass
+      await db.execute("""
+                CREATE TABLE IF NOT EXISTS guild_daily_usage (
+                    guild_id INTEGER NOT NULL,
+                    day_utc TEXT NOT NULL,
+                    ai_calls INTEGER NOT NULL DEFAULT 0,
+                    catchup_calls INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (guild_id, day_utc)
+                )
+            """)
       await db.execute("""
                 CREATE TABLE IF NOT EXISTS dm_logs (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1020,6 +1033,77 @@ class BotDatabase:
       async with db.execute("SELECT * FROM guild_settings") as cursor:
         rows = await cursor.fetchall()
         return {r["guild_id"]: dict(r) for r in rows}
+
+  # --- Multi-tenant guild settings & quota (Phase D) ---
+  async def get_guild_settings(self, guild_id: int) -> Optional[Dict[str, Any]]:
+    async with self._connect() as db:
+      db.row_factory = aiosqlite.Row
+      async with db.execute("SELECT * FROM guild_settings WHERE guild_id = ?", (guild_id,)) as cursor:
+        row = await cursor.fetchone()
+        if row is None:
+          return None
+        data = dict(row)
+        data["guard_level"] = data.get("guard_mode") or "off"
+        return data
+
+  async def upsert_guild_settings(
+      self,
+      guild_id: int,
+      *,
+      dialect: Optional[str] = None,
+      guard_level: Optional[str] = None,
+      social_fixer_enabled: Optional[bool] = None,
+  ) -> None:
+    """Update only the fields that were supplied; omitted fields keep their value."""
+    from datetime import datetime, timezone
+    fields = []
+    params: list = []
+    if dialect is not None:
+      fields.append("dialect = ?")
+      params.append(dialect)
+    if guard_level is not None:
+      fields.append("guard_mode = ?")
+      params.append(guard_level)
+    if social_fixer_enabled is not None:
+      fields.append("social_fixer_enabled = ?")
+      params.append(int(bool(social_fixer_enabled)))
+    async with self._connect() as db:
+      await db.execute("INSERT OR IGNORE INTO guild_settings (guild_id) VALUES (?)", (guild_id,))
+      if fields:
+        fields.append("updated_at = ?")
+        params.extend([datetime.now(timezone.utc).isoformat(), guild_id])
+        await db.execute(
+            f"UPDATE guild_settings SET {', '.join(fields)} WHERE guild_id = ?", params)
+      await db.commit()
+
+  async def consume_guild_ai_quota(self, guild_id: int) -> Tuple[bool, int]:
+    """Atomically reserve one AI reply for a guild today: (allowed, used_after)."""
+    from datetime import datetime, timezone
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    async with self._connect() as db:
+      await db.execute(
+          "INSERT INTO guild_daily_usage (guild_id, day_utc, ai_calls) VALUES (?, ?, 0) "
+          "ON CONFLICT(guild_id, day_utc) DO NOTHING",
+          (guild_id, day),
+      )
+      limit = 40
+      async with db.execute("SELECT daily_ai_limit FROM guild_settings WHERE guild_id = ?", (guild_id,)) as cursor:
+        row = await cursor.fetchone()
+        if row and row[0]:
+          limit = int(row[0])
+      cursor = await db.execute(
+          "UPDATE guild_daily_usage SET ai_calls = ai_calls + 1 "
+          "WHERE guild_id = ? AND day_utc = ? AND ai_calls < ?",
+          (guild_id, day, limit),
+      )
+      allowed = cursor.rowcount == 1
+      async with db.execute(
+          "SELECT ai_calls FROM guild_daily_usage WHERE guild_id = ? AND day_utc = ?",
+          (guild_id, day),
+      ) as cursor:
+        used_row = await cursor.fetchone()
+      await db.commit()
+    return bool(allowed), int(used_row[0]) if used_row else 0
 
   # --- Leveling & XP ---
   async def add_xp(self, guild_id: int, user_id: int, xp_gain: int) -> Tuple[int, int, bool]:

@@ -67,5 +67,7 @@
   "whisper": "Send a direct message through the bot in the current conversation",
   "اقتراح رد ومهام": "Suggest a reply and follow-up tasks for a message",
   "ترجمة وتحليل": "Translate a message and explain its meaning",
-  "تلخيص الرسالة": "Summarise a message into key points"
+  "تلخيص الرسالة": "Summarise a message into key points",
+  "setup": "Configure Angel for this server (dialect, guard level, link fixer)",
+  "catchup": "Summarise the recent messages you missed in this channel"
 }

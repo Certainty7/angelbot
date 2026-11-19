@@ -1,0 +1,14 @@
+.git
+.venv
+venv
+__pycache__
+*.pyc
+.env
+cookies.txt
+*.db
+*.db-wal
+*.db-shm
+website/node_modules
+website/dist
+tests
+docs/QA

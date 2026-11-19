@@ -1,0 +1,28 @@
+services:
+  angelbot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: angelbot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - ANGEL_DB_PATH=/app/data/angel.db
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - angel_data:/app/data
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 1g
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  angel_data:

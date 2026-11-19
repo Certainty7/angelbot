@@ -6,7 +6,7 @@
 
 [**Website**](https://angel.aetherisnode.cloud/en/) · [العربية](README.ar.md)
 
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![discord.py](https://img.shields.io/badge/discord.py-2.7.1-5865F2?logo=discord&logoColor=white)](https://discordpy.readthedocs.io/) [![SQLite](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/fts5.html)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![discord.py](https://img.shields.io/badge/discord.py-2.7.1-5865F2?logo=discord&logoColor=white)](https://discordpy.readthedocs.io/) [![SQLite](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/fts5.html) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 [Overview](#overview) · [Features](#features) · [Architecture](#architecture) · [Quick start](#quick-start) · [Configuration](#configuration) · [Commands](#commands) · [Deployment](#deployment) · [Testing](#testing) · [Security](#security) · [Contributing](#contributing)
 
@@ -220,6 +220,28 @@ sudo systemctl enable --now angelbot.service
 journalctl -u angelbot -n 30 --no-pager
 ```
 
+### Docker
+
+```bash
+cp .env.example .env      # fill in DISCORD_TOKEN, MALAK_OWNER_ID, GEMINI_API_KEY
+docker compose up -d --build
+docker compose logs -f angelbot
+```
+
+The image runs as the non-root user `angel`; only the `angel_data` volume mounted at `/app/data`
+is writable, and `ANGEL_DB_PATH=/app/data/angel.db` keeps SQLite inside it. `.env` and
+`cookies.txt` are excluded from the build context.
+
+### Windows
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/run_windows.ps1
+```
+
+The script creates `.venv`, installs the requirements, copies `.env.example` to `.env` on first run,
+checkpoints the database and starts the bot. FFmpeg is needed for music and video; install it with
+`winget install Gyan.FFmpeg`.
+
 <p align="center"><img src="docs/screenshots/deploy-gate.png" alt="Deploy gate output" width="820"></p>
 <p align="center"><sub>The deploy gate: 50/50 checks before the service starts.</sub></p>
 
@@ -235,9 +257,17 @@ Backups are local SQLite snapshots. They contain messages and pinned memory, are
 days, and there is no off-host copy.
 
 ```bash
+# Verified, integrity-checked backup (run from a timer or cron as a user that can write BACKUP_DIR)
+ANGEL_DB_PATH=/opt/angelbot/data/angel.db ANGEL_BACKUP_DIR=/opt/angelbot/backups \
+  scripts/backup_db.sh
+
 journalctl -u angelbot -f
 python tools/metrics.py
 ```
+
+Restore is the reverse: stop the service, copy the newest `angel_*.db` over the live database,
+start the service and confirm `python bot.py --verify-db` passes. The bot process itself cannot
+write the backups directory (it is outside the service's `ReadWritePaths`).
 
 ### Update
 
@@ -308,14 +338,18 @@ necessary but not sufficient: it cannot replace a real Discord server.
 
 ## Status
 
-Angel runs in production on a single server. Development is paused, so issues and pull requests are
-answered on a best-effort basis.
+Angel runs in production on a single server. The repository is public and open source; issues and
+pull requests are welcome and reviewed on a best-effort basis.
 
 ## Contributing
 
-Contributions are by invitation. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull
-request; it lists the commands to run and the commit format. Bug reports and questions go to the
-issue tracker.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request; it lists the commands to run
+and the commit format. Bug reports and questions go to the issue tracker.
+
+## License
+
+MIT — see [LICENSE](LICENSE). You may fork, self-host and redistribute it, keeping the copyright
+notice. "Angel" and the project branding belong to the maintainer.
 
 ## Maintainer
 
@@ -325,7 +359,7 @@ issue tracker.
 
 ## License
 
-All rights reserved. No license is granted for redistribution or commercial use.
+MIT — see [LICENSE](LICENSE).
 
 ## Acknowledgements
 

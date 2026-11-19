@@ -1,5 +1,12 @@
 # Website security — what is actually enforced on the live host
 
+> **2026-11-19 update (T-012):** `website/public/_headers` now carries HSTS,
+> `X-Frame-Options: DENY`, COOP, Permissions-Policy and the full CSP. Those headers apply
+> only on a host that honours the Cloudflare Pages `_headers` convention. Until the Pages
+> cutover is done, the measurements below still describe the GitHub Pages origin.
+> Verify after cutover with:
+> `curl -sI https://angel.aetherisnode.cloud | grep -Ei 'strict-transport-security|x-frame-options|content-security-policy'`.
+
 Owner: infrastructure. Measured **2026-11-15, 11:05–11:30 UTC** with `curl
 -D -`, a full TLS handshake per name, and the GitHub REST API. This file records measured behaviour
 only. It is deliberately hostile to claims made elsewhere in the docs: if a header is not in the

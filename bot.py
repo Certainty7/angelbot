@@ -65,6 +65,7 @@ from cogs import productivity as _cog_productivity
 from cogs import community as _cog_community
 from cogs import context_menus as _cog_context_menus
 from cogs import control as _cog_control
+from cogs import setup_and_catchup as _cog_setup
 from cogs import xp_profile as _cog_xp_profile
 
 _cog_admin.install(bot)
@@ -79,14 +80,25 @@ _cog_owner.install(bot)
 _cog_community.install(bot)
 _cog_flagship.install(bot)
 _cog_context_menus.install(bot)
+_cog_setup.install(bot)
 
 
 
 # --- Action executor and natural-language command router ---
+async def _is_opted_out_fail_closed(bot, user_id: int) -> bool:
+  """A member who opted out stays opted out even when SQLite is momentarily unavailable."""
+  try:
+    return bool((await bot.db.get_user_prefs(user_id)).get("opt_out"))
+  except Exception:
+    return True
+
+
 # --- Event listeners: voice state guard, snipe, edit snipe, modlog routing, ghost pings ---
 @bot.event
 async def on_message_delete(message: discord.Message):
   if not message.guild or message.author.bot:
+    return
+  if await _is_opted_out_fail_closed(bot, message.author.id):
     return
 
   att_url = message.attachments[0].url if message.attachments else None
@@ -138,6 +150,8 @@ async def on_message_delete(message: discord.Message):
 @bot.event
 async def on_message_edit(before: discord.Message, after: discord.Message):
   if not before.guild or before.author.bot or before.content == after.content:
+    return
+  if await _is_opted_out_fail_closed(bot, before.author.id):
     return
   bot.editsnipe_cache[before.channel.id] = {
       "author_name": before.author.display_name,
@@ -271,12 +285,10 @@ async def on_message(message: discord.Message):
     return
 
   # A member who ran `/data delete` keeps `opt_out = 1`; nothing below may store them again.
+  # Any database error is treated as opt-out: leaking a private message is worse than silence.
   _opted_out = False
   if message.guild:
-    try:
-      _opted_out = bool((await bot.db.get_user_prefs(message.author.id)).get("opt_out"))
-    except Exception:
-      _opted_out = False
+    _opted_out = await _is_opted_out_fail_closed(bot, message.author.id)
 
   # 0.05 Durable server log: every human line is kept for learning (bounded to one year).
   # Runs before the music shortcut so a play request is not the one message class missing
@@ -303,7 +315,7 @@ async def on_message(message: discord.Message):
       return
 
   # 0.1 Keep a rolling per-channel speaker buffer for the autonomous engine.
-  if message.guild and message.content.strip():
+  if message.guild and message.content.strip() and not _opted_out:
     bot.recent_speakers[message.channel.id].append({
         "user_id": message.author.id,
         "name": message.author.display_name,
@@ -333,7 +345,7 @@ async def on_message(message: discord.Message):
         user_times = bot.spam_tracker[(message.guild.id, message.author.id)]
         user_times.append(now_t)
         is_flood = len(user_times) >= 6 and (now_t - user_times[0]) < 5.0
-        is_sus_link = bool(SUSPICIOUS_LINK_REGEX.search(message.content))
+        is_sus_link = bool(SUSPICIOUS_LINK_REGEX.search(message.content)) or guard.is_suspicious_arabic_scam(message.content)
         if is_flood or is_sus_link:
           reason_ar = "إغراق رسائل سريع (Spam Flood)" if is_flood else "رابط دعوة/رابط مشبوه"
           if gmode == "dry_run":
@@ -441,7 +453,7 @@ async def on_message(message: discord.Message):
           bot.recent_social_links.pop(_k, None)
     social_urls = fresh_urls
 
-  if social_urls:
+  if social_urls and (not message.guild or bot.social_fixer_cache.get(message.guild.id, True)):
     async def _handle_social_links_bg(msg_obj: discord.Message, urls_to_fix: List[str]):
       max_b = (
           min(getattr(msg_obj.guild, "filesize_limit", 10 * 1024 * 1024), 25 * 1024 * 1024)
@@ -536,6 +548,15 @@ async def on_message(message: discord.Message):
     if lower_content in triggers:
       await safe_reply(message, triggers[lower_content])
 
+  # Prefix commands (!help, !sync ...) must work in DMs and when the bot is mentioned too;
+  # before this they were skipped by every early return above. An unknown `!word` falls
+  # through to the normal AI path instead of being silently swallowed.
+  if message.content.startswith("!") and len(message.content) > 1 and message.content[1].isalpha():
+    ctx = await bot.get_context(message)
+    if ctx.valid:
+      await bot.invoke(ctx)
+      return
+
   # 7. Detect Conversation, Follow-up Window, or Pending Step Trigger
   is_dm = isinstance(message.channel, discord.DMChannel)
   is_mentioned = bot.user in message.mentions
@@ -566,7 +587,7 @@ async def on_message(message: discord.Message):
         in_followup_window = True
 
   # Record message in O(1) RAM buffer for ambient context (eliminating slow channel.history REST calls)
-  if message.guild and message.content.strip():
+  if message.guild and message.content.strip() and not _opted_out:
     prev_ambient_list = list(bot.recent_channel_msgs[message.channel.id])
     bot.recent_channel_msgs[message.channel.id].append(
         f"{message.author.display_name}: {message.content.strip()[:120]}"
@@ -643,9 +664,6 @@ async def on_message(message: discord.Message):
         logger.exception(f"Unexpected error in on_message: {exc}")
         await safe_reply(message, "⚠️ حدث خطأ غير متوقع.")
     return
-
-  if message.content.startswith("!") and len(message.content) > 1 and message.content[1].isalpha():
-    await bot.process_commands(message)
 
 
 @bot.event

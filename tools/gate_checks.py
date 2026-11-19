@@ -25,7 +25,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 EXPECTED_BOT_COMMANDS = 0   # every command lives in a cog now
 # Eager cogs: imported by bot.py, so they must show up in the runtime tree. Add a row per cog.
-EXPECTED_COG_COMMANDS = {"admin.py": 17, "fun_gif.py": 2, "xp_profile.py": 2, "media_tools.py": 2, "memory_rules.py": 7, "ai_chat.py": 4, "context_menus.py": 3, "productivity.py": 2, "control.py": 3, "community.py": 11, "owner.py": 6, "flagship.py": 6}
+EXPECTED_COG_COMMANDS = {"admin.py": 17, "fun_gif.py": 2, "xp_profile.py": 2, "media_tools.py": 2, "memory_rules.py": 7, "ai_chat.py": 4, "context_menus.py": 3, "productivity.py": 2, "control.py": 3, "community.py": 11, "owner.py": 6, "flagship.py": 6, "setup_and_catchup.py": 2}
 EXPECTED_MUSIC_COMMANDS = 4  # /play /skip /queue /playlist, counted in cogs/music.py (lazy: setup_hook)
 EXPECTED_CENSUS = EXPECTED_BOT_COMMANDS + sum(EXPECTED_COG_COMMANDS.values())
 
