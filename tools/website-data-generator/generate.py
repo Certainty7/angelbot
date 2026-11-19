@@ -377,6 +377,7 @@ def changelog(repo: pathlib.Path) -> dict:
             "summary": {"en": en["summary"], "ar": ar.get("summary") or en["summary"]},
             "sections": sections,
         })
+    releases.sort(key=lambda release: release["date"], reverse=True)
     return {
         "schema": 1,
         "source": ["CHANGELOG.md", "CHANGELOG.ar.md"],
