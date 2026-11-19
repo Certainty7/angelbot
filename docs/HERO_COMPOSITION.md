@@ -1,7 +1,7 @@
 # Hero composition — "The Aperture"
 
 Implementable specification for the `/` hero. Anything not fixed here is a normal component decision;
-everything fixed here is **not** open to interpretation. Written by Certina. Tokens refer to
+everything fixed here is **not** open to interpretation. Written by the design owner. Tokens refer to
 `website/src/styles/tokens.css`.
 
 The hero is the only place on the site where a large graphic object is allowed. It carries the identity

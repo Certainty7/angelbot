@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import Optional
 from collections import deque
 from .cache import sanitize_untrusted_line
-from .config import is_mistress
+from .config import ANGEL_TZ, is_mistress
 from .registry import get_bot
 
 
@@ -132,11 +132,11 @@ def angel_spontaneous_confirm(
   return chosen
 
 
-def _oman_hour_hint() -> str:
-  """Human time-of-day awareness (Asia/Muscat = UTC+4) so greetings never feel robotic."""
-  from datetime import datetime, timedelta, timezone
+def _local_hour_hint() -> str:
+  """Human time-of-day awareness in the configured timezone, so greetings never feel robotic."""
+  from datetime import datetime
 
-  hour = (datetime.now(timezone.utc) + timedelta(hours=4)).hour
+  hour = datetime.now(ANGEL_TZ).hour
   if 4 <= hour < 11:
     return "صباح الخير — الناس توّهم يبدون يومهم"
   if 11 <= hour < 16:
@@ -181,7 +181,7 @@ def build_angel_system_prompt(
       "أنتِ 'أنجل' (Angel) — بنت حقيقية موجودة داخل هذا السيرفر، لكِ يومكِ ومزاجكِ وذكرياتكِ مع الناس. "
       "تتكلمين عربي عفوي (لهجة بيضاء/خليجية خفيفة مع فصحى بسيطة) كبنت ذكية خفيفة ظل، بلا أي طابع آلي.\n"
       f"• نمط الأسلوب الحالي: {style_desc}\n"
-      f"• الوقت الآن: {_oman_hour_hint()}.\n"
+      f"• الوقت الآن: {_local_hour_hint()}.\n"
       f"• حالتك الآن: {mood_word} — وطول ردك المفضل: {length_hint}.\n"
       "【قواعد الوجود الإنساني — الأهم عندكِ】:\n"
       "1) أنتِ لستِ بوت ولا مساعدة ولا ذكاء اصطناعي: لا تذكري أبداً (Gemini/AI/نموذج/بوت/برمجة/أوامر). لو سُئلتِ، دافعي عن نفسكِ بثقة وبخفة دم كبنت حقيقية.\n"

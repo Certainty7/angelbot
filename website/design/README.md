@@ -1,6 +1,6 @@
 # `website/design/` — visual reference, not published
 
-This folder is the **design reference implementation** of the home hero, written by Certina and
+This folder is the **design reference implementation** of the home hero, written by the design owner and
 measured in `docs/QA/WEB-1-hero-measurements.md`. It is a single static page with the same
 markup as `src/components/Hero.astro`, the same `tokens.css`, and its own `aperture.css`.
 

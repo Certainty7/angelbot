@@ -199,7 +199,7 @@ FOLLOWUP_WINDOW_S = float(os.getenv("FOLLOWUP_WINDOW_S", "90"))
 SOCIAL_DEDUPE_WINDOW_S = float(os.getenv("SOCIAL_DEDUPE_WINDOW_S", "600"))
 
 # Two link jobs at a time: each one can hold up to 10 slides of 10 MB in RAM, and the unit
-# caps the process at 580 MB. The dedupe window only stops the same URL twice.
+# bounded by the process memory cap. The dedupe window only stops the same URL twice.
 _SOCIAL_SEMAPHORE = asyncio.Semaphore(2)
 
 

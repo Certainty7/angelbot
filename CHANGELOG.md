@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.0.4 — 2026-11-19
+
+Privacy and public-repository hygiene pass.
+
+### Privacy
+
+- Removed personal and operator-specific details from the public tree: display names, the
+  location-specific default timezone, hosting provider and exact host specifications, internal
+  project and DNS names, and legacy publish-repository references.
+- Added `ANGEL_TIMEZONE` (IANA name, default `UTC`). Quiet hours, greetings and the daily budget
+  follow it. `ANGEL_OWNER_ID` is the documented owner variable; legacy environment names are still
+  read for compatibility so an existing host does not break on upgrade.
+- The bot presence and the generated owner role use `Angel`; `LICENSE` names the project
+  contributors. The dead publish-check script was removed.
+- `CONTRIBUTING.md` now requires placeholders for personal IDs, hostnames, account/project IDs,
+  DNS records, exact host specifications and locations.
+
+### Operations
+
+- The static host's path filter was corrected so every push to `master` deploys; the next push
+  was used to verify the automatic build. Account, project and DNS settings stay in private
+  operator notes.
+- `website/` package name is now `angel-website`.
+
 ## 1.0.3 — 2026-11-19
 
 Full hardening pass from an independent 45-finding audit, verified against this tree.

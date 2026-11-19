@@ -388,7 +388,7 @@ async def resolve_best(query: str, *, timeout: float = DEFAULT_TIMEOUT) -> Dict[
       return cached
 
   errors: List[str] = []
-  # Measured 2026-11-12 on the 1-OCPU host: running yt-dlp beside the SoundCloud search
+  # Measured on the reference host: running yt-dlp beside the SoundCloud search
   # makes both slower, so the probe stays lazy -- it only starts when SoundCloud is weak.
   candidates = await _collect_source("SoundCloud", "scsearch", text, 5, timeout)
   best_sc = max((c["score"] for c in candidates), default=-999.0)

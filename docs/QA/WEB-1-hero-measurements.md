@@ -1,6 +1,6 @@
 # WEB-1 — hero measurements and the three corrections site.css needs
 
-Author: Certina. Date: 2026-11-14. Scope: the `/` hero (`website/src/components/Hero.astro`
+Author: the design owner. Date: 2026-11-14. Scope: the `/` hero (`website/src/components/Hero.astro`
 + the hero block of `website/src/styles/site.css`), measured in Chrome 1440 / 1280 / 1024 /
 768 / 390 / 360 on the reference implementation in `website/design/`.
 

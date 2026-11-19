@@ -1,6 +1,6 @@
 # Visual acceptance — criterion → evidence
 
-Owner of this section: Certina. Written for the owner's final report (§25 items 9, 10, 16).
+Owner of this section: the design owner. Written for the owner's final report (§25 items 9, 10, 16).
 Every number below was measured, not estimated; the file or commit that proves it is named
 next to it. Nothing here claims a check that was not run.
 
@@ -29,7 +29,7 @@ Screenshots: `docs/QA/production/domain-home-light.jpg`, `domain-home-rose-night
 `domain-mobile-light.jpg`.
 
 What is still true on this host: `CSP` and `referrer` are document-level (`<meta>`), with no
-`HSTS`, no `frame-ancestors` and no asset caching policy. Those return with Cloudflare.
+`HSTS`, no `frame-ancestors` and no asset caching policy. Those return with the static host.
 
 ## 1. Brand identity
 
@@ -105,7 +105,7 @@ Every text pair clears AA for normal text; the smallest margin is 6.06:1.
 
 - No field performance measurement on the custom domain. The visual review there is done
   (§0), but Lighthouse numbers still come from `astro preview`; the CDN measurement waits
-  for the move back to Cloudflare, where the caching headers exist.
+  for the move back to the static host, where the caching headers exist.
 - No screen-reader session with a human user; the accessibility evidence is automated
   (Lighthouse) plus structural checks, not a usability study.
 - No visual diff harness: the screenshots in `docs/QA/` are evidence for review, not a

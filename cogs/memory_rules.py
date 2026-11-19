@@ -218,7 +218,7 @@ class MemoryRules(commands.Cog):
       used, limit = await self.bot.db.get_guild_ai_usage(interaction.guild.id)
       embed.add_field(name="حصتك اليومية", value=f"`{used}` / `{limit}`", inline=True)
       embed.add_field(name="المتبقي", value=f"`{max(0, limit - used)}`", inline=True)
-    embed.set_footer(text="التوقيت: سلطنة عمان (UTC+4)")
+    embed.set_footer(text="التوقيت المحلي")
     await interaction.followup.send(embed=embed, ephemeral=True)
 
 

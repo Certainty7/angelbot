@@ -13,7 +13,7 @@ website/
     data/         commands.json, invite.json (generated), changelog.json
     styles/       fonts.css → tokens.css → base.css → site.css
     scripts/      site.ts (theme, menu, reveals), commands.ts (search/filter/copy)
-    assets/brand/ the identity artwork (Certina, WEB-1)
+    assets/brand/ the identity artwork (the design owner, WEB-1)
   public/         fonts, icons, robots.txt, manifest, _headers
   scripts/        build.sh (Pages entry point), changelog.mjs
 ```

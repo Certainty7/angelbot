@@ -26,6 +26,9 @@ pull request. If a check fails, fix the code, not the check.
 - Do not add a dependency, a service or a network call the bot does not already need.
 - Never commit `.env`, `cookies.txt`, a database file or a token. `.gitignore` covers the common
   cases, not your judgement.
+- This repository is public: never commit a real owner or member ID, host name, account or project
+  ID, DNS record, exact host specification or personal location. Use placeholders in docs and
+  examples.
 
 ## Commits
 

@@ -112,8 +112,8 @@ attachment count, and a deleted post renders nothing. That is the accepted trade
 
 **Why:** the source of truth for a product belongs next to the product. The website's command
 explorer is generated from `cogs/` and `angel/`, so a separate repository would either duplicate the
-bot source or fetch it at build time — both create drift. `angel-site` stays as a read-only legacy
-reference and is not overwritten.
+bot source or fetch it at build time — both create drift. The old website project stays as a
+read-only legacy reference and is not overwritten.
 
 **Consequence:** the Pages build runs from the repository root, installs from `website/package-lock.json`,
 and publishes `website/dist`. Watch paths must include `cogs/**`, `angel/**`, `bot.py` and
@@ -121,14 +121,14 @@ and publishes `website/dist`. Watch paths must include `cogs/**`, `angel/**`, `b
 
 ## Website: static hosting on a CDN, no origin server (2026-11-14)
 
-**Decision:** Cloudflare Pages, Git integration (not Direct Upload), two independent projects.
+**Decision:** a managed static host with Git integration (not Direct Upload), two independent projects.
 
 **Why:** the brief forbids public website traffic on the web host and forbids a backend. Git
 integration keeps every deployment traceable to a commit and is the documented mode for a
 GitHub-backed static site. Direct Upload cannot later be switched to Git integration, so the mode is
 chosen now, before any project exists.
 
-**Blocker:** no Cloudflare credentials are available to any agent. This is recorded once; the build,
+**Blocker:** no hosting credentials are available to any agent. This is recorded once; the build,
 tests and security work continue independently and the deployment step stays blocked.
 
 ## Website: no runtime backend, ever (2026-11-14)
@@ -190,7 +190,7 @@ and C survives as the dark variant's elevation law (luminance + halo instead of 
   `#8A2E45`, ink `#221A1B`. Rose Night: ground `#14100F`, card `#241C1E`, text `#F6EEEC`, lifted rose
   `#E9A9B6`. Contrast is measured, not assumed: every text pair ≥ 4.5:1, every control border ≥ 3:1.
 
-**Consequence for implementation:** tokens are authored by Certina and consumed by the implementation. Palette changes
+**Consequence for implementation:** tokens are authored by the design owner and consumed by the implementation. Palette changes
 never transition (a transition on a palette-driven colour restarts per recalculation and Chrome can leave
 inherited colours on the old palette). Arabic takes no letter-spacing. Wordmarks are outlines, not live
 text.
@@ -223,8 +223,8 @@ what makes the skip honest rather than decorative.
 
 ## Portal: committed output, no Pages build step (2026-11-14)
 
-**Decision:** `Certainty7/aetherisnode-home` holds its sources in `src/` **and** its built site in
-`public/`. `node scripts/build.mjs` regenerates `public/` from `src/`; Cloudflare Pages serves
+**Decision:** the portal repository (private) holds its sources in `src/` **and** its built site in
+`public/`. `node scripts/build.mjs` regenerates `public/` from `src/`; the static host serves
 `public/` with an empty build command; CI rebuilds and fails if the two differ.
 
 **Why:** the portal has to survive years of unattended hosting. Zero npm dependencies means no
@@ -239,8 +239,8 @@ links and no build-host paths.
 
 **History:** an earlier seed commit in that repository carried a single English placeholder page and
 stated it would be replaced by this build. It was replaced by a normal commit on top (`7a2e49c`),
-not by a force-push. Pages project name is `aetherisnode-portal` (see
-`docs/WEBSITE_DEPLOYMENT.md` §7); the repository name is `aetherisnode-home`.
+not by a force-push. The portal project and repository names are operator-managed and are not
+recorded in this public repository.
 
 ## Website catalogue: which Arabic ships, and what `owner_only` means (2026-11-14)
 
@@ -279,7 +279,7 @@ command re-sync — a separate card, out of scope here.
 `tests/website/test_command_catalog.py` (census oracle on `description_discord`, editorial-copy pin,
 `owner_only` oracle), `generate.py --check` clean after regeneration.
 
-**Current count (v1.0.3):** the catalogue has **71** entries — 68 slash commands and 3 context
+**Current count (v1.0.4):** the catalogue has **71** entries — 68 slash commands and 3 context
 menus; 67 load eagerly and the 4 music commands load lazily. The historical measurements above
 refer to the 68-entry census captured on 2026-11-14.
 

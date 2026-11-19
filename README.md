@@ -6,7 +6,7 @@
 
 [**Website**](https://angel.aetherisnode.cloud/en/) · [العربية](README.ar.md)
 
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![discord.py](https://img.shields.io/badge/discord.py-2.7.1-5865F2?logo=discord&logoColor=white)](https://discordpy.readthedocs.io/) [![SQLite](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/fts5.html) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Release](https://img.shields.io/badge/release-v1.0.3-D4AF37)](https://github.com/Certainty7/angelbot/releases/tag/v1.0.3)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![discord.py](https://img.shields.io/badge/discord.py-2.7.1-5865F2?logo=discord&logoColor=white)](https://discordpy.readthedocs.io/) [![SQLite](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/fts5.html) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Release](https://img.shields.io/badge/release-v1.0.4-D4AF37)](https://github.com/Certainty7/angelbot/releases/tag/v1.0.4)
 
 [Overview](#overview) · [Features](#features) · [Architecture](#architecture) · [Quick start](#quick-start) · [Configuration](#configuration) · [Commands](#commands) · [Deployment](#deployment) · [Testing](#testing) · [Security](#security) · [Contributing](#contributing)
 
@@ -112,7 +112,7 @@ cp .env.example .env
 $EDITOR .env
 ```
 
-At minimum, set `DISCORD_TOKEN`, `MALAK_OWNER_ID` and `GEMINI_API_KEY`. The bot refuses to start
+At minimum, set `DISCORD_TOKEN`, `ANGEL_OWNER_ID` and `GEMINI_API_KEY`. The bot refuses to start
 when the owner ID is missing or not numeric, because a silent owner lockout is worse than a failed
 boot.
 
@@ -168,18 +168,19 @@ used by the operator scripts under `tools/`.
 | Variable | Required | Description |
 |---|---|---|
 | `DISCORD_TOKEN` | yes | Bot token from the Discord Developer Portal. |
-| `MALAK_OWNER_ID` | yes | Owner Discord user ID, as a numeric ID. |
+| `ANGEL_OWNER_ID` | yes | Owner Discord user ID, as a numeric ID. |
 | `GEMINI_API_KEY` | yes | Google AI Studio key. |
 | `GEMINI_API_KEY_2` | no | Second key. When both are set, this one is tried first and the chain falls back to `GEMINI_API_KEY`. |
 | `GEMINI_MODEL` | no | Primary model ID. Blank uses the free-tier default `gemini-3-flash-preview`, then `3.1-flash-lite`, `3.5-flash-lite` and `4-hydrogen`. |
-| `MISTRESS_USER_ID` | no | Alias for `MALAK_OWNER_ID`, read only when that variable is empty. |
+| `ANGEL_TIMEZONE` | no | IANA timezone for quiet hours, greetings and the daily budget. Defaults to `UTC`; set it in the host environment. |
+| `MISTRESS_USER_ID` | no | Alias for `ANGEL_OWNER_ID`, read only when that variable is empty. |
 | `ENABLE_MEMBERS_INTENT` | no | `1` after enabling Server Members in the portal. Unlocks autorole and the join log. |
 | `ANGEL_DB_PATH` | no | SQLite path. Defaults to `chat_history.db` in the project root. |
 | `FFMPEG_PATH` | no | Explicit ffmpeg binary. |
 | `YOUTUBE_COOKIES_FILE` | no | `cookies.txt` for yt-dlp. |
 | `MUSIC_ENABLED` | no | `0` turns the music cog off. Default on. |
 | `MUSIC_YOUTUBE` | no | `0` removes YouTube from the source chain and leaves SoundCloud. |
-| `MALAK_DAILY_COST_LIMIT_USD` | no | Daily model budget in US dollars. |
+| `ANGEL_DAILY_COST_LIMIT_USD` | no | Daily model budget in US dollars. |
 
 The full commented list, including the autonomy, archive and backfill tuning variables, is in
 [`.env.example`](.env.example).
@@ -227,7 +228,7 @@ journalctl -u angelbot -n 30 --no-pager
 ### Docker
 
 ```bash
-cp .env.example .env      # fill in DISCORD_TOKEN, MALAK_OWNER_ID, GEMINI_API_KEY
+cp .env.example .env      # fill in DISCORD_TOKEN, ANGEL_OWNER_ID, GEMINI_API_KEY
 docker compose up -d --build
 docker compose logs -f angelbot
 ```
@@ -330,8 +331,7 @@ necessary but not sufficient: it cannot replace a real Discord server.
   is the intended trade, because Discord's Developer Policy forbids profiling users from API data.
 - There is no off-host backup yet.
 - The output filter is a first version. It catches the obvious cases, not every phrasing.
-- The reference deployment is a single host with one core and less than a gigabyte of RAM, and the
-  timers share that budget.
+- The reference deployment is a small single host, and the timers share that budget.
 - YouTube playback needs a cookies file and Deno. Without them the music search falls back to
   SoundCloud only.
 - Pinned memory is keyed per user, not per server, so a note pinned in one server is recalled in
@@ -353,7 +353,7 @@ necessary but not sufficient: it cannot replace a real Discord server.
 
 ## Status
 
-Angel runs in production on a single server. The current release is **v1.0.3** (2026-11-19); the
+Angel runs in production on a single server. The current release is **v1.0.4** (2026-11-19); the
 repository is public and open source, and issues and pull requests are welcome and reviewed on a
 best-effort basis.
 
@@ -369,9 +369,7 @@ notice. "Angel" and the project branding belong to the maintainer.
 
 ## Maintainer
 
-<p align="center">
-  <a href="https://github.com/Certainty7"><img src="https://github.com/Certainty7.png?size=120" width="56" alt="Certainty"><br><sub><b>Certainty</b> · maintainer</sub></a>
-</p>
+Maintained by the repository owner. See the commit history and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Acknowledgements
 

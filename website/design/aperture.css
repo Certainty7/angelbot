@@ -1,7 +1,7 @@
 /* ============================================================================
    ANGEL — hero reference implementation: "The Aperture"
    Implements docs/HERO_COMPOSITION.md to the letter. Tokens: src/styles/tokens.css.
-   Owner: Certina. Ported into src/components/Hero.astro unchanged.
+   Owner: the design owner. Ported into src/components/Hero.astro unchanged.
 
    Order: ground → rings → bloom → specular → mark → sheen → text.
    ========================================================================== */

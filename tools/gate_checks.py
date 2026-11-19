@@ -266,9 +266,10 @@ def owner_id_not_in_source():
     """The owner id is configuration, never source."""
     from dotenv import dotenv_values
 
-    declared = (dotenv_values(os.path.join(ROOT, ".env")).get("MALAK_OWNER_ID") or "").strip()
+    values = dotenv_values(os.path.join(ROOT, ".env"))
+    declared = (values.get("ANGEL_OWNER_ID") or values.get("MALAK_OWNER_ID") or "").strip()
     if not declared.isdigit() or len(declared) < 15:
-        return "skipped: no real 64-bit MALAK_OWNER_ID in .env to search for"
+        return "skipped: no real 64-bit ANGEL_OWNER_ID in .env to search for"
 
     # Production sources only: a test fixture is allowed to invent an id.
     targets = [os.path.join(ROOT, "bot.py")]

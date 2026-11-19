@@ -61,7 +61,7 @@ def _fuzzy_best(query: str, rows, text_key: str, limit: int = 3, threshold: floa
 
 class BotDatabase:
   """
-  Persistent single-connection SQLite manager optimized for Wispbyte (0.35 vCPU / 612 MiB RAM).
+  Persistent single-connection SQLite manager optimized for a small single-core host.
   Avoids spawning a new OS thread per query and keeps WAL + synchronous=NORMAL + temp_store=MEMORY active permanently.
   """
 

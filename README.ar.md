@@ -6,7 +6,7 @@
 
 [**الموقع**](https://angel.aetherisnode.cloud/) · [English](README.md)
 
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![discord.py](https://img.shields.io/badge/discord.py-2.7.1-5865F2?logo=discord&logoColor=white)](https://discordpy.readthedocs.io/) [![SQLite](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/fts5.html) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Release](https://img.shields.io/badge/release-v1.0.3-D4AF37)](https://github.com/Certainty7/angelbot/releases/tag/v1.0.3)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![discord.py](https://img.shields.io/badge/discord.py-2.7.1-5865F2?logo=discord&logoColor=white)](https://discordpy.readthedocs.io/) [![SQLite](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/fts5.html) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Release](https://img.shields.io/badge/release-v1.0.4-D4AF37)](https://github.com/Certainty7/angelbot/releases/tag/v1.0.4)
 
 [نظرة عامة](#نظرة-عامة) · [المزايا](#المزايا) · [البنية](#البنية) · [البدء السريع](#البدء-السريع) · [الإعدادات](#الإعدادات) · [الأوامر](#الأوامر) · [النشر](#النشر) · [الاختبار](#الاختبار) · [الأمان](#الأمان) · [المساهمة](#المساهمة)
 
@@ -102,7 +102,7 @@ cp .env.example .env
 $EDITOR .env
 ```
 
-على الأقل اضبط `DISCORD_TOKEN` و`MALAK_OWNER_ID` و`GEMINI_API_KEY`. ويرفض البوت البدء إذا كان معرّف
+على الأقل اضبط `DISCORD_TOKEN` و`ANGEL_OWNER_ID` و`GEMINI_API_KEY`. ويرفض البوت البدء إذا كان معرّف
 المالك مفقودًا أو غير رقمي، لأن فقدان صلاحية المالك بصمت أسوأ من فشل البدء.
 
 ### التحقق
@@ -156,18 +156,19 @@ python bot.py
 | المتغير | مطلوب | الوصف |
 |---|---|---|
 | `DISCORD_TOKEN` | نعم | رمز البوت من بوابة مطوّري ديسكورد. |
-| `MALAK_OWNER_ID` | نعم | معرّف مالك ديسكورد الرقمي. |
+| `ANGEL_OWNER_ID` | نعم | معرّف مالك ديسكورد الرقمي. |
 | `GEMINI_API_KEY` | نعم | مفتاح Google AI Studio. |
 | `GEMINI_API_KEY_2` | لا | مفتاح ثانٍ. وإذا وُجد الاثنان جُرّب هذا أولًا ثم عادت السلسلة إلى `GEMINI_API_KEY`. |
 | `GEMINI_MODEL` | لا | معرّف النموذج الأساسي. وإذا تُرك فارغًا استُخدم الافتراضي المجاني `gemini-3-flash-preview` ثم `3.1-flash-lite` ثم `3.5-flash-lite` ثم `4-hydrogen`. |
-| `MISTRESS_USER_ID` | لا | اسم بديل لـ `MALAK_OWNER_ID`، يُقرأ فقط إذا كان ذلك المتغير فارغًا. |
+| `ANGEL_TIMEZONE` | لا | المنطقة الزمنية IANA لساعات الهدوء والتحيات والميزانية اليومية. الافتراضي `UTC`؛ تُضبط في بيئة الاستضافة. |
+| `MISTRESS_USER_ID` | لا | اسم بديل لـ `ANGEL_OWNER_ID`، يُقرأ فقط إذا كان ذلك المتغير فارغًا. |
 | `ENABLE_MEMBERS_INTENT` | لا | `1` بعد تفعيل Server Members في البوابة. يفتح autorole وسجل الانضمام. |
 | `ANGEL_DB_PATH` | لا | مسار SQLite. الافتراضي `chat_history.db` في جذر المشروع. |
 | `FFMPEG_PATH` | لا | مسار ffmpeg صريح. |
 | `YOUTUBE_COOKIES_FILE` | لا | ملف `cookies.txt` لـ yt-dlp. |
 | `MUSIC_ENABLED` | لا | `0` يوقف وحدة الموسيقى. مفعّلة افتراضيًا. |
 | `MUSIC_YOUTUBE` | لا | `0` يزيل يوتيوب من سلسلة المصادر ويترك SoundCloud. |
-| `MALAK_DAILY_COST_LIMIT_USD` | لا | ميزانية النماذج اليومية بالدولار. |
+| `ANGEL_DAILY_COST_LIMIT_USD` | لا | ميزانية النماذج اليومية بالدولار. |
 
 القائمة الكاملة المشروحة، بما فيها متغيرات الاستقلالية والأرشيف والتعبئة الخلفية، في
 [`.env.example`](.env.example).
@@ -213,7 +214,7 @@ journalctl -u angelbot -n 30 --no-pager
 ### Docker
 
 ```bash
-cp .env.example .env      # املأ DISCORD_TOKEN وMALAK_OWNER_ID وGEMINI_API_KEY
+cp .env.example .env      # املأ DISCORD_TOKEN وANGEL_OWNER_ID وGEMINI_API_KEY
 docker compose up -d --build
 docker compose logs -f angelbot
 ```
@@ -314,8 +315,7 @@ journalctl -u angelbot -n 30 --no-pager
   المقصود، لأن سياسة ديسكورد للمطورين تمنع بناء ملفات عن المستخدمين من بيانات الواجهة.
 - لا توجد نسخة احتياطية خارج الخادم بعد.
 - فلتر المخرجات نسخة أولى: يلتقط الحالات الواضحة، لا كل صياغة.
-- النشر المرجعي على خادم واحد بنواة واحدة وأقل من غيغابايت من الذاكرة، والمؤقتات تتشارك الميزانية
-  نفسها.
+- النشر المرجعي على خادم واحد صغير، والمؤقتات تتشارك الميزانية نفسها.
 - يحتاج تشغيل يوتيوب إلى ملف cookies وDeno، وبدونهما يعود البحث إلى SoundCloud فقط.
 - الملاحظات المثبّتة مرتبطة بالمستخدم لا بالسيرفر: ملاحظة ثُبّتت في سيرفر تُستدعى في سيرفر آخر. أما
   الأرشيف فمحدود بالسيرفر.
@@ -334,7 +334,7 @@ journalctl -u angelbot -n 30 --no-pager
 
 ## الحالة
 
-يعمل أنجل في الإنتاج على خادم واحد. الإصدار الحالي **v1.0.3** (2026-11-19)؛ والمستودع عام ومفتوح
+يعمل أنجل في الإنتاج على خادم واحد. الإصدار الحالي **v1.0.4** (2026-11-19)؛ والمستودع عام ومفتوح
 المصدر، والبلاغات وطلبات السحب مرحّب بها وتُراجَع على قدر الاستطاعة.
 
 ## المساهمة
@@ -344,9 +344,7 @@ journalctl -u angelbot -n 30 --no-pager
 
 ## المشرف
 
-<p align="center">
-  <a href="https://github.com/Certainty7"><img src="https://github.com/Certainty7.png?size=120" width="56" alt="Certainty"><br><sub><b>Certainty</b> · maintainer</sub></a>
-</p>
+يدير المشروع مالك المستودع. راجع سجل الإيداعات و[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## الترخيص
 

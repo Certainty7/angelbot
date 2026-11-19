@@ -18,9 +18,10 @@ def _id_set(name: str) -> set:
     return out
 
 
-ADMIN_ROLE_IDS = _id_set("MALAK_ADMIN_ROLE_IDS")
-ADMIN_CHANNEL_IDS = _id_set("MALAK_ADMIN_CHANNEL_IDS")
-OWNER_ID = int((os.getenv("MALAK_OWNER_ID") or "0").strip() or 0) if (os.getenv("MALAK_OWNER_ID") or "").strip().isdigit() else 0
+ADMIN_ROLE_IDS = _id_set("ANGEL_ADMIN_ROLE_IDS") | _id_set("MALAK_ADMIN_ROLE_IDS")
+ADMIN_CHANNEL_IDS = _id_set("ANGEL_ADMIN_CHANNEL_IDS") | _id_set("MALAK_ADMIN_CHANNEL_IDS")
+_owner_raw = (os.getenv("ANGEL_OWNER_ID") or os.getenv("MALAK_OWNER_ID") or "0").strip()
+OWNER_ID = int(_owner_raw) if _owner_raw.isdigit() else 0
 
 
 class AclError(PermissionError):

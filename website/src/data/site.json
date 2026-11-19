@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "1.0.3",
+  "version": "1.0.4",
   "license": "MIT",
   "license_url": "https://github.com/Certainty7/angelbot/blob/master/LICENSE",
   "repository": "https://github.com/Certainty7/angelbot",
@@ -8,11 +8,11 @@
   "default_branch": "master",
   "media_platforms": 14,
   "latest_release": {
-    "version": "1.0.3",
+    "version": "1.0.4",
     "date": "2026-11-19",
     "summary": {
-      "en": "Full hardening pass from an independent 45-finding audit, verified against this tree.",
-      "ar": "جولة تقوية شاملة مبنية على تدقيق مستقل من 45 ملاحظة، تم التحقق منها مقابل شجرة الكود الحالية."
+      "en": "Privacy and public-repository hygiene pass.",
+      "ar": "جولة خصوصية ونظافة للمستودع العام."
     }
   }
 }

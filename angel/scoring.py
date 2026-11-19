@@ -5,18 +5,21 @@ from dataclasses import dataclass
 
 
 def _f(name: str, default: float) -> float:
+    raw = os.getenv(name)
+    if raw is None and name.startswith("ANGEL_"):
+        raw = os.getenv("MALAK_" + name[len("ANGEL_"):])
     try:
-        return float(os.getenv(name, default))
+        return float(raw if raw is not None else default)
     except (TypeError, ValueError):
         return float(default)
 
 
-W_ACTIVITY = _f("MALAK_W_ACTIVITY", 0.18)
-W_MENTION = _f("MALAK_W_MENTION", 0.30)
-W_TOPIC = _f("MALAK_W_TOPIC", 0.18)
-W_MOOD = _f("MALAK_W_MOOD", 0.14)
-W_RECENCY = _f("MALAK_W_RECENCY", 0.20)
-REPLY_THRESHOLD = _f("MALAK_REPLY_THRESHOLD", 0.55)
+W_ACTIVITY = _f("ANGEL_W_ACTIVITY", 0.18)
+W_MENTION = _f("ANGEL_W_MENTION", 0.30)
+W_TOPIC = _f("ANGEL_W_TOPIC", 0.18)
+W_MOOD = _f("ANGEL_W_MOOD", 0.14)
+W_RECENCY = _f("ANGEL_W_RECENCY", 0.20)
+REPLY_THRESHOLD = _f("ANGEL_REPLY_THRESHOLD", 0.55)
 MENTION_FLOOR = 0.90
 
 

@@ -14,7 +14,7 @@ from angel.net import get_media_download_semaphore
 from angel.output_filter import filter_outgoing
 
 # One `/fix` per member every few seconds: a loop of distinct links otherwise keeps several
-# yt-dlp subprocesses and large downloads in flight on a 580 MB cgroup.
+# yt-dlp subprocesses and large downloads in flight within the process memory cap.
 _FIX_LAST_AT: dict[int, float] = {}
 _FIX_COOLDOWN_S = 8.0
 

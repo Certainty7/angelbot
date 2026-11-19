@@ -1,7 +1,7 @@
 # Final QA — desktop, mobile, accessibility, performance
 
 Date: 2026-11-15. Evidence owner: design review. Independent re-checks: second reviewer.
-All Angel numbers are against the live bytes `angel-web@54cdb48` (source `angelbot@9b9ff00`),
+All Angel numbers are against the live bytes at the audited commit (source in this repository),
 fingerprint `etag "6af99fe1-3cb5"`, `sha256 542b9f47…`, 15,541 B. Raw captures and JSON:
 `<deliverables-dir>` (12 screenshots, three Lighthouse runs,
 `README.md`).

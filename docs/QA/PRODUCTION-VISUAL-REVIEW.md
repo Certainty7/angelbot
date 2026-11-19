@@ -1,6 +1,6 @@
 # Production visual review — the published site
 
-Author: Certina. Date: 2026-11-14, against the live preview deployment before the custom domain
+Author: the design owner. Date: 2026-11-14, against the live preview deployment before the custom domain
 was pointed at it.
 Method: real browser, 1440 and 390 CSS px, measured in the DOM — not judged from source.
 
