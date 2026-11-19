@@ -1,7 +1,5 @@
-# Example production unit. Adjust User, Group, WorkingDirectory and
-# EnvironmentFile for your host before installing.
 [Unit]
-Description=Angel Discord Bot (Production 24/7 Service)
+Description=Angel Discord Bot (Hardened Production 24/7 Service)
 After=network-online.target
 Wants=network-online.target
 
@@ -11,24 +9,27 @@ User=angel
 Group=angel
 WorkingDirectory=/opt/angelbot
 EnvironmentFile=/opt/angelbot/.env
-Environment="PYTHONUNBUFFERED=1"
+Environment=PYTHONUNBUFFERED=1
+
 ExecStartPre=/opt/angelbot/venv/bin/python /opt/angelbot/bot.py --checkpoint-db
-# Deployment gate: the offline selftest must pass before the new process can start.
 ExecStartPre=/opt/angelbot/venv/bin/python /opt/angelbot/tools/selftest.py
+
 ExecStart=/opt/angelbot/venv/bin/python /opt/angelbot/bot.py
 Restart=always
 RestartSec=5
 KillSignal=SIGINT
 TimeoutStopSec=20
-# Example limits; adjust to the host.
+
 MemoryMax=1G
 CPUQuota=100%
-# Sandbox: the service and every subprocess (yt-dlp, ffmpeg) see a private /tmp, a read-only
-# /usr, and no /home. NoNewPrivileges is deliberately not set: the owner's in-chat update
-# command calls sudo, and NoNewPrivileges would block it. Set it if you drop that command.
+NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=full
+ProtectSystem=strict
 ProtectHome=true
+# ONLY /opt/angelbot/data is writable; code and .env stay read-only to the bot user.
+ReadWritePaths=/opt/angelbot/data
+RestrictSUIDSGID=true
+LockPersonality=true
 
 [Install]
 WantedBy=multi-user.target

@@ -1006,14 +1006,14 @@ async def try_execute_natural_command(
     if not mistress:
       await safe_reply(message, "🚫 أمر تحديث نظام السيرفر مخصص للمالكة فقط.")
       return True
-    await safe_reply(message, "🔄 جاري تحديث جميع حزم السيرفر (بما فيها التحديثات المعلقة Phased Updates) وتحديث مكتبات البوت وتنظيف القمامة... قد يستغرق ذلك دقيقة واحدة ⏳")
+    await safe_reply(message, "🔄 البوت لا يشغّل أوامر إدارية (sudo) بنفسه. سأعرض خطوات التحديث الآمنة وأشغّل تنظيف التخزين فقط. ⏳")
     async with message.channel.typing():
       res = await perform_full_system_and_bot_update()
       st = res["clean_stats"]
-      reb_txt = "⚠️ **ملاحظة:** يوجد تحديث لنواة النظام (Kernel) يفضل معه إعادة تشغيل السيرفر." if res["reboot_required"] else "✅ جميع التحديثات فُعّلت دون الحاجة لإعادة تشغيل السيرفر."
+      reb_txt = "⚠️ **ملاحظة:** يوجد تحديث لنواة النظام (Kernel) يفضل معه إعادة تشغيل السيرفر." if res["reboot_required"] else "✅ لا حاجة لإعادة تشغيل السيرفر."
       embed = discord.Embed(
-          title="✅ اكتمل تحديث السيرفر والبوت وتنظيف التخزين",
-          description=f"{reb_txt}\n\n🗑️ **القمامة المحذوفة:** `{st['freed_mb']} MB`\n💾 **المساحة الحرة:** `{st['disk_free_gb']} GB` / `{st['disk_total_gb']} GB`\n🧠 **استهلاك الرام:** `{st['ram_mb']} MB`",
+          title="🛠️ تحديث السيرفر: خطوات يدوية آمنة",
+          description=f"{reb_txt}\n\n{res['logs_tail']}\n\n🗑️ **القمامة المحذوفة:** `{st['freed_mb']} MB`\n💾 **المساحة الحرة:** `{st['disk_free_gb']} GB` / `{st['disk_total_gb']} GB`\n🧠 **استهلاك الرام:** `{st['ram_mb']} MB`",
           color=0xD4AF37,
           timestamp=datetime.now(timezone.utc),
       )

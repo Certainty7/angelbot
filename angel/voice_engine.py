@@ -17,6 +17,8 @@ group, and playback must still start in that case.
 from __future__ import annotations
 
 import asyncio
+import math
+import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -26,10 +28,17 @@ import discord
 
 from .audio_source import ResolveError, resolve, resolve_best
 from .config import FFMPEG_EXE, logger
+from .net import validate_extracted_stream_url
 
 # Reconnect options matter: SoundCloud hands out HLS/m3u8 URLs that expire and drop.
-FFMPEG_BEFORE = "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
+# The protocol whitelist keeps a hostile playlist/redirect from naming a local file or
+# an exotic FFmpeg protocol after yt-dlp has already handed us the URL.
+FFMPEG_BEFORE = (
+    "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 "
+    "-protocol_whitelist https,http,tcp,tls,crypto"
+)
 FFMPEG_OPTIONS = {"before_options": FFMPEG_BEFORE, "options": "-vn"}
+QUEUE_MAX = 200
 
 # How long to wait for the DAVE (E2EE) session to become ready before starting anyway.
 DAVE_WAIT_S = 8.0
@@ -45,11 +54,13 @@ class _CountingSource(discord.AudioSource):
   def __init__(self, inner: discord.AudioSource):
     self.inner = inner
     self.bytes_read = 0
+    self._bytes_lock = threading.Lock()
 
   def read(self) -> bytes:
     data = self.inner.read()
     if data:
-      self.bytes_read += len(data)
+      with self._bytes_lock:
+        self.bytes_read += len(data)
     return data
 
   def is_opus(self) -> bool:
@@ -85,7 +96,7 @@ class Track:
 
   @property
   def duration_text(self) -> str:
-    if not self.duration:
+    if not self.duration or not math.isfinite(self.duration):
       return "—"
     total = int(self.duration)
     hours, rest = divmod(total, 3600)
@@ -97,7 +108,7 @@ class Track:
 class GuildQueue:
   """Pure queue state -- no Discord calls, so selftest can drive it."""
 
-  tracks: Deque[Track] = field(default_factory=deque)
+  tracks: Deque[Track] = field(default_factory=lambda: deque(maxlen=QUEUE_MAX))
   current: Optional[Track] = None
   loop: bool = False
   volume: float = 1.0
@@ -121,7 +132,7 @@ class GuildQueue:
   def _drop(self, index: int) -> Track:
     items = list(self.tracks)
     removed = items.pop(index)
-    self.tracks = deque(items)
+    self.tracks = deque(items, maxlen=QUEUE_MAX)
     return removed
 
   def clear(self) -> None:
@@ -143,9 +154,22 @@ class MusicEngine:
   def __init__(self, bot: discord.Client):
     self.bot = bot
     self.queues: Dict[int, GuildQueue] = {}
-    self._loop = asyncio.get_event_loop()
+    self._loop: Optional[asyncio.AbstractEventLoop] = None
     self.last_dave: Dict[str, object] = {}
     self._watch_tasks: Dict[int, asyncio.Task] = {}
+    self._locks: Dict[int, asyncio.Lock] = {}
+
+  def _guild_lock(self, guild_id: int) -> asyncio.Lock:
+    lock = self._locks.get(guild_id)
+    if lock is None:
+      lock = asyncio.Lock()
+      self._locks[guild_id] = lock
+    return lock
+
+  def _current_loop(self) -> asyncio.AbstractEventLoop:
+    if self._loop is None:
+      self._loop = asyncio.get_running_loop()
+    return self._loop
 
   # ---- state -------------------------------------------------------------
   def state(self, guild_id: int) -> GuildQueue:
@@ -158,12 +182,18 @@ class MusicEngine:
   # ---- connection --------------------------------------------------------
   async def ensure_connected(self, channel: discord.VoiceChannel) -> discord.VoiceClient:
     """Join (or move to) the member's voice channel using public API only."""
-    voice = channel.guild.voice_client
-    if voice is not None and voice.is_connected():
-      if voice.channel and voice.channel.id != channel.id:
-        await voice.move_to(channel, timeout=20.0)
-      return voice
-    return await channel.connect(timeout=25.0, reconnect=True, self_deaf=True)
+    async with self._guild_lock(channel.guild.id):
+      voice = channel.guild.voice_client
+      if voice is not None and voice.is_connected():
+        if voice.channel and voice.channel.id != channel.id:
+          await voice.move_to(channel, timeout=20.0)
+        return voice
+      if voice is not None:
+        try:
+          await voice.disconnect(force=True)
+        except Exception:
+          pass
+      return await channel.connect(timeout=25.0, reconnect=True, self_deaf=True)
 
   # ---- queue -------------------------------------------------------------
   async def enqueue(self, channel: discord.VoiceChannel, query: str, requester: discord.abc.User) -> Track:
@@ -241,6 +271,9 @@ class MusicEngine:
         logger.debug(f"music-audio watch failed: {type(exc).__name__}: {exc}")
 
     task = asyncio.ensure_future(runner())
+    previous = self._watch_tasks.get(guild.id)
+    if previous is not None and not previous.done():
+      previous.cancel()
     self._watch_tasks[guild.id] = task
 
   # ---- playback ----------------------------------------------------------
@@ -255,11 +288,46 @@ class MusicEngine:
       await self.play_next(guild)
 
     try:
-      asyncio.run_coroutine_threadsafe(runner(), self._loop)
+      fut = asyncio.run_coroutine_threadsafe(runner(), self._current_loop())
+
+      def _done(f):
+        try:
+          exc = f.exception()
+        except Exception:
+          return
+        if exc is not None:
+          logger.warning(f"music-advance failed: {type(exc).__name__}: {exc}")
+
+      fut.add_done_callback(_done)
     except RuntimeError:  # loop already closed during shutdown -- nothing to advance
       pass
 
+  async def _recover_dave(self, guild: discord.Guild, voice: discord.VoiceClient) -> discord.VoiceClient:
+    """One clean reconnect when an encrypted channel left the MLS session unusable."""
+    channel = getattr(voice, "channel", None)
+    try:
+      await voice.disconnect(force=True)
+    except Exception:
+      pass
+    if channel is None:
+      return voice
+    try:
+      fresh = await channel.connect(timeout=20.0, reconnect=True, self_deaf=True)
+    except Exception as exc:  # noqa: BLE001 - playback must degrade, not crash
+      logger.warning(f"music-dave reconnect failed: {type(exc).__name__}: {exc}")
+      return voice
+    try:
+      self.last_dave = await self._wait_for_dave(fresh)
+    except Exception:
+      self.last_dave = {}
+    return fresh
+
   async def play_next(self, guild: discord.Guild) -> Optional[Track]:
+    async with self._guild_lock(guild.id):
+      return await self._play_next_locked(guild)
+
+  async def _play_next_locked(self, guild: discord.Guild) -> Optional[Track]:
+    started = time.monotonic()
     state = self.state(guild.id)
     voice = guild.voice_client
     if voice is None or not voice.is_connected():
@@ -278,9 +346,19 @@ class MusicEngine:
 
     try:
       self.last_dave = await self._wait_for_dave(voice)
+      if self.last_dave.get("ver") and not self.last_dave.get("can_encrypt"):
+        voice = await self._recover_dave(guild, voice)
     except Exception as exc:  # noqa: BLE001 - a diagnostic must never block playback
       logger.debug(f"music-dave probe failed: {type(exc).__name__}: {exc}")
       self.last_dave = {}
+
+    try:
+      await validate_extracted_stream_url(track.stream_url)
+    except PermissionError as exc:
+      logger.warning(f"music-stream blocked: {exc}")
+      self._schedule_advance(guild, delay=0.2)
+      return None
+
     source, counted = self._make_source(track, state.volume)
     try:
       voice.play(source, after=after)
@@ -292,7 +370,8 @@ class MusicEngine:
     logger.info(
         f"music-play guild={guild.id} title={track.title[:60]!r} "
         f"dur={track.duration_text} source={track.source} "
-        f"can_encrypt={self.last_dave.get('can_encrypt')}"
+        f"can_encrypt={self.last_dave.get('can_encrypt')} "
+        f"encode_ms={round((time.monotonic() - started) * 1000, 1)}"
     )
     self._watch_audio(guild, voice, counted, track)
     return track
@@ -304,13 +383,14 @@ class MusicEngine:
     return await self.play_next(guild)
 
   async def skip(self, guild: discord.Guild) -> Optional[Track]:
-    voice = guild.voice_client
-    state = self.state(guild.id)
-    skipped = state.current
-    state.current = None
-    if voice is not None and (voice.is_playing() or voice.is_paused()):
-      voice.stop()  # fires `after` -> play_next
-      return skipped
+    async with self._guild_lock(guild.id):
+      voice = guild.voice_client
+      state = self.state(guild.id)
+      skipped = state.current
+      state.current = None
+      if voice is not None and (voice.is_playing() or voice.is_paused()):
+        voice.stop()  # fires `after` -> play_next
+        return skipped
     return await self.play_next(guild)
 
   async def set_volume(self, guild: discord.Guild, volume: float) -> float:

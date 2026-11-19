@@ -6,17 +6,26 @@ import base64
 import hashlib
 import html as html_lib
 import io
+import json
 import os
 import random
 import re
 import shutil
 import sys
+import tempfile
 import time
 import urllib.parse
 from typing import Any, Dict, List, Optional, Set, Tuple
 from .config import BASE_DIR, FFMPEG_EXE, Image, _safe_gc_collect, logger, yt_dlp
 from .images import _is_safe_public_http_url
-from .net import get_shared_http_session, read_bounded_stream
+from .net import (
+    get_shared_http_session,
+    is_allowed_hostname,
+    read_bounded_stream,
+    safe_fetch_response,
+    safe_fetch_text,
+    validate_ig_shortcode,
+)
 from .downloader import _AUDIO_STREAM_CACHE, _KNOWN_PREVIEW_URLS, run_ytdlp_json
 from .registry import get_bot
 
@@ -37,14 +46,29 @@ _SOCIAL_ALLOWED_HOSTS = (
 
 
 def _allowed_social_host(url: str) -> bool:
+  return is_allowed_hostname(url, _SOCIAL_ALLOWED_HOSTS)
+
+
+_FFMPEG_SEMS: Dict[int, asyncio.Semaphore] = {}
+
+
+def _get_ffmpeg_semaphore(limit: int = 2) -> asyncio.Semaphore:
+  """Loop-scoped semaphore capping concurrent libx264 transcodes."""
+  lid = id(asyncio.get_running_loop())
+  sem = _FFMPEG_SEMS.get(lid)
+  if sem is None:
+    sem = asyncio.Semaphore(limit)
+    _FFMPEG_SEMS[lid] = sem
+  return sem
+
+
+def _create_private_temp_dir(prefix: str = "angelbot_social_") -> str:
+  path = tempfile.mkdtemp(prefix=prefix)
   try:
-    parsed = urllib.parse.urlsplit((url or "").strip())
-  except ValueError:
-    return False
-  if parsed.scheme not in ("http", "https") or not parsed.hostname:
-    return False
-  host = parsed.hostname.rstrip(".").lower()
-  return any(host == allowed or host.endswith("." + allowed) for allowed in _SOCIAL_ALLOWED_HOSTS)
+    os.chmod(path, 0o700)
+  except OSError:
+    pass
+  return path
 
 _TIKWM_LOCK = asyncio.Lock()
 _LAST_TIKWM_CALL_AT: float = 0.0
@@ -92,7 +116,6 @@ async def resolve_social_redirect_and_clean(url: str) -> str:
       flags=re.IGNORECASE,
   )
 
-  timeout = aiohttp.ClientTimeout(total=8)
   headers = {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
       "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -112,31 +135,23 @@ async def resolve_social_redirect_and_clean(url: str) -> str:
       # Redirects are followed one hop at a time and every target is re-validated; following
       # them inside aiohttp would let a public host bounce the request to 127.0.0.1 or the
       # cloud metadata address after the guard has already approved the first URL.
-      for _hop in range(4):
-        if not _is_safe_public_http_url(clean_url):
-          break
-        async with session.get(clean_url, headers=headers, allow_redirects=False, timeout=timeout) as resp:
-          if resp.status in (301, 302, 303, 307, 308):
-            loc = (resp.headers.get("Location") or "").strip()
-            if not loc:
-              break
-            clean_url = urllib.parse.urljoin(clean_url, loc)
-            continue
-          final_u = str(resp.url)
-          # If TikTok redirected to a login wall with ?redirect_url=..., extract the real target URL!
-          if "redirect_url=" in final_u:
-            q_params = urllib.parse.parse_qs(urllib.parse.urlsplit(final_u).query)
-            red_list = q_params.get("redirect_url")
-            if red_list and red_list[0].startswith("http") and _allowed_social_host(red_list[0]):
-              if _is_safe_public_http_url(red_list[0]):
-                final_u = red_list[0]
-          clean_url = final_u
-          break
+      final_u, status, _ctype, _body = await safe_fetch_response(
+          clean_url, max_bytes=256 * 1024, headers=headers, session=session
+      )
+      if status == 200:
+        # If TikTok redirected to a login wall with ?redirect_url=..., extract the real target URL!
+        if "redirect_url=" in final_u:
+          q_params = urllib.parse.parse_qs(urllib.parse.urlsplit(final_u).query)
+          red_list = q_params.get("redirect_url")
+          if red_list and red_list[0].startswith("http") and _allowed_social_host(red_list[0]):
+            if _is_safe_public_http_url(red_list[0]):
+              final_u = red_list[0]
+        clean_url = final_u
     except Exception:
       pass
 
   parsed = urllib.parse.urlsplit(clean_url)
-  if any(d in parsed.netloc.lower() for d in ("instagram.com", "tiktok.com", "x.com", "twitter.com")):
+  if _allowed_social_host(clean_url):
     clean_url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
   return clean_url
 
@@ -241,43 +256,46 @@ async def _ensure_discord_playable_mp4(video_bytes: bytes, max_bytes: int = 10 *
   if not (has_hevc and not has_avc1):
     return video_bytes
 
-  tmp_dir = "/tmp/angelbot_social"
+  tmp_dir = _create_private_temp_dir("angelbot_transcode_")
   try:
-    os.makedirs(tmp_dir, exist_ok=True)
     rnd = f"{os.getpid()}_{random.randint(1000, 9999)}"
     in_p = os.path.join(tmp_dir, f"in_{rnd}.mp4")
     out_p = os.path.join(tmp_dir, f"out_{rnd}.mp4")
-    with open(in_p, "wb") as f:
-      f.write(video_bytes)
-    proc = await asyncio.create_subprocess_exec(
-        FFMPEG_EXE, "-nostdin", "-y", "-loglevel", "error",
-        "-i", in_p,
-        "-c:v", "libx264", "-preset", " ultrafast".strip(), "-crf", "25",
-        "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
-        "-movflags", "+faststart", out_p,
-        stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
-    )
-    try:
-      await asyncio.wait_for(proc.wait(), timeout=14.0)
-    except asyncio.TimeoutError:
-      proc.kill()
-      await proc.wait()
-      raise
-    if os.path.isfile(out_p):
-      sz = os.path.getsize(out_p)
-      if 4096 < sz <= max_bytes:
-        with open(out_p, "rb") as rf:
-          video_bytes = rf.read()
+    async with _get_ffmpeg_semaphore():
+      await asyncio.to_thread(_write_file_sync, in_p, video_bytes)
+      proc = await asyncio.create_subprocess_exec(
+          FFMPEG_EXE, "-nostdin", "-y", "-loglevel", "error",
+          "-i", in_p,
+          "-c:v", "libx264", "-preset", "ultrafast", "-crf", "25",
+          "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
+          "-movflags", "+faststart", out_p,
+          stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+      )
+      try:
+        await asyncio.wait_for(proc.wait(), timeout=14.0)
+      except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        raise
+      if os.path.isfile(out_p):
+        sz = os.path.getsize(out_p)
+        if 4096 < sz <= max_bytes:
+          video_bytes = await asyncio.to_thread(_read_file_sync, out_p)
   except Exception:
     pass
   finally:
-    for p in (locals().get("in_p"), locals().get("out_p")):
-      if p and os.path.exists(p):
-        try:
-          os.remove(p)
-        except Exception:
-          pass
+    await asyncio.to_thread(shutil.rmtree, tmp_dir, True)
   return video_bytes
+
+
+def _write_file_sync(path: str, data: bytes) -> None:
+  with open(path, "wb") as handle:
+    handle.write(data)
+
+
+def _read_file_sync(path: str) -> bytes:
+  with open(path, "rb") as handle:
+    return handle.read()
 
 
 def _decode_snapsave_eval(h: str, u: int, n: str, t: int, e: int) -> str:
@@ -368,7 +386,10 @@ async def _fetch_snapsave_instagram_slides(
       ) as resp:
         if resp.status != 200:
           return []
-        body_txt = await resp.text()
+        body_bytes = await read_bounded_stream(resp, max_bytes=2 * 1024 * 1024)
+        if not body_bytes:
+          return []
+        body_txt = body_bytes.decode("utf-8", "replace")
         decoded_html = body_txt
         eval_m = re.search(
             r'\(\s*"([^"]+)"\s*,\s*(\d+)\s*,\s*"([^"]+)"\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)',
@@ -562,7 +583,8 @@ async def _fetch_ig_embed_and_graphql_slides(
         timeout=aiohttp.ClientTimeout(total=5.5),
     ) as resp:
       if resp.status == 200:
-        html_txt = await resp.text()
+        _html_bytes = await read_bounded_stream(resp, max_bytes=3 * 1024 * 1024)
+        html_txt = _html_bytes.decode("utf-8", "replace") if _html_bytes else ""
 
         # 1A. Parse contextJSON string inside /embed/captioned/ (contains full edge_sidecar_to_children for carousels!)
         ctx_m = re.search(r'"contextJSON"\s*:\s*("(?:\\.|[^"\\])*")', html_txt)
@@ -641,7 +663,8 @@ async def _fetch_ig_embed_and_graphql_slides(
           timeout=aiohttp.ClientTimeout(total=4.5),
       ) as gresp:
         if gresp.status == 200:
-          gdata = await gresp.json(content_type=None)
+          _gql_bytes = await read_bounded_stream(gresp, max_bytes=2 * 1024 * 1024)
+          gdata = json_mod.loads(_gql_bytes.decode("utf-8", "replace")) if _gql_bytes else None
           if isinstance(gdata, dict) and gdata.get("data"):
             _collect_ig_slides_from_json_obj(gdata["data"], slides, seen_urls)
             if slides:
@@ -692,38 +715,38 @@ async def extract_instagram_media_items(
       p_slides: List[Tuple[str, str]] = []
       proxy_url = f"https://{proxy_host}/{'reel' if is_reel_url else 'p'}/{shortcode}/"
       try:
-        async with session.get(
+        final_url, status, ctype, body = await safe_fetch_response(
             proxy_url,
+            allowed_domains=("kkinstagram.com", "instagramez.com", "vxinstagram.com", "ddinstagram.com"),
+            max_bytes=2 * 1024 * 1024,
             headers={"User-Agent": "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)"},
-            allow_redirects=True,
-            timeout=aiohttp.ClientTimeout(total=5.0),
-        ) as presp:
-          if presp.status != 200:
-            return []
-          ctype = (presp.headers.get("Content-Type") or "").lower()
-          if "video/" in ctype or "image/" in ctype:
-            return [("video" if "video/" in ctype else "image", str(presp.url))]
-          phtml = await presp.text()
-          if "Login • Instagram" in phtml or "accounts/login" in str(presp.url) or "Due to a legal request" in phtml:
-            return []
-          for og_vpat in (
-              r'<meta[^>]+property="og:video(?::secure_url)?"[^>]+content="([^"]+)"',
-              r'<meta[^>]+content="([^"]+)"[^>]+property="og:video(?::secure_url)?"',
+            session=session,
+        )
+        if status != 200:
+          return []
+        if "video/" in ctype or "image/" in ctype:
+          return [("video" if "video/" in ctype else "image", final_url)]
+        phtml = (body or b"").decode("utf-8", "replace")
+        if "Login • Instagram" in phtml or "accounts/login" in final_url or "Due to a legal request" in phtml:
+          return []
+        for og_vpat in (
+            r'<meta[^>]+property="og:video(?::secure_url)?"[^>]+content="([^"]+)"',
+            r'<meta[^>]+content="([^"]+)"[^>]+property="og:video(?::secure_url)?"',
+        ):
+          for om in re.finditer(og_vpat, phtml, re.IGNORECASE):
+            vlink = _unescape_ig_url(om.group(1))
+            if vlink.startswith("http") and ("video", vlink) not in p_slides:
+              p_slides.append(("video", vlink))
+        if not is_reel_url:
+          for og_ipat in (
+              r'<meta[^>]+property="og:image"[^>]+content="([^"]+)"',
+              r'<meta[^>]+content="([^"]+)"[^>]+property="og:image"',
           ):
-            for om in re.finditer(og_vpat, phtml, re.IGNORECASE):
-              vlink = _unescape_ig_url(om.group(1))
-              if vlink.startswith("http") and ("video", vlink) not in p_slides:
-                p_slides.append(("video", vlink))
-          if not is_reel_url:
-            for og_ipat in (
-                r'<meta[^>]+property="og:image"[^>]+content="([^"]+)"',
-                r'<meta[^>]+content="([^"]+)"[^>]+property="og:image"',
-            ):
-              for im in re.finditer(og_ipat, phtml, re.IGNORECASE):
-                ilink = _unescape_ig_url(im.group(1))
-                if ilink.startswith("http") and not any(av in ilink for av in ("s150x150", "rsrc.php")):
-                  if ("image", ilink) not in p_slides:
-                    p_slides.append(("image", ilink))
+            for im in re.finditer(og_ipat, phtml, re.IGNORECASE):
+              ilink = _unescape_ig_url(im.group(1))
+              if ilink.startswith("http") and not any(av in ilink for av in ("s150x150", "rsrc.php")):
+                if ("image", ilink) not in p_slides:
+                  p_slides.append(("image", ilink))
       except Exception:
         pass
       return p_slides
@@ -745,36 +768,32 @@ async def extract_instagram_media_items(
   async def _download_slide(idx: int, kind: str, media_u: str) -> Optional[Tuple[int, bytes, str]]:
     async with dl_sem:
       try:
-        async with session.get(
+        _final, status, m_ctype, raw_bytes = await safe_fetch_response(
             media_u,
+            max_bytes=max_bytes,
             headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", "Referer": "https://www.instagram.com/"},
-            allow_redirects=True,
-            timeout=aiohttp.ClientTimeout(total=12.0),
-        ) as mresp:
-          if mresp.status != 200:
+            session=session,
+        )
+        if status != 200 or len(raw_bytes or b"") < 500:
+          return None
+        if "text/html" in m_ctype or "application/json" in m_ctype:
+          return None
+        if kind == "video" or "video/" in m_ctype:
+          if not _is_valid_mp4_video_bytes(raw_bytes, m_ctype):
+            # If a photo slide was mislabeled as video, check if it is actually a valid image
+            if not is_reel_url:
+              norm_img = await _normalize_image_bytes(raw_bytes)
+              if norm_img:
+                return (idx, norm_img, f"ig_{idx}.jpg")
             return None
-          m_ctype = (mresp.headers.get("Content-Type") or "").lower()
-          if "text/html" in m_ctype or "application/json" in m_ctype:
+          clean_vid = await _ensure_discord_playable_mp4(raw_bytes, max_bytes=max_bytes)
+          return (idx, clean_vid, f"ig_{idx}.mp4")
+        else:
+          norm_img = await _normalize_image_bytes(raw_bytes)
+          if not norm_img:
             return None
-          raw_bytes = await read_bounded_stream(mresp, max_bytes=max_bytes, min_bytes=500)
-          if not raw_bytes:
-            return None
-          if kind == "video" or "video/" in m_ctype:
-            if not _is_valid_mp4_video_bytes(raw_bytes, m_ctype):
-              # If a photo slide was mislabeled as video, check if it is actually a valid image
-              if not is_reel_url:
-                norm_img = await _normalize_image_bytes(raw_bytes)
-                if norm_img:
-                  return (idx, norm_img, f"ig_{idx}.jpg")
-              return None
-            clean_vid = await _ensure_discord_playable_mp4(raw_bytes, max_bytes=max_bytes)
-            return (idx, clean_vid, f"ig_{idx}.mp4")
-          else:
-            norm_img = await _normalize_image_bytes(raw_bytes)
-            if not norm_img:
-              return None
-            ext = "png" if norm_img.startswith(b"\x89PNG") else "jpg"
-            return (idx, norm_img, f"ig_{idx}.{ext}")
+          ext = "png" if norm_img.startswith(b"\x89PNG") else "jpg"
+          return (idx, norm_img, f"ig_{idx}.{ext}")
       except Exception:
         return None
 
@@ -950,17 +969,22 @@ async def extract_tiktok_media_items(
           pass
         return None
 
-    # TikTok allows up to 35 photos per post; 15 was dropping slides 16+ silently.
-    # Sending is paginated by chunk_slides (10 attachments per Discord message).
-    urls = img_urls[:35]
+    # Cap slides and total RAM: a 35-photo post buffered in memory can OOM a 1 GB host.
+    urls = img_urls[:10]
     res_list = await asyncio.gather(*(_dl_one_img(i, u) for i, u in enumerate(urls, start=1)), return_exceptions=True)
     got: Dict[int, Tuple[bytes, str]] = {r[0]: (r[1], r[2]) for r in res_list if isinstance(r, tuple) and len(r) == 3}
+    total_bytes = sum(len(b) for b, _ in got.values())
+    for idx in list(got):
+      if total_bytes <= 25 * 1024 * 1024:
+        break
+      total_bytes -= len(got[idx][0])
+      got.pop(idx)
     if requote and len(got) < len(urls):
       # TikTok signs every slide to one CDN node and sometimes refuses the node TikWM
       # quoted (403, same URL forever); a fresh quote re-signs, so retry only the
       # missing slides instead of posting a partial carousel.
       await asyncio.sleep(1.0)
-      fresh = [u for u in (await requote() or []) if isinstance(u, str) and u.startswith("http")][:35]
+      fresh = [u for u in (await requote() or []) if isinstance(u, str) and u.startswith("http")][:10]
       if len(fresh) == len(urls):
         missing = [(i, fresh[i - 1]) for i in range(1, len(urls) + 1) if i not in got]
 
@@ -996,12 +1020,13 @@ async def extract_tiktok_media_items(
           if elapsed < 1.05:
             await asyncio.sleep(1.05 - elapsed)
           _LAST_TIKWM_CALL_AT = time.monotonic()
-          api_url = f"https://www.tikwm.com/api/?url={urllib.parse.quote(resolved_url)}&hd=0"
-          async with session.get(api_url, headers={"User-Agent": "Mozilla/5.0 AngelBot/10.0"}, timeout=aiohttp.ClientTimeout(total=8)) as resp:
-            if resp.status == 200:
-              data = await resp.json(content_type=None)
-              if isinstance(data, dict) and data.get("code") == 0 and isinstance(data.get("data"), dict):
-                return data["data"]
+        api_url = f"https://www.tikwm.com/api/?url={urllib.parse.quote(resolved_url)}&hd=0"
+        async with session.get(api_url, headers={"User-Agent": "Mozilla/5.0 AngelBot/10.0"}, timeout=aiohttp.ClientTimeout(total=8)) as resp:
+          if resp.status == 200:
+            _raw = await read_bounded_stream(resp, max_bytes=2 * 1024 * 1024)
+            data = json.loads(_raw.decode("utf-8", "replace")) if _raw else None
+            if isinstance(data, dict) and data.get("code") == 0 and isinstance(data.get("data"), dict):
+              return data["data"]
         if attempt == 0:
           await asyncio.sleep(1.1)
       except Exception:
@@ -1063,7 +1088,8 @@ async def extract_tiktok_media_items(
     try:
       async with session.get(tikly_ep, headers={"User-Agent": "Mozilla/5.0"}, timeout=aiohttp.ClientTimeout(total=6.5)) as tresp:
         if tresp.status == 200:
-          tdata = await tresp.json(content_type=None)
+          _t_bytes = await read_bounded_stream(tresp, max_bytes=2 * 1024 * 1024)
+          tdata = json.loads(_t_bytes.decode("utf-8", "replace")) if _t_bytes else None
           if isinstance(tdata, dict):
             res_obj = tdata.get("result") if isinstance(tdata.get("result"), dict) else tdata
             t_title = (res_obj.get("title") or res_obj.get("desc") or "").strip()[:180]
@@ -1107,20 +1133,20 @@ async def extract_tiktok_media_items(
   for proxy_dom in ("www.tfxktok.com", "a.tnktok.com", "tnktok.com"):
     proxy_u = re.sub(r"(?:www\.|vm\.|vt\.|m\.|lite\.)?tiktok\.com", proxy_dom, resolved_url, flags=re.IGNORECASE)
     try:
-      async with session.get(
+      _final_p, p_status, p_ct, p_body = await safe_fetch_response(
           proxy_u,
+          allowed_domains=("tfxktok.com", "tnktok.com"),
+          max_bytes=max_bytes,
           headers={"User-Agent": "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)"},
-          allow_redirects=True,
-          timeout=aiohttp.ClientTimeout(total=6.0),
-      ) as presp:
-        if presp.status == 200:
-          p_ct = (presp.headers.get("Content-Type") or "").lower()
+          session=session,
+      )
+      if p_status == 200:
           if "video/" in p_ct:
-            v_bytes = await read_bounded_stream(presp, max_bytes=max_bytes, min_bytes=4096)
+            v_bytes = p_body
             if _is_valid_mp4_video_bytes(v_bytes, p_ct):
               clean_vid = await _ensure_discord_playable_mp4(v_bytes, max_bytes=max_bytes)
               return [(clean_vid, "video.mp4")], None, "🎬 **TikTok**"
-          phtml = await presp.text()
+          phtml = (p_body or b"").decode("utf-8", "replace")
           if "Due to a legal request" in phtml:
             continue
           if not is_photo_url:
@@ -1132,12 +1158,12 @@ async def extract_tiktok_media_items(
               if vm:
                 vu = html_lib.unescape(vm.group(1)).strip()
                 if vu.startswith("http"):
-                  async with session.get(vu, headers={"User-Agent": "Mozilla/5.0"}, timeout=timeout) as dv:
-                    if dv.status == 200:
-                      v_bytes = await read_bounded_stream(dv, max_bytes=max_bytes, min_bytes=4096)
-                      if _is_valid_mp4_video_bytes(v_bytes, dv.headers.get("Content-Type", "")):
-                        clean_vid = await _ensure_discord_playable_mp4(v_bytes, max_bytes=max_bytes)
-                        return [(clean_vid, "video.mp4")], None, "🎬 **TikTok**"
+                  _dv_final, dv_status, dv_ct, v_bytes = await safe_fetch_response(
+                      vu, max_bytes=max_bytes,
+                      headers={"User-Agent": "Mozilla/5.0"}, session=session)
+                  if dv_status == 200 and _is_valid_mp4_video_bytes(v_bytes, dv_ct):
+                    clean_vid = await _ensure_discord_playable_mp4(v_bytes, max_bytes=max_bytes)
+                    return [(clean_vid, "video.mp4")], None, "🎬 **TikTok**"
           # Check og:image tags for TikTok photo posts
           og_imgs: List[str] = []
           for og_ipat in (
@@ -1214,6 +1240,7 @@ async def _download_photo_slides(img_urls: List[str], max_bytes: int, prefix: st
   """
   session = await get_shared_http_session()
   sem = asyncio.Semaphore(4)
+  img_urls = list(img_urls)[:10]
 
   async def _one(idx: int, target: str) -> Optional[Tuple[int, bytes, str]]:
     async with sem:
@@ -1280,7 +1307,8 @@ async def extract_x_media_items(
         timeout=aiohttp.ClientTimeout(total=10),
     ) as resp:
       if resp.status == 200:
-        payload = await resp.json()
+        _x_bytes = await read_bounded_stream(resp, max_bytes=2 * 1024 * 1024)
+        payload = json.loads(_x_bytes.decode("utf-8", "replace")) if _x_bytes else None
         if isinstance(payload, dict) and payload.get("code") == 200 and isinstance(payload.get("tweet"), dict):
           tweet = payload["tweet"]
   except Exception:
@@ -1349,23 +1377,22 @@ async def process_social_media_url_multi(
   resolved_url = await resolve_social_redirect_and_clean(url)
   if not _allowed_social_host(resolved_url) or not _is_safe_public_http_url(resolved_url):
     return [], None, None
-  lower_url = resolved_url.lower()
 
   # 1. TikTok (Videos + Multi-Photo Slideshows)
-  if "tiktok.com" in lower_url:
+  if is_allowed_hostname(resolved_url, ("tiktok.com", "tnktok.com", "tfxktok.com", "vxtiktok.com")):
     return await extract_tiktok_media_items(resolved_url, max_bytes=max_bytes)
 
   # 2. Instagram (Reels + Single & Multi-Photo Carousel Posts)
-  if "instagram.com" in lower_url or "instagr.am" in lower_url:
+  if is_allowed_hostname(resolved_url, ("instagram.com", "instagr.am", "ddinstagram.com")):
     norm_ig = re.sub(r"/reels/", "/reel/", resolved_url, flags=re.IGNORECASE)
     return await extract_instagram_media_items(norm_ig, max_bytes=max_bytes)
 
   # 3. X / Twitter (photos and video files, FxEmbed JSON first, link as the last resort)
-  if ("x.com/" in lower_url or "twitter.com/" in lower_url) and "/status/" in lower_url:
+  if is_allowed_hostname(resolved_url, ("x.com", "twitter.com", "fxtwitter.com", "vxtwitter.com", "fixupx.com")):
     return await extract_x_media_items(resolved_url, max_bytes=max_bytes)
 
   # 4. Reddit
-  if (("reddit.com/" in lower_url and ("/comments/" in lower_url or "/s/" in lower_url)) or "redd.it/" in lower_url):
+  if is_allowed_hostname(resolved_url, ("reddit.com", "redd.it")):
     fixed = re.sub(r"https?://(?:[a-z0-9]+\.)?reddit\.com", "https://rxddit.com", resolved_url, flags=re.IGNORECASE)
     return [], fixed, None
 
@@ -1403,52 +1430,25 @@ def _get_active_audio_stage_files() -> Set[str]:
 
 
 async def perform_full_system_and_bot_update() -> Dict[str, Any]:
-  """
-  Update all system packages (including Ubuntu Phased Updates), Python venv packages (yt-dlp, discord.py, etc.),
-  refresh PackageKit/Cockpit status, and clean up disk garbage.
-  """
-  cmds = [
-      ["sudo", "-n", "dpkg", "--configure", "-a"],
-      ["sudo", "-n", "apt-get", "update", "-y"],
-      ["sudo", "-n", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get",
-       "-o", "APT::Get::Always-Include-Phased-Updates=true",
-       "-o", "Dpkg::Options::=--force-confdef", "-o", "Dpkg::Options::=--force-confold",
-       "full-upgrade", "-y"],
-      ["sudo", "-n", "apt-get", "autoremove", "--purge", "-y"],
-      ["sudo", "-n", "apt-get", "clean"],
-      [sys.executable, "-m", "pip", "install", "--upgrade", "pip", "yt-dlp", "aiohttp", "discord.py", "aiosqlite", "Pillow"],
-      ["sudo", "-n", "systemctl", "restart", "packagekit.service"],
-      ["pkcon", "refresh", "force", "-c", "-1"],
-  ]
-  logs: List[str] = []
-  for argv in cmds:
-    try:
-      # No shell: argv list only, so a value can never become a metacharacter.
-      proc = await asyncio.create_subprocess_exec(
-          *argv,
-          stdout=asyncio.subprocess.PIPE,
-          stderr=asyncio.subprocess.STDOUT,
-      )
-      try:
-        out_b, _ = await asyncio.wait_for(proc.communicate(), timeout=180.0)
-      except asyncio.TimeoutError:
-        # Leaving a half-finished apt run behind can meet a locked or half-configured dpkg later.
-        proc.kill()
-        await proc.wait()
-        logs.append(f"Timeout: {argv[0][:30]} killed after 180s")
-        continue
-      out_t = (out_b or b"").decode("utf-8", errors="ignore").strip()
-      if out_t:
-        logs.append(out_t[-300:])
-    except Exception as exc:
-      logs.append(f"Notice ({argv[0][:30]}): {exc}")
+  """Read-only owner update report. The bot process never escalates to root.
 
+  Package upgrades run from the host (unattended-upgrades or an operator SSH
+  session), not from inside a Discord message handler. Keeping the command
+  registered preserves the command census; it only reports instructions and runs
+  the ordinary storage cleanup.
+  """
   clean_stats = await perform_storage_cleanup(deep=True)
-  reboot_required = os.path.isfile("/var/run/reboot-required")
+  instructions = (
+      "تحديث النظام يتم من السيرفر وليس من البوت (بدون sudo):\n"
+      "1) ssh <user>@<host>\n"
+      "2) sudo unattended-upgrade -d  (أو: sudo apt update && sudo apt full-upgrade -y)\n"
+      "3) python -m pip install -r requirements.txt --upgrade\n"
+      "4) sudo systemctl restart angelbot"
+  )
   return {
-      "logs_tail": "\n".join(logs[-3:])[-900:] if logs else "تم التحديث بنجاح.",
+      "logs_tail": instructions,
       "clean_stats": clean_stats,
-      "reboot_required": reboot_required,
+      "reboot_required": os.path.isfile("/var/run/reboot-required"),
   }
 
 
@@ -1495,16 +1495,22 @@ async def perform_storage_cleanup(deep: bool = True) -> Dict[str, Any]:
           pass
 
   loop = asyncio.get_running_loop()
+  tmp_root = tempfile.gettempdir()
 
   def _sync_disk_sweep():
     nonlocal freed_bytes, deleted_files
-    # 1. Clean AngelBot staging and cache directories
-    _clean_dir_tree("/tmp/angelbot_audio", keep_paths=active_audio_paths, min_age_sec=0.0 if deep else 600.0)
-    _clean_dir_tree("/tmp/angelbot_social", min_age_sec=30.0)
+    # 1. Clean AngelBot staging and cache directories. Reveal only our own prefixes:
+    #    other services share the host temp directory.
+    _clean_dir_tree(os.path.join(tmp_root, "angelbot_audio"),
+                    keep_paths=active_audio_paths, min_age_sec=0.0 if deep else 600.0)
+    for entry in os.listdir(tmp_root):
+      if entry.startswith(("angelbot_social_", "angelbot_transcode_")):
+        _clean_dir_tree(os.path.join(tmp_root, entry), min_age_sec=60.0)
+    _clean_dir_tree(os.path.join(tmp_root, "angelbot_social"), min_age_sec=30.0)
     if deep:
-      _clean_dir_tree("/tmp/angelbot_ytdlp_cache", min_age_sec=0.0)
+      _clean_dir_tree(os.path.join(tmp_root, "angelbot_ytdlp_cache"), min_age_sec=60.0)
     else:
-      _clean_dir_tree("/tmp/angelbot_ytdlp_cache", min_age_sec=3600.0)
+      _clean_dir_tree(os.path.join(tmp_root, "angelbot_ytdlp_cache"), min_age_sec=3600.0)
 
     # 2. Deliberately no sweep of the rest of /tmp: other services share the host,
     #    so matching "tmp*"/"*.mp4" there deleted another process's files mid-flight.
@@ -1551,14 +1557,15 @@ async def perform_storage_cleanup(deep: bool = True) -> Dict[str, Any]:
     for uid in unlocked:
       b.user_locks.pop(uid, None)
 
-  _safe_gc_collect()
+  await loop.run_in_executor(None, _safe_gc_collect)
   if sys.platform.startswith("linux"):
-    try:
-      import ctypes
-      libc = ctypes.CDLL("libc.so.6")
-      libc.malloc_trim(0)
-    except Exception:
-      pass
+    def _trim_heap():
+      try:
+        import ctypes
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+      except Exception:
+        pass
+    await loop.run_in_executor(None, _trim_heap)
 
   # 6. Collect Disk & RAM telemetry
   disk_free_gb = 0.0
