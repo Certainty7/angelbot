@@ -13,10 +13,17 @@ import os
 import re
 import shutil
 import time
+import urllib.parse
 from typing import Any, Dict, List, Optional, Tuple
 
 from .config import BASE_DIR, logger
-from .net import get_ytdlp_semaphore, is_allowed_hostname, is_valid_http_url_syntax, validate_extracted_stream_url
+from .net import (
+    get_ytdlp_semaphore,
+    is_allowed_hostname,
+    is_valid_http_url_syntax,
+    safe_fetch_text,
+    validate_extracted_stream_url,
+)
 from .images import _is_safe_public_http_url
 from .downloader import read_bounded_subprocess_stdout
 
@@ -75,6 +82,67 @@ def clean_reason(text: str) -> str:
   return raw[:180]
 
 
+def _safe_ffmpeg_headers(headers: Any) -> Dict[str, str]:
+    """Only the headers FFmpeg needs for a CDN, never credentials.
+
+    SoundCloud/YouTube CDNs reject the default FFmpeg UA while accepting the
+    browser-like UA yt-dlp used. Cookies/Authorization must not travel to a
+    redirect target, so they are dropped here.
+    """
+    if not isinstance(headers, dict):
+        return {}
+    allowed = {"user-agent", "referer", "origin", "accept-language"}
+    return {
+        str(k): str(v)
+        for k, v in headers.items()
+        if str(k).lower() in allowed and v
+    }
+
+
+_YOUTUBE_HOSTS = frozenset({
+    "youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be",
+})
+
+
+def _is_youtube_url(url: str) -> bool:
+    try:
+        host = (urllib.parse.urlparse(url).hostname or "").lower().rstrip(".")
+    except ValueError:
+        return False
+    return host in _YOUTUBE_HOSTS or host.endswith(".youtube.com")
+
+
+def _youtube_oembed_url(url: str) -> str:
+    """Public metadata endpoint (no cookies): title for a SoundCloud fallback."""
+    return "https://www.youtube.com/oembed?" + urllib.parse.urlencode({"url": url, "format": "json"})
+
+
+async def _youtube_oembed_title(url: str) -> str:
+    """Best-effort title for a YouTube URL that yt-dlp could not extract.
+
+    The public oEmbed endpoint is not behind the bot check. If it answers, the
+    caller can search SoundCloud for the same song and play that instead of
+    failing the request with a raw `yt-dlp exit 1`.
+    """
+    try:
+        _final, status, text = await safe_fetch_text(
+            _youtube_oembed_url(url),
+            allowed_domains=("youtube.com",),
+            max_bytes=64 * 1024,
+            headers={"User-Agent": "AngelBot/10"},
+        )
+    except Exception:
+        return ""
+    if status != 200:
+        return ""
+    try:
+        data = json.loads(text)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return ""
+    title = data.get("title") if isinstance(data, dict) else ""
+    return str(title or "").strip()[:200]
+
+
 def parse_info(payload: str) -> Dict[str, Any]:
   """Turn one `yt-dlp -j` document into the fields the player needs (pure)."""
   data = json.loads(payload)
@@ -98,6 +166,7 @@ def parse_info(payload: str) -> Dict[str, Any]:
       "duration": float(data.get("duration") or 0),
       "ext": data.get("ext") or "",
       "uploader": data.get("uploader") or data.get("channel") or "",
+      "http_headers": _safe_ffmpeg_headers(data.get("http_headers")),
   }
 
 
@@ -164,7 +233,11 @@ async def resolve(query: str, *, timeout: float = DEFAULT_TIMEOUT) -> Dict[str, 
       errors.append(f"{label}: no usable result")
       continue
     except ResolveError as exc:
-      errors.append(f"{label}: {exc}")
+      msg = str(exc)
+      if is_url(text) and ("youtube.com" in text or "youtu.be" in text) and "exit" in msg:
+        # The raw exit code sends the user hunting; name the two required pieces.
+        msg = "YouTube يحتاج cookies صالحة وDeno 2.9+ (YOUTUBE_COOKIES_FILE ثم أعد المحاولة)"
+      errors.append(f"{label}: {msg}")
       continue
 
     if info["duration"] > MAX_DURATION:
@@ -176,6 +249,21 @@ async def resolve(query: str, *, timeout: float = DEFAULT_TIMEOUT) -> Dict[str, 
         f"music-resolve ok source={label} dur={info['duration']:.0f}s title={info['title'][:60]!r}"
     )
     return info
+
+  # YouTube's extractor needs cookies + a JS runtime. When that fails, the public
+  # oEmbed title still lets us play the same song from SoundCloud instead of
+  # returning a raw `yt-dlp exit 1` to the user.
+  if is_url(text) and _is_youtube_url(text):
+    title = await _youtube_oembed_title(text)
+    if title:
+      try:
+        info = await _resolve_target(f"scsearch1:{title}", timeout)
+        info["source"] = "SoundCloud"
+        info["search_title"] = title
+        logger.info(f"music-resolve youtube-fallback title={title[:60]!r}")
+        return info
+      except ResolveError as exc:
+        errors.append(f"SoundCloud (YouTube title): {exc}")
 
   raise ResolveError(" · ".join(errors) or "not found")
 
@@ -330,6 +418,12 @@ def _cache_put(key: str, info: Dict[str, Any]) -> None:
     oldest = min(_CACHE, key=lambda k: _CACHE[k][0])
     _CACHE.pop(oldest, None)
   _CACHE[key] = (time.monotonic(), dict(info))
+
+
+def invalidate_cache(query: str) -> None:
+  """Drop one resolved stream URL so the next /play extracts a fresh signed URL."""
+  key = f"{strip_command_words(query).lower()}|{YOUTUBE_ENABLED}"
+  _CACHE.pop(key, None)
 
 
 async def _collect_source(label: str, source: str, search_text: str, limit: int,
