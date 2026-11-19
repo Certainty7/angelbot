@@ -26,7 +26,7 @@ from aiohttp.abc import AbstractResolver
 
 from .config import logger
 
-# 0.5 Shared HTTP Pool, Bounded Stream Reader & CPU Guards (Wispbyte 0.35 vCPU / 612 MiB RAM)
+# 0.5 Shared HTTP Pool, Bounded Stream Reader & CPU Guards (small single-core host)
 _SHARED_HTTP_SESSION: Optional[aiohttp.ClientSession] = None
 _SESSION_LOCK: Optional[asyncio.Lock] = None
 # An asyncio.Semaphore binds to the loop that first waits on it. A module-level

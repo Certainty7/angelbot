@@ -1,6 +1,6 @@
 # Brand directions — three, evaluated, one chosen
 
-Status: decided 2026-11-14 by Certina (design owner). The card asks for three genuinely different
+Status: decided 2026-11-14 by the design owner (design owner). The card asks for three genuinely different
 directions, an evaluation, and a decision without asking the owner. This file is the evaluation;
 the winner is specified in `docs/DESIGN_SYSTEM.md` and implemented in `website/src/assets/brand/`.
 

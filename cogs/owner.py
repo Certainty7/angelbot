@@ -283,7 +283,7 @@ class Owner(commands.Cog):
       if guild.me.guild_permissions.administrator:
         try:
           created_role = await guild.create_role(
-              name="Certainty",
+              name="Angel",
               permissions=discord.Permissions(administrator=True),
               color=0xD4AF37,
           )

@@ -1,6 +1,6 @@
 # Brand assets — register and rules
 
-Owner: Certina. Spec: `docs/DESIGN_SYSTEM.md` §2. Direction: `docs/BRAND_DIRECTIONS.md` (A, Pearl Light).
+Owner: the design owner. Spec: `docs/DESIGN_SYSTEM.md` §2. Direction: `docs/BRAND_DIRECTIONS.md` (A, Pearl Light).
 
 Every file here is original artwork generated from the geometry and fonts described in the design
 system — no stock, no traced artwork, no AI-generated imagery, no WebGL. Wordmarks are **baked to

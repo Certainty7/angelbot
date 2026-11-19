@@ -12,6 +12,23 @@ import sys
 from typing import Any, Dict, List, Optional, Set, Tuple
 from .registry import get_bot
 
+
+def _resolve_timezone(name: str):
+  try:
+    from zoneinfo import ZoneInfo
+    return ZoneInfo(name)
+  except Exception:
+    from datetime import timezone
+    return timezone.utc
+
+
+# All time-based behaviour (quiet hours, greetings, daily budget) follows this IANA zone.
+# The default is deliberately generic; a deployment sets ANGEL_TIMEZONE in its private .env.
+ANGEL_TIMEZONE = (os.getenv("ANGEL_TIMEZONE") or "UTC").strip() or "UTC"
+ANGEL_TZ = _resolve_timezone(ANGEL_TIMEZONE)
+if getattr(ANGEL_TZ, "key", "") != ANGEL_TIMEZONE:
+  ANGEL_TIMEZONE = "UTC"
+
 # Auto-Bootstrap Required Packages
 def _ensure_dependencies():
   required = [
@@ -121,13 +138,18 @@ GEMINI_API_KEYS = [k for k in (GEMINI_API_KEY_SECONDARY, GEMINI_API_KEY) if k]
 RAW_ENV_MODEL = (os.getenv("GEMINI_MODEL") or "gemini-3-flash-preview").strip()
 
 # Sovereign owner identification. The owner id lives in the environment only:
-# MALAK_OWNER_ID (the name the systemd EnvironmentFile uses), with MISTRESS_USER_ID kept as
-# an alias for older tooling. No id is baked into the source: a typo must fail loudly here
-# instead of silently locking the owner out of her own bot.
-MISTRESS_USER_ID = (os.getenv("MALAK_OWNER_ID") or os.getenv("MISTRESS_USER_ID") or "").strip()
+# ANGEL_OWNER_ID (the name the systemd EnvironmentFile uses), with legacy MALAK_OWNER_ID and
+# MISTRESS_USER_ID kept as aliases for older deployments. No id is baked into the source: a typo
+# must fail loudly here instead of silently locking the owner out of her own bot.
+MISTRESS_USER_ID = (
+    os.getenv("ANGEL_OWNER_ID")
+    or os.getenv("MALAK_OWNER_ID")
+    or os.getenv("MISTRESS_USER_ID")
+    or ""
+).strip()
 if not MISTRESS_USER_ID.isdigit():
   raise RuntimeError(
-      "MALAK_OWNER_ID is missing or not a numeric Discord user id — refusing to start with an "
+      "ANGEL_OWNER_ID is missing or not a numeric Discord user id — refusing to start with an "
       "undefined owner (a silent owner lockout is worse than a failed boot)."
   )
 MISTRESS_INT_ID = int(MISTRESS_USER_ID)

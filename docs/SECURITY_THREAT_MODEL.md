@@ -13,9 +13,9 @@ to a static site that has no authentication, no forms, and no state.
 | Discord bot token | `angelbot/.env` on the bot host, never in git | full control of the bot identity |
 | Message archive (`chat_history.db`) | bot host, gitignored | member messages, names, ids |
 | Pinned memory (`user_preferences.pinned_facts`, `angel/memory.py`) | member-written, host only | only what the member typed into `/memory pin` |
-| AI provider keys (OpenRouter/others) | bot host `.env` | cost and abuse |
-| Git push rights | `GITHUB_TOKEN` on the agent host | can rewrite the product |
-| Cloudflare account | token held on the agent host, never in git | DNS and hosting control |
+| AI provider keys | host `.env` | cost and abuse |
+| Git push rights | scoped token outside git | can rewrite the product |
+| Hosting account | token held outside git | DNS and hosting control |
 | Deploy pipeline | `.github/workflows/*` | code that runs with repo access |
 | Published website | CDN, public | brand and factual accuracy |
 | Owner identity and persona notes | bot host, private | privacy of the owner |
@@ -28,7 +28,7 @@ Internet ──▶ Discord gateway ──▶ bot process ──▶ SQLite (host)
    │                                   └──▶ outbound: AI APIs, media sources, yt-dlp
    └──▶ CDN (static site)  ── no callback into any origin server
 
-GitHub ──▶ Actions runner ──▶ build artifact ──▶ Cloudflare Pages
+GitHub ──▶ Actions runner ──▶ build artifact ──▶ static host
                                   ▲
                           generator reads bot source (never the reverse)
 ```
@@ -50,7 +50,7 @@ server-side processing is the build.
 | T-07 | Member data published by mistake | the site publishes no member names, ids, message content or counts; `website/src/data/*.json` is generated from command metadata only | `website/src/data/*.json` scan, `tools/website-data-generator/` |
 | T-08 | Privilege escalation inside a guild through role commands | permission re-checked at execution; owner-only commands marked as such in the catalogue copy | `cogs/admin.py`, `descriptions_ar.json` («للمالكة فقط») |
 | T-09 | Denial of service by resource exhaustion on a small VM | the unit caps memory and CPU, and `tools/selftest.py` runs as a deploy gate before restart | `deploy/angelbot.service` |
-| T-10 | Malicious content served from the CDN | Cloudflare Pages applies `website/public/_headers`: CSP with `frame-ancestors 'none'`, HSTS, `nosniff`, COOP and Permissions-Policy; self-hosted fonts and assets, no third-party scripts | `website/public/_headers`, `docs/WEBSITE_SECURITY.md` |
+| T-10 | Malicious content served from the CDN | the static host applies `website/public/_headers`: CSP with `frame-ancestors 'none'`, HSTS, `nosniff`, COOP and Permissions-Policy; self-hosted fonts and assets, no third-party scripts | `website/public/_headers`, `docs/WEBSITE_SECURITY.md` |
 
 ## 4. Out of scope
 

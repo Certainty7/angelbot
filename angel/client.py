@@ -317,7 +317,7 @@ class AngelDiscordBot(commands.Bot):
     await self.change_presence(
         activity=discord.Activity(
             type=discord.ActivityType.watching,
-            name="Certainty 🪽",
+            name="Angel 🪽",
         )
     )
     logger.info(

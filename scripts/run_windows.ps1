@@ -35,7 +35,7 @@ if (-not (Test-Path ".venv\Scripts\python.exe")) {
 
 if (-not (Test-Path ".env")) {
     Copy-Item ".env.example" ".env"
-    Write-Host "Created .env from .env.example. Fill in DISCORD_TOKEN, MALAK_OWNER_ID, GEMINI_API_KEY and re-run." -ForegroundColor Yellow
+    Write-Host "Created .env from .env.example. Fill in DISCORD_TOKEN, ANGEL_OWNER_ID, GEMINI_API_KEY and re-run." -ForegroundColor Yellow
     notepad ".env"
     exit 0
 }

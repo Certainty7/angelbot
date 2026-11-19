@@ -35,7 +35,7 @@ is a deliberate deviation, not an oversight — "simplifying" it back breaks ins
 - The dependency audit is a release gate: `npm audit --omit=dev` must report no high or critical
   finding before production. This line stays unchecked until the site's lockfile is final.
 
-## Portal — `aetherisnode-home`
+## Portal (private repository)
 
 **Zero dependencies.** `package.json` declares no `dependencies` and no `devDependencies`; the build is
 `node scripts/build.mjs` with the Node standard library. There is no lockfile to audit and no

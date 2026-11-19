@@ -41,21 +41,22 @@ os.environ.setdefault("ANGEL_DB_PATH", TMP_DB)
 # (not setdefault): under systemd the EnvironmentFile already carries the production admin ids,
 # and inheriting them made `context-acl` fail on the real deploy path. A false negative in a
 # startup gate is an outage, so the test owns its own ids.
-os.environ["MALAK_ADMIN_ROLE_IDS"] = "555"
-os.environ["MALAK_ADMIN_CHANNEL_IDS"] = "999"
+os.environ["ANGEL_ADMIN_ROLE_IDS"] = "555"
+os.environ["ANGEL_ADMIN_CHANNEL_IDS"] = "999"
 # The owner id is environment-only now, so the test must use the real declared id
 # (falling back to an obvious placeholder on a clean checkout without .env).
 def _declared_owner_id() -> str:
     try:
         from dotenv import dotenv_values
 
-        value = (dotenv_values(os.path.join(ROOT, ".env")).get("MALAK_OWNER_ID") or "").strip()
+        values = dotenv_values(os.path.join(ROOT, ".env"))
+        value = (values.get("ANGEL_OWNER_ID") or values.get("MALAK_OWNER_ID") or "").strip()
         return value if value.isdigit() else "42"
     except Exception:  # noqa: BLE001 - a missing .env is not a test failure by itself
         return "42"
 
 
-os.environ.setdefault("MALAK_OWNER_ID", _declared_owner_id())
+os.environ.setdefault("ANGEL_OWNER_ID", _declared_owner_id())
 
 EXPECTED_COMMANDS = 67
 results = []
@@ -431,10 +432,11 @@ def _owner_identity():
     from dotenv import dotenv_values
 
     cfg = importlib.import_module("angel.config")
-    declared = (os.getenv("MALAK_OWNER_ID") or dotenv_values(os.path.join(ROOT, ".env")).get("MALAK_OWNER_ID") or "").strip()
-    assert declared.isdigit(), "MALAK_OWNER_ID missing or non-numeric"
+    values = dotenv_values(os.path.join(ROOT, ".env"))
+    declared = (os.getenv("ANGEL_OWNER_ID") or values.get("ANGEL_OWNER_ID") or values.get("MALAK_OWNER_ID") or "").strip()
+    assert declared.isdigit(), "ANGEL_OWNER_ID missing or non-numeric"
     owner = int(declared)  # read at runtime; the id is never written in this file
-    assert cfg.MISTRESS_INT_ID == owner, "config owner id drifted from MALAK_OWNER_ID"
+    assert cfg.MISTRESS_INT_ID == owner, "config owner id drifted from ANGEL_OWNER_ID"
     assert owner in cfg._ALLOWED_OWNER_IDS, "_ALLOWED_OWNER_IDS lost the owner"
     if cfg.MISTRESS_USER_ID.isdigit():
         assert int(cfg.MISTRESS_USER_ID) in cfg._ALLOWED_OWNER_IDS, "env override not wired into _ALLOWED_OWNER_IDS"
@@ -458,8 +460,8 @@ def _owner_gates():
         assert cfg.check_staff_action_permission(_User(owner), None, action) is True, f"owner lost {action}"
     assert cfg.check_staff_action_permission(_User(owner + 7919), None, "BAN") is False, "stranger got staff rights"
 
-    # context_acl reads its own owner id from MALAK_OWNER_ID at import time
-    assert acl.OWNER_ID, "context_acl.OWNER_ID unset (MALAK_OWNER_ID not read)"
+    # context_acl reads its own owner id from ANGEL_OWNER_ID at import time
+    assert acl.OWNER_ID, "context_acl.OWNER_ID unset (ANGEL_OWNER_ID not read)"
     plain = SimpleNamespace(id=acl.OWNER_ID, roles=[], guild_permissions=SimpleNamespace(administrator=False))
     outsider = SimpleNamespace(id=acl.OWNER_ID + 7919, roles=[], guild_permissions=SimpleNamespace(administrator=False))
     assert acl.is_admin_member(plain) is True, "context_acl owner branch is gone"

@@ -119,7 +119,7 @@ point where Discord performs it.
 - Rollback: `git reset --hard rollback-pre-policy` on the host and restart; the database snapshot
   above restores the pre-change rows.
 
-`angel.aetherisnode.cloud` is served by Cloudflare Pages project `angel-site`, built directly
+`angel.aetherisnode.cloud` is served by a managed static host, built directly
 from `Certainty7/angelbot` on every push to `master`; the apex and `www` are served by the
-`aetheris-node` Worker. The old `angel-web` publish repository and its GitHub Pages origin were
+operator's edge site. The legacy publish repository and its GitHub Pages origin were
 removed on 2026-11-19.

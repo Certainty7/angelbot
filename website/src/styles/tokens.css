@@ -1,7 +1,7 @@
 /* ============================================================================
    ANGEL — Design Tokens (SINGLE SOURCE OF TRUTH)
    Direction: PEARL LIGHT (light) · ROSE NIGHT (dark)
-   Authored by Certina. Spec: docs/DESIGN_SYSTEM.md. Assets: src/assets/brand/.
+   Authored by the design owner. Spec: docs/DESIGN_SYSTEM.md. Assets: src/assets/brand/.
 
    Components never hardcode a colour, size, duration or easing: they read tokens.
    If a value is missing, ask — do not approximate.

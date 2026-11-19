@@ -6,6 +6,56 @@
   ],
   "releases": [
     {
+      "version": "1.0.4",
+      "date": "2026-11-19",
+      "summary": {
+        "en": "Privacy and public-repository hygiene pass.",
+        "ar": "جولة خصوصية ونظافة للمستودع العام."
+      },
+      "sections": [
+        {
+          "title": {
+            "en": "Privacy",
+            "ar": "الخصوصية"
+          },
+          "items": [
+            {
+              "en": "Removed personal and operator-specific details from the public tree: display names, the location-specific default timezone, hosting provider and exact host specifications, internal project and DNS names, and legacy publish-repository references.",
+              "ar": "أُزيلت التفاصيل الشخصية والتشغيلية من الشجرة العامة: الأسماء الظاهرة، والمنطقة الزمنية الافتراضية المرتبطة بموقع، ومزوّد الاستضافة ومواصفات الخادم الدقيقة، وأسماء المشاريع والـ DNS الداخلية، ومراجع مستودع النشر القديم."
+            },
+            {
+              "en": "Added `ANGEL_TIMEZONE` (IANA name, default `UTC`). Quiet hours, greetings and the daily budget follow it. `ANGEL_OWNER_ID` is the documented owner variable; legacy environment names are still read for compatibility so an existing host does not break on upgrade.",
+              "ar": "أُضيف `ANGEL_TIMEZONE` (اسم IANA، الافتراضي `UTC`)، وتتبعه ساعات الهدوء والتحيات والميزانية اليومية. و`ANGEL_OWNER_ID` هو متغير المالك الموثّق؛ وتُقرأ الأسماء القديمة للتوافق حتى لا تتعطل الاستضافة القائمة عند الترقية."
+            },
+            {
+              "en": "The bot presence and the generated owner role use `Angel`; `LICENSE` names the project contributors. The dead publish-check script was removed.",
+              "ar": "حضور البوت والرتبة المولّدة يستخدمان `Angel`، ورخصة `LICENSE` باسم مساهمي المشروع. وحُذف سكربت فحص النشر الميت."
+            },
+            {
+              "en": "`CONTRIBUTING.md` now requires placeholders for personal IDs, hostnames, account/project IDs, DNS records, exact host specifications and locations.",
+              "ar": "يفرض `CONTRIBUTING.md` الآن استخدام قيم بديلة للمعارف الشخصية وأسماء المضيفين ومعرّفات الحسابات والمشاريع وسجلات DNS ومواصفات الخادم الدقيقة والمواقع."
+            }
+          ]
+        },
+        {
+          "title": {
+            "en": "Operations",
+            "ar": "التشغيل"
+          },
+          "items": [
+            {
+              "en": "The static host's path filter was corrected so every push to `master` deploys; the next push was used to verify the automatic build. Account, project and DNS settings stay in private operator notes.",
+              "ar": "صُحح مرشّح مسارات الاستضافة الساكنة بحيث يُنشر كل دفع إلى `master`؛ واستُخدم الدفع التالي للتحقق من البناء التلقائي. تبقى إعدادات الحساب والمشروع وDNS في ملاحظات المشغّل الخاصة."
+            },
+            {
+              "en": "`website/` package name is now `angel-website`.",
+              "ar": "اسم حزمة `website/` أصبح `angel-website`."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.0.3",
       "date": "2026-11-19",
       "summary": {

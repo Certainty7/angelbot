@@ -1,6 +1,6 @@
 # Angel design system — Pearl Light / Roseglass
 
-Owner: **Certina**. Direction decided in `docs/BRAND_DIRECTIONS.md` (option A, with B's editorial
+Owner: **the design owner**. Direction decided in `docs/BRAND_DIRECTIONS.md` (option A, with B's editorial
 discipline and C's optics subordinated). Implemented as tokens in `website/src/styles/tokens.css`
 and assets in `website/src/assets/brand/`. Consumers: every Astro page and component.
 
@@ -390,7 +390,7 @@ any motion. The site must look composed with motion off, not merely frozen mid-t
 ## 11. Handoff — what the implementation consumes
 
 **Use:**
-- `website/src/styles/tokens.css` — imported first, values owned by Certina. Do not edit values; add
+- `website/src/styles/tokens.css` — imported first, values owned by the design owner. Do not edit values; add
   component-scoped custom properties in a separate file if needed.
 - `website/public/fonts/*` + the `@font-face` block already in `base.css`.
 - `website/src/assets/brand/*` — imported so Astro fingerprints them, or referenced from `public/` if a

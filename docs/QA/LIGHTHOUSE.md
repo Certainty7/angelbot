@@ -22,11 +22,11 @@ Raw reports: `prod-home-1..3`, `prod-en`, `prod-commands`, `prod-portal` in this
 
 This host sets no long-lived cache headers (`cache-control: max-age=600` for every asset) and no
 `HSTS`, so the numbers are a floor for this provider, not the site's ceiling. The cached/CDN path on
-Cloudflare is expected to be equal or better; it is not claimed here because it has not been measured.
+The static host is expected to be equal or better; it is not claimed here because it has not been measured.
 
 ## Local, 2026-11-14 — the shared build host
 
-Measured against `astro preview` serving `website/dist` — the same build Cloudflare Pages publishes —
+Measured against `astro preview` serving `website/dist` — the same build the static host publishes —
 on a **shared build host under load**. Three consecutive runs per page
 on one identical build; the table reports the median and the spread, because the spread here is
 larger than the distance between a pass and a miss.

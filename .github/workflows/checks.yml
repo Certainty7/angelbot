@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 20
     env:
       # Fixture owner id: the self-test must never read a real one.
-      MALAK_OWNER_ID: "42"
+      ANGEL_OWNER_ID: "42"
       PYTHONPATH: "."
     steps:
       # actions/checkout v4.4.0

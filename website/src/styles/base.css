@@ -2,7 +2,7 @@
    ANGEL — base layer
    Fonts, reset, typographic primitives and the component seeds named in
    docs/DESIGN_SYSTEM.md §9. Values come from tokens.css only.
-   Owner: Certina. Consumers: every page and component.
+   Owner: the design owner. Consumers: every page and component.
    ========================================================================== */
 
 /* ------------------------------------------------------------------- fonts

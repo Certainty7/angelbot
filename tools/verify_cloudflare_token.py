@@ -60,13 +60,16 @@ def authorised(status: int) -> bool:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--zone", default="aetherisnode.cloud")
+    ap.add_argument("--zone", default=os.getenv("CLOUDFLARE_ZONE", ""), help="zone name; or set CLOUDFLARE_ZONE")
     ap.add_argument("--account", default=None, help="defaults to the only account on the token")
     args = ap.parse_args()
 
     token = os.environ.get("CLOUDFLARE_API_TOKEN", "").strip()
     if not token:
         print("FATAL: CLOUDFLARE_API_TOKEN is not in the environment.", file=sys.stderr)
+        return 2
+    if not args.zone:
+        print("FATAL: pass --zone or set CLOUDFLARE_ZONE.", file=sys.stderr)
         return 2
 
     rows: list[tuple[str, bool, str]] = []

@@ -2,9 +2,9 @@
 
 Last verified: **2026-11-19** against `https://angel.aetherisnode.cloud`.
 
-The Angel site is served by **Cloudflare Pages** (project `angel-site`) from this
-repository's `master` branch. The previous GitHub Pages origin applied no custom
-response headers; that limitation no longer applies.
+The Angel site is served by a **managed static host** from this repository's `master`
+branch. The previous GitHub Pages origin applied no custom response headers; that limitation
+no longer applies.
 
 ## 1. Measured response headers
 
@@ -22,14 +22,13 @@ response headers; that limitation no longer applies.
 
 Caching: `_astro/*` is `public, max-age=31536000, immutable`; HTML is
 `max-age=0, must-revalidate`. The source of these rules is `website/public/_headers`,
-which Cloudflare Pages honours.
+which the static host honours.
 
 ## 2. What is enforced
 
 - **CSP** is a real response header now, so `frame-ancestors` and
   `upgrade-insecure-requests` are enforced (a `<meta>` CSP cannot express them).
-- **TLS**: Cloudflare Pages certificate for `angel.aetherisnode.cloud`, HTTP redirected to
-  HTTPS. The zone also sets Always Use HTTPS.
+- **TLS**: host-managed certificate for the public domain, HTTP redirected to HTTPS.
 - **No state, no tracking**: no cookies, no analytics, no third-party requests. The only
   client storage is the theme preference in `localStorage`.
 - **No secrets in the published bytes**: the build script fails on `.env*`, `*.pem`,
@@ -42,7 +41,7 @@ which Cloudflare Pages honours.
 | Risk | Impact | Mitigation |
 |---|---|---|
 | Public static content can be mirrored | None beyond what is already public | Content is marketing copy; no member data |
-| Cloudflare account compromise | Site defacement | Account-level 2FA and scoped tokens (owner action) |
+| Hosting account compromise | Site defacement | Account-level 2FA and scoped tokens (owner action) |
 | The `_headers` file is only as good as the host | If the site moves back to GitHub Pages, headers silently disappear | `docs/WEBSITE_DEPLOYMENT.md` records the current host and verification command |
 
 ## 4. Verification

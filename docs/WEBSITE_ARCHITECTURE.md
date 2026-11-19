@@ -13,7 +13,7 @@ bot source (cogs/, bot.py, angel/client.py)
 website/src/data/commands.json  invite.json  changelog.json  site.json
         │  Astro build
         ▼
-website/dist  →  Cloudflare Pages  →  angel.aetherisnode.cloud
+website/dist  →  static host  →  public domain
 ```
 
 ## Command discovery
@@ -51,7 +51,7 @@ runtime `has_perm_or_mistress` gate), and whether the handler refuses everyone b
 commands); both are true. Source files scanned: 15 (`cogs/*.py`).
 
 The generator's output is compared against `tests/website/fixtures/runtime_census.json`, which was
-captured by importing every cog's `install()` against a stub command tree on the production host:
+captured by importing every cog's `install()` against a stub command tree on the live tree:
 that is the object Discord receives, not an interpretation of the source. Any disagreement between
 the AST result and the runtime census fails the test.
 

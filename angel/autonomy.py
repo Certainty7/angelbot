@@ -9,18 +9,18 @@ import asyncio
 import os
 import random
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Dict, List, Optional
 
 from . import evolution, guard, memory, scoring
 from .cache import BoundedDict
-from .config import logger
-from .persona import _oman_hour_hint
+from .config import ANGEL_TZ, logger
+from .persona import _local_hour_hint
 from .registry import get_bot
 
 
-QUIET_START = int(os.getenv("AUTONOMY_QUIET_START", "2"))       # owner's timezone (UTC+4)
-QUIET_END = int(os.getenv("AUTONOMY_QUIET_END", "10"))          # owner's timezone (UTC+4)
+QUIET_START = int(os.getenv("AUTONOMY_QUIET_START", "2"))       # configured timezone
+QUIET_END = int(os.getenv("AUTONOMY_QUIET_END", "10"))          # configured timezone
 MIN_GAP_CHANNEL = float(os.getenv("AUTONOMY_MIN_GAP_CHANNEL", "1200"))   # 20 min per channel
 MIN_GAP_TARGET = float(os.getenv("AUTONOMY_MIN_GAP_TARGET", "21600"))    # 6 h per member
 MAX_PER_HOUR = int(os.getenv("AUTONOMY_MAX_PER_HOUR", "4"))
@@ -38,8 +38,8 @@ PATTERN_HINTS = {
 }
 
 
-def _oman_now() -> datetime:
-  return datetime.now(timezone.utc) + timedelta(hours=4)
+def _local_now() -> datetime:
+  return datetime.now(ANGEL_TZ)
 
 
 class AutonomyEngine:
@@ -50,20 +50,20 @@ class AutonomyEngine:
     self.last_target: Dict[int, float] = BoundedDict(5000)
     self.sent_times: List[float] = []
     self.daily_count = 0
-    self.day = _oman_now().strftime("%Y-%m-%d")
+    self.day = _local_now().strftime("%Y-%m-%d")
     self._running = False
     self._tick_lock: Optional[asyncio.Lock] = None
 
   # ---------- limits ----------
   def _roll_day(self):
-    today = _oman_now().strftime("%Y-%m-%d")
+    today = _local_now().strftime("%Y-%m-%d")
     if today != self.day:
       self.day = today
       self.daily_count = 0
       self.sent_times.clear()
 
   def in_quiet_hours(self) -> bool:
-    hour = _oman_now().hour
+    hour = _local_now().hour
     if QUIET_START <= QUIET_END:
       return QUIET_START <= hour < QUIET_END
     return hour >= QUIET_START or hour < QUIET_END
@@ -214,7 +214,7 @@ class AutonomyEngine:
             recent_lines=recent_lines,
             facts=facts,
             avoid_lines=avoid,
-            time_hint=_oman_hour_hint(),
+            time_hint=_local_hour_hint(),
             topic_hint=PATTERN_HINTS.get(pattern, ""),
         )
         if not text:
