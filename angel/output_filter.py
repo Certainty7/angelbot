@@ -37,8 +37,17 @@ _SECRETS = (
     re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{30,}\b"),
     re.compile(r"\bgithub_pat_[A-Za-z0-9_]{30,}\b"),
     re.compile(r"(?i)\bBearer\s+[A-Za-z0-9\-._~+/]+=*"),
-    # KEY=value lines pasted from a .env file.
-    re.compile(r"(?i)\b[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_?KEY)\s*=\s*\S+"),
+    # KEY=value lines pasted from a .env file. The prefix is bounded so a
+    # long token-shaped run cannot trigger quadratic backtracking.
+    re.compile(r"(?i)\b[A-Z0-9_]{0,40}(?:TOKEN|SECRET|PASSWORD|API_?KEY)\s*=\s*\S+"),
+)
+
+_TAGS_OPEN = re.compile(
+    r"\[\s*(?:EXEC|BAN|KICK|TIMEOUT|UNTIMEOUT|PURGE|UNBAN|DELETE_CHANNEL|LOCK|UNLOCK|"
+    r"HIDE|UNHIDE|SLOWMODE|ADD_ROLE|REMOVE_ROLE|CREATE_ROLE|NICKNAME|SET_TOPIC|"
+    r"CREATE_TEXT|CREATE_VOICE|CLONE_CHANNEL|RENAME_CHANNEL|SET_MODLOG|GUARD_MODE|PIN_FACT)"
+    r"\b[^\]]*$",
+    re.IGNORECASE | re.MULTILINE,
 )
 
 _TAGS = re.compile(
@@ -87,6 +96,11 @@ def filter_outgoing(text: str, action_status: str = "none") -> str:
   if replaced != out:
     out = replaced
     reasons.append("control-tag")
+
+  replaced = _TAGS_OPEN.sub("", out)
+  if replaced != out:
+    out = replaced
+    reasons.append("unclosed-control-tag")
 
   if action_status != "executed" and _CLAIM.search(out):
     if action_status == "queued":

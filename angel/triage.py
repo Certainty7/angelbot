@@ -43,17 +43,18 @@ def triage(text: str) -> Triage:
     t.is_question = bool(QUESTION_RE.search(raw))
     t.is_noise = bool(NOISE_RE.match(raw)) or len(raw) < 4
 
-    for pattern, key, conf in FACT_PATTERNS:
-        m = pattern.search(raw)
-        if not m:
-            continue
-        value = clean(m.group(m.lastindex) if m.lastindex else m.group(0))
-        if not (2 <= len(value) <= 60):
-            continue
-        if value in {"انا", "أنا", "هو", "هي", "شي", "كذا"}:
-            continue
-        t.facts.append((key, value, conf))
+    if not t.is_question:
+        for pattern, key, conf in FACT_PATTERNS:
+            m = pattern.search(raw)
+            if not m:
+                continue
+            value = clean(m.group(m.lastindex) if m.lastindex else m.group(0))
+            if not (2 <= len(value) <= 60):
+                continue
+            if value in {"انا", "أنا", "هو", "هي", "شي", "كذا"}:
+                continue
+            t.facts.append((key, value, conf))
 
-    t.store = bool(t.facts) or (len(raw) >= 40 and not t.is_noise)
+    t.store = bool(t.facts) or (len(raw) >= 40 and not t.is_noise and not t.is_question)
     t.score_hint = 0.7 if t.facts else (0.5 if t.is_question else 0.3 if not t.is_noise else 0.0)
     return t
