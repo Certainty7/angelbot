@@ -43,7 +43,7 @@ def _readable_channels(guild, member) -> Optional[Set[int]]:
     return out
 
 
-async def lookup(prompt: str, guild=None, member=None, limit: int = 6) -> Optional[str]:
+async def lookup(prompt: str, guild=None, member=None, limit: int = 4) -> Optional[str]:
     bot = get_bot()
     if bot is None or not is_recall(prompt):
         return None

@@ -50,5 +50,5 @@ def _render(raw) -> str:
         if isinstance(value, list):
             value = "، ".join(str(v) for v in value[:5] if v)
         if value:
-            parts.append(f"- {label}: {str(value)[:220]}")
+            parts.append(f"- {label}: {str(value)[:160]}")
     return "\n".join(parts)

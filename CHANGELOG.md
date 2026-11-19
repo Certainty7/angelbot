@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.0.2 — 2026-11-19
+
+Latency and model-quality pass driven by measured behaviour on this deployment.
+
+### Engine
+
+- `gemini-3-flash-preview` leads the chain: on this account it answers a real prompt in
+  ~1–3 s with full-flash Arabic quality, while `gemini-3.5-flash-lite` answers in 14–20 s
+  and `gemini-4-hydrogen` mostly returns 503. Thinking is disabled for it, as for 3.1/4.x,
+  because the model otherwise spends the whole token budget before writing.
+- `gemini-3.1-flash-lite` is the first fallback, then `3.5-flash-lite`; retired and
+  unavailable models (`gemini-2.5-*`, `gemini-flash-latest`) are out of the chain.
+- One quick retry on `503` before falling back, because a spike on the fast model clears
+  in about a second while the lite fallbacks cost 14–20 s.
+- A `429` that names a per-day free-tier limit cools the model for an hour instead of two
+  minutes, so an exhausted daily quota is not retried on every message.
+- The whole fallback chain is bounded at 28 s and each request at 18 s; a reply can no
+  longer sit through five slow models. Chat output is capped at 450 tokens, enough for the
+  1–3 sentence persona.
+- `ai-reply` log lines now carry `in=`/`out=` token counts alongside latency and cost.
+
+### Prompt size
+
+- Archive recall now injects 4 lines instead of 6, and each culture note field is capped at
+  160 characters. On a free-tier key the measured cost of an oversized prompt is seconds:
+  1.4 k input tokens ≈ 2.5 s, 3.4 k ≈ 5–10 s.
+
 ## 1.0.1 — 2026-11-19
 
 Correctness and hardening fixes after the first independent audit of v1.0.0.
