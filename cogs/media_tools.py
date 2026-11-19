@@ -10,7 +10,7 @@ from discord.ext import commands
 
 from angel.config import is_mistress
 from angel.media import chunk_slides, perform_storage_cleanup, process_social_media_url_multi
-from angel.net import _MEDIA_DOWNLOAD_SEMAPHORE
+from angel.net import get_media_download_semaphore
 from angel.output_filter import filter_outgoing
 
 # One `/fix` per member every few seconds: a loop of distinct links otherwise keeps several
@@ -50,7 +50,7 @@ class MediaTools(commands.Cog):
     _FIX_LAST_AT[interaction.user.id] = now
     await interaction.response.defer()
     max_b = min(getattr(interaction.guild, "filesize_limit", 10 * 1024 * 1024), 25 * 1024 * 1024) if interaction.guild else 10 * 1024 * 1024
-    async with _MEDIA_DOWNLOAD_SEMAPHORE:
+    async with get_media_download_semaphore():
       media_files, fixed_url, caption = await process_social_media_url_multi(url.strip(), max_bytes=max_b)
     caption = filter_outgoing((caption or "")[:1900]) if caption else None
     no_mentions = discord.AllowedMentions.none()

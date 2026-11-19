@@ -16,7 +16,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from .config import BASE_DIR, logger
-from .net import _YTDLP_SEMAPHORE, is_allowed_hostname, is_valid_http_url_syntax, validate_extracted_stream_url
+from .net import get_ytdlp_semaphore, is_allowed_hostname, is_valid_http_url_syntax, validate_extracted_stream_url
 from .images import _is_safe_public_http_url
 from .downloader import read_bounded_subprocess_stdout
 
@@ -116,7 +116,7 @@ def is_url(text: str) -> bool:
 async def _run_ytdlp(args: List[str], timeout: float) -> str:
   if not (os.path.exists(YTDLP) or shutil.which("yt-dlp")):
     raise ResolveError("yt-dlp is not installed")
-  async with _YTDLP_SEMAPHORE:
+  async with get_ytdlp_semaphore():
     proc = await asyncio.create_subprocess_exec(
         YTDLP if os.path.exists(YTDLP) else "yt-dlp",
         *args,
@@ -377,8 +377,15 @@ async def resolve_best(query: str, *, timeout: float = DEFAULT_TIMEOUT) -> Dict[
   key = f"{text.lower()}|{YOUTUBE_ENABLED}"
   cached = _cache_get(key)
   if cached is not None:
-    logger.info("music-search cache-hit %r" % text[:40])
-    return cached
+    # A cached direct URL is re-checked like a fresh extraction: signed CDN URLs expire
+    # and a stale entry must never reach FFmpeg unvalidated.
+    try:
+      await validate_extracted_stream_url(cached["stream_url"])
+    except (KeyError, PermissionError):
+      _CACHE.pop(key, None)
+    else:
+      logger.info("music-search cache-hit %r" % text[:40])
+      return cached
 
   errors: List[str] = []
   # Measured 2026-11-12 on the 1-OCPU host: running yt-dlp beside the SoundCloud search

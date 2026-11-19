@@ -13,12 +13,14 @@ import io
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import PIL.Image  # noqa: E402
 
 from angel import media  # noqa: E402
+from angel.net import SafeAsyncResolver  # noqa: E402
 
 
 def _jpeg(seed: int) -> bytes:
@@ -64,6 +66,8 @@ class FakeTikTok:
         self.refused = set(refused_first_quote)
         self.quotes = 0
         self.image_hits = []
+        # safe_fetch_response only accepts sessions backed by the connect-time SSRF resolver.
+        self.connector = SimpleNamespace(_resolver=SafeAsyncResolver())
 
     def _api_body(self) -> bytes:
         self.quotes += 1

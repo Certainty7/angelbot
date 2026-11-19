@@ -9,12 +9,15 @@ import asyncio
 import os
 import tempfile
 import unittest
+from types import SimpleNamespace
 
 import discord
 
 from angel.cache import BoundedTTLCache, WeakLockMap
 from angel.downloader import build_ytdlp_json_argv
 from angel.net import (
+    SafeAsyncResolver,
+    get_ytdlp_semaphore,
     is_allowed_hostname,
     is_public_ip,
     is_valid_http_url_syntax,
@@ -55,11 +58,19 @@ class _FakeSession:
     def __init__(self, responses):
         self._responses = list(responses)
         self.recorded_calls = []
+        self.connector = SimpleNamespace(_resolver=SafeAsyncResolver())
 
     def get(self, url, headers=None, allow_redirects=False):
         assert allow_redirects is False, "safe_fetch must never let aiohttp follow redirects"
         self.recorded_calls.append((url, dict(headers) if headers else None))
         return self._responses.pop(0)
+
+
+class _UnsafeSession:
+    connector = None
+
+    def get(self, *_args, **_kwargs):
+        raise AssertionError("an unsafe injected session must never be used")
 
 
 class TestSafeNet(unittest.TestCase):
@@ -119,6 +130,21 @@ class TestSafeNet(unittest.TestCase):
             self.assertEqual(session.recorded_calls[1][1]["User-Agent"], "AngelBot")
 
         asyncio.run(_run())
+
+    def test_custom_session_without_safe_resolver_is_rejected(self):
+        async def _run():
+            with self.assertRaises(PermissionError):
+                await safe_fetch_bytes("https://example.com/", session=_UnsafeSession())
+
+        asyncio.run(_run())
+
+    def test_semaphores_are_recreated_for_each_running_loop(self):
+        async def _get():
+            return get_ytdlp_semaphore()
+
+        first = asyncio.run(_get())
+        second = asyncio.run(_get())
+        self.assertIsNot(first, second)
 
     def test_ig_shortcode_validation(self):
         self.assertEqual(validate_ig_shortcode("C8xYz_123-ab"), "C8xYz_123-ab")
