@@ -342,7 +342,7 @@ def humanize_reply(raw_text: str, max_len: int = 1900) -> str:
   for pattern in _ROBOTIC_OPENERS:
     text = pattern.sub("", text).strip()
   text = _MODEL_IDENTITY_RE.sub("آنجل", text)
-  text = re.sub(r"@(everyone|here)\b", r"@\u200b\1", text, flags=re.IGNORECASE)
+  text = re.sub(r"@(everyone|here)\b", "@\u200b\\1", text, flags=re.IGNORECASE)
   text = re.sub(r"<@&\d{15,25}>", "@\u200brole", text)
   text = re.sub(r"\n{3,}", "\n\n", text).strip()
   if len(text) > max_len:
