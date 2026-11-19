@@ -719,8 +719,9 @@ async def try_execute_natural_command(
   )
   if afk_m:
     rsn = (afk_m.group(1) or "مشغولة حالياً").strip()
-    await bot.db.set_afk(author.id, rsn)
-    bot.afk_cache[author.id] = (rsn, datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
+    await bot.db.set_afk(guild.id if guild else 0, author.id, rsn)
+    bot.afk_cache[(guild.id if guild else 0, author.id)] = (
+        rsn, datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
     await safe_reply(message, f"💤 تم تفعيل وضع الغياب (AFK): **{rsn}** — خذي راحتك!")
     return True
 
@@ -1197,7 +1198,7 @@ async def try_execute_natural_command(
     return True
 
   if any(k in cmd_lower for k in ("شيلي الرسالة المثبتة بالشات", "الغي الرسالة المثبتة اسفل الشات", "وقفي الرسالة المثبتة")) and (mistress or author.guild_permissions.manage_messages):
-    await bot.db.remove_sticky(message.channel.id)
+    await bot.db.remove_sticky(message.channel.id, guild.id)
     bot.stickies_cache.pop(message.channel.id, None)
     await safe_reply(message, "✅ ألغيت الرسالة المثبتة في أسفل القناة.")
     return True

@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from . import evolution, guard, memory, scoring
+from .cache import BoundedDict
 from .config import logger
 from .persona import _oman_hour_hint
 from .registry import get_bot
@@ -45,8 +46,8 @@ class AutonomyEngine:
   """Schedules and writes Angel's self-initiated messages."""
 
   def __init__(self):
-    self.last_channel: Dict[int, float] = {}
-    self.last_target: Dict[int, float] = {}
+    self.last_channel: Dict[int, float] = BoundedDict(5000)
+    self.last_target: Dict[int, float] = BoundedDict(5000)
     self.sent_times: List[float] = []
     self.daily_count = 0
     self.day = _oman_now().strftime("%Y-%m-%d")
@@ -149,8 +150,20 @@ class AutonomyEngine:
         if last_spoke_at is not None and now - last_spoke_at < MIN_GAP_CHANNEL:
           continue
 
-        target = self._pick_target(list(speakers), guild)
-        if not target or not await self._allowed_target(int(target["user_id"])):
+        pool = list(speakers)
+        target = None
+        for _ in range(3):
+          candidate = self._pick_target(pool, guild)
+          if not candidate:
+            break
+          if await self._allowed_target(int(candidate["user_id"])):
+            target = candidate
+            break
+          pool = [
+              s for s in pool
+              if int(s.get("user_id") or 0) != int(candidate["user_id"])
+          ]
+        if not target:
           continue
 
         # Probabilistic gate: P(reply) from activity / mention / topic / mood / recency.
@@ -208,7 +221,7 @@ class AutonomyEngine:
           continue
 
         try:
-          await channel.send(f"<@{uid}> {text}", allowed_mentions=discord_allowed())
+          await channel.send(f"<@{uid}> {text[:1900]}", allowed_mentions=discord_allowed())
         except Exception as exc:
           logger.warning("autonomy send failed in %s: %s", channel_id, exc)
           continue

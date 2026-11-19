@@ -21,6 +21,11 @@ def _fts_query(text: str) -> str:
   return " OR ".join(f'"{t}"*' for t in tokens)
 
 
+def _like_escape(value: str) -> str:
+  """Escape LIKE wildcards so a fact/keyword containing % or _ stays literal."""
+  return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def _norm_ar(text: str) -> str:
   import re
   import unicodedata
@@ -180,8 +185,8 @@ class BotDatabase:
       ):
         try:
           await db.execute(col_sql)
-        except Exception:
-          pass
+        except Exception as exc:
+          logger.debug("guild_settings migration skipped: %s", exc)
       await db.execute("""
                 CREATE TABLE IF NOT EXISTS guild_daily_usage (
                     guild_id INTEGER NOT NULL,
@@ -204,11 +209,32 @@ class BotDatabase:
             """)
       await db.execute("""
                 CREATE TABLE IF NOT EXISTS afk_users (
-                    user_id INTEGER PRIMARY KEY,
+                    guild_id INTEGER NOT NULL DEFAULT 0,
+                    user_id INTEGER NOT NULL,
                     reason TEXT NOT NULL,
-                    since TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    since TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (guild_id, user_id)
                 )
             """)
+      # Migrate the legacy per-user table once; AFK reasons must not cross guilds.
+      async with db.execute("PRAGMA table_info(afk_users)") as cur:
+        afk_cols = [row[1] for row in await cur.fetchall()]
+      if "guild_id" not in afk_cols:
+        await db.execute("""
+                  CREATE TABLE afk_users_scoped (
+                      guild_id INTEGER NOT NULL DEFAULT 0,
+                      user_id INTEGER NOT NULL,
+                      reason TEXT NOT NULL,
+                      since TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                      PRIMARY KEY (guild_id, user_id)
+                  )
+              """)
+        await db.execute(
+            "INSERT OR IGNORE INTO afk_users_scoped (guild_id, user_id, reason, since) "
+            "SELECT 0, user_id, reason, since FROM afk_users"
+        )
+        await db.execute("DROP TABLE afk_users")
+        await db.execute("ALTER TABLE afk_users_scoped RENAME TO afk_users")
       await db.execute("""
                 CREATE TABLE IF NOT EXISTS user_xp (
                     guild_id INTEGER NOT NULL,
@@ -222,8 +248,8 @@ class BotDatabase:
             """)
       try:
         await db.execute("ALTER TABLE user_xp ADD COLUMN rep_points INTEGER DEFAULT 0")
-      except Exception:
-        pass
+      except Exception as exc:
+        logger.debug("user_xp migration skipped: %s", exc)
       await db.execute("""
                 CREATE TABLE IF NOT EXISTS auto_triggers (
                     guild_id INTEGER NOT NULL,
@@ -265,8 +291,8 @@ class BotDatabase:
             """)
       try:
         await db.execute("ALTER TABLE custom_action_triggers ADD COLUMN usage_count INTEGER DEFAULT 0")
-      except Exception:
-        pass
+      except Exception as exc:
+        logger.debug("custom_action migration skipped: %s", exc)
       await db.execute("""
                 CREATE TABLE IF NOT EXISTS sticky_messages (
                     channel_id INTEGER PRIMARY KEY,
@@ -297,8 +323,8 @@ class BotDatabase:
               "UPDATE user_preferences SET pinned_facts = REPLACE(pinned_facts, ?, 'صاحبتي') WHERE pinned_facts LIKE ?",
               (noisy_phrase, f"%{noisy_phrase}%"),
           )
-        except Exception:
-          pass
+        except Exception as exc:
+          logger.debug("preference cleanup skipped: %s", exc)
       try:
         # Remove broken/truncated summaries and prune old dm_logs/messages per-user (keep up to 60 recent messages per user)
         await db.execute("DELETE FROM user_summaries WHERE LENGTH(TRIM(summary)) < 35")
@@ -314,8 +340,8 @@ class BotDatabase:
             )
             """
         )
-      except Exception:
-        pass
+      except Exception as exc:
+        logger.debug("message prune skipped: %s", exc)
       # --- Social memory, silence map & autonomous-chat audit (2026-11) ---
       await db.execute("""
                 CREATE TABLE IF NOT EXISTS silent_channels (
@@ -705,16 +731,25 @@ class BotDatabase:
       )
       await db.commit()
 
-  async def remove_sticky(self, channel_id: int) -> int:
+  async def remove_sticky(self, channel_id: int, guild_id: int) -> int:
     async with self._connect() as db:
-      cursor = await db.execute("DELETE FROM sticky_messages WHERE channel_id = ?", (channel_id,))
+      cursor = await db.execute(
+          "DELETE FROM sticky_messages WHERE channel_id = ? AND guild_id = ?",
+          (channel_id, guild_id),
+      )
       await db.commit()
       return cursor.rowcount
 
-  async def get_all_stickies(self) -> Dict[int, Dict[str, Any]]:
+  async def get_all_stickies(self, guild_id: Optional[int] = None) -> Dict[int, Dict[str, Any]]:
     async with self._connect() as db:
       db.row_factory = aiosqlite.Row
-      async with db.execute("SELECT * FROM sticky_messages") as cursor:
+      if guild_id is None:
+        cursor = await db.execute("SELECT * FROM sticky_messages")
+      else:
+        cursor = await db.execute(
+            "SELECT * FROM sticky_messages WHERE guild_id = ?", (guild_id,)
+        )
+      async with cursor:
         rows = await cursor.fetchall()
         return {r["channel_id"]: dict(r) for r in rows}
 
@@ -999,33 +1034,45 @@ class BotDatabase:
         row = await cursor.fetchone()
         return row[0] if row and row[0] else None
 
-  # --- AFK System ---
-  async def set_afk(self, user_id: int, reason: str):
+  # --- AFK System (guild-scoped) ---
+  async def set_afk(self, guild_id: int, user_id: int, reason: str):
     async with self._connect() as db:
-      await db.execute("INSERT OR REPLACE INTO afk_users (user_id, reason, since) VALUES (?, ?, CURRENT_TIMESTAMP)", (user_id, reason))
+      await db.execute(
+          "INSERT OR REPLACE INTO afk_users (guild_id, user_id, reason, since) "
+          "VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+          (guild_id, user_id, reason),
+      )
       await db.commit()
 
-  async def remove_afk(self, user_id: int) -> Optional[Tuple[str, str]]:
+  async def remove_afk(self, guild_id: int, user_id: int) -> Optional[Tuple[str, str]]:
     async with self._connect() as db:
-      async with db.execute("SELECT reason, since FROM afk_users WHERE user_id = ?", (user_id,)) as cursor:
+      async with db.execute(
+          "SELECT reason, since FROM afk_users WHERE guild_id = ? AND user_id = ?",
+          (guild_id, user_id),
+      ) as cursor:
         row = await cursor.fetchone()
         if not row:
           return None
-      await db.execute("DELETE FROM afk_users WHERE user_id = ?", (user_id,))
+      await db.execute(
+          "DELETE FROM afk_users WHERE guild_id = ? AND user_id = ?", (guild_id, user_id)
+      )
       await db.commit()
       return row[0], row[1]
 
-  async def get_afk(self, user_id: int) -> Optional[Tuple[str, str]]:
+  async def get_afk(self, guild_id: int, user_id: int) -> Optional[Tuple[str, str]]:
     async with self._connect() as db:
-      async with db.execute("SELECT reason, since FROM afk_users WHERE user_id = ?", (user_id,)) as cursor:
+      async with db.execute(
+          "SELECT reason, since FROM afk_users WHERE guild_id = ? AND user_id = ?",
+          (guild_id, user_id),
+      ) as cursor:
         row = await cursor.fetchone()
         return (row[0], row[1]) if row else None
 
-  async def get_all_afk(self) -> Dict[int, Tuple[str, str]]:
+  async def get_all_afk(self) -> Dict[Tuple[int, int], Tuple[str, str]]:
     async with self._connect() as db:
-      async with db.execute("SELECT user_id, reason, since FROM afk_users") as cursor:
+      async with db.execute("SELECT guild_id, user_id, reason, since FROM afk_users") as cursor:
         rows = await cursor.fetchall()
-        return {r[0]: (r[1], r[2]) for r in rows}
+        return {(r[0], r[1]): (r[2], r[3]) for r in rows}
 
   async def get_all_guild_settings_map(self) -> Dict[int, Dict[str, Any]]:
     async with self._connect() as db:
@@ -1089,7 +1136,7 @@ class BotDatabase:
       limit = 40
       async with db.execute("SELECT daily_ai_limit FROM guild_settings WHERE guild_id = ?", (guild_id,)) as cursor:
         row = await cursor.fetchone()
-        if row and row[0]:
+        if row and row[0] is not None:
           limit = int(row[0])
       cursor = await db.execute(
           "UPDATE guild_daily_usage SET ai_calls = ai_calls + 1 "
@@ -1104,6 +1151,25 @@ class BotDatabase:
         used_row = await cursor.fetchone()
       await db.commit()
     return bool(allowed), int(used_row[0]) if used_row else 0
+
+  async def get_guild_ai_usage(self, guild_id: int) -> Tuple[int, int]:
+    """Read-only (used, limit) for today's guild AI quota."""
+    from datetime import datetime, timezone
+    day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    async with self._connect() as db:
+      limit = 40
+      async with db.execute(
+          "SELECT daily_ai_limit FROM guild_settings WHERE guild_id = ?", (guild_id,)
+      ) as cursor:
+        row = await cursor.fetchone()
+        if row and row[0] is not None:
+          limit = int(row[0])
+      async with db.execute(
+          "SELECT ai_calls FROM guild_daily_usage WHERE guild_id = ? AND day_utc = ?",
+          (guild_id, day),
+      ) as cursor:
+        used_row = await cursor.fetchone()
+    return (int(used_row[0]) if used_row else 0), limit
 
   async def refund_guild_ai_quota(self, guild_id: int) -> None:
     """Give back one reserved call when the provider failed before answering."""
@@ -1350,7 +1416,8 @@ class BotDatabase:
         if allowed_channels is not None:
           rows = [r for r in rows if r["channel_id"] in allowed_channels][:limit]
         return rows[:limit]
-      except Exception:
+      except Exception as exc:
+        logger.warning("archive FTS query failed: %s: %s", type(exc).__name__, exc)
         return []
 
   async def get_user_dossier(self, user_id: int):
@@ -1477,12 +1544,12 @@ class BotDatabase:
             rows = [dict(r) async for r in cur]
             if rows:
               return rows
-        except Exception:
-          pass
+        except Exception as exc:
+          logger.warning("profile FTS query failed: %s: %s", type(exc).__name__, exc)
       clauses, params = [], [user_id]
       for kw in keywords[:8]:
-        clauses.append("(fact_key LIKE ? OR fact_value LIKE ?)")
-        params.extend([f"%{kw}%", f"%{kw}%"])
+        clauses.append("(fact_key LIKE ? ESCAPE '\\' OR fact_value LIKE ? ESCAPE '\\')")
+        params.extend([f"%{_like_escape(kw)}%", f"%{_like_escape(kw)}%"])
       params.append(limit)
       async with db.execute(
           "SELECT fact_key, fact_value, confidence FROM user_profile WHERE user_id = ? AND ("
@@ -1667,8 +1734,8 @@ class BotDatabase:
             rows = [dict(r) async for r in cur]
             if rows:
               return rows
-        except Exception:
-          pass
+        except Exception as exc:
+          logger.warning("rules FTS query failed: %s: %s", type(exc).__name__, exc)
       async with db.execute(
           "SELECT rule_key, content FROM rules WHERE guild_id = ? ORDER BY id LIMIT 300", (guild_id,)
       ) as cur:
@@ -1745,21 +1812,24 @@ class BotDatabase:
           cur = await db.execute(sql)
           if cur.rowcount and cur.rowcount > 0:
             pruned += cur.rowcount
-        except Exception:
-          pass
+        except Exception as exc:
+          logger.debug("cleanup statement skipped: %s", exc)
       await db.commit()
       if deep:
         try:
-          await db.execute("VACUUM")
+          # VACUUM takes an exclusive lock and blocks every other DB call on this host;
+          # a passive checkpoint plus incremental vacuum keeps the file healthy without it.
+          await db.execute("PRAGMA wal_checkpoint(PASSIVE)")
+          await db.execute("PRAGMA incremental_vacuum")
           await db.commit()
-        except Exception:
-          pass
+        except Exception as exc:
+          logger.warning("maintenance checkpoint failed: %s: %s", type(exc).__name__, exc)
       try:
         await db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
         await db.execute("PRAGMA optimize")
         await db.commit()
-      except Exception:
-        pass
+      except Exception as exc:
+        logger.warning("maintenance optimize failed: %s: %s", type(exc).__name__, exc)
 
     total_db_bytes = 0
     for suffix in ("", "-wal", "-shm"):

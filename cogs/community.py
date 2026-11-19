@@ -58,11 +58,13 @@ class Community(commands.Cog):
 
 
   @app_commands.command(name="afk", description="تفعيل وضع الغياب التلقائي (AFK)")
+  @app_commands.guild_only()
   @app_commands.describe(reason="سبب الغياب")
   async def afk_cmd(self, interaction: discord.Interaction, reason: str = "مشغول حالياً"):
-    self.bot.afk_cache[interaction.user.id] = (reason, datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
+    self.bot.afk_cache[(interaction.guild.id, interaction.user.id)] = (
+        reason, datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
     await _safe_interaction_reply(interaction, f"💤 تم تفعيل وضع الغياب: **{reason}**", ephemeral=False)
-    await self.bot.db.set_afk(interaction.user.id, reason)
+    await self.bot.db.set_afk(interaction.guild.id, interaction.user.id, reason)
 
 
   @app_commands.command(name="serverinfo", description="عرض معلومات السيرفر")

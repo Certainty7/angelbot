@@ -1,15 +1,20 @@
 """USD budget + circuit breaker helpers (merged from the Malak build)."""
+import math
 import os
 from datetime import datetime, timedelta, timezone
-
-LOCAL_TZ = timezone(timedelta(hours=4))
 
 
 def _f(name: str, default: float) -> float:
     try:
-        return float(os.getenv(name, default))
+        value = float(os.getenv(name, default))
     except (TypeError, ValueError):
         return float(default)
+    if not math.isfinite(value) or value < 0:
+        return float(default)
+    return value
+
+
+LOCAL_TZ = timezone(timedelta(hours=_f("MALAK_TZ_OFFSET_HOURS", 4.0)))
 
 
 DAILY_LIMIT_USD = _f("MALAK_DAILY_COST_LIMIT_USD", 0.0)  # 0 = no daily ceiling
@@ -27,7 +32,9 @@ def local_day() -> str:
 
 
 def cost_of(input_tokens: int, output_tokens: int) -> float:
-    return (input_tokens / 1_000_000) * PRICE_INPUT_PER_MTOK + (output_tokens / 1_000_000) * PRICE_OUTPUT_PER_MTOK
+    safe_input = max(0, int(input_tokens or 0))
+    safe_output = max(0, int(output_tokens or 0))
+    return (safe_input / 1_000_000) * PRICE_INPUT_PER_MTOK + (safe_output / 1_000_000) * PRICE_OUTPUT_PER_MTOK
 
 
 def stop_at() -> float:

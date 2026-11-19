@@ -19,12 +19,18 @@ class BoundedDict(OrderedDict):
   def __init__(self, maxsize: int = 1024, *args, **kwargs):
     self._maxsize = max(1, int(maxsize))
     super().__init__(*args, **kwargs)
+    while len(self) > self._maxsize:
+      self.popitem(last=False)
 
   def __setitem__(self, key, value):
     super().__setitem__(key, value)
     self.move_to_end(key)
     while len(self) > self._maxsize:
       self.popitem(last=False)
+
+  def update(self, *args, **kwargs):
+    for key, value in dict(*args, **kwargs).items():
+      self[key] = value
 
   def setdefault(self, key, default=None):
     if key in self:

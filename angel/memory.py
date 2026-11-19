@@ -7,13 +7,12 @@ so Angel remembers people across sessions instead of re-reading history.
 import re
 import time
 from typing import Any, Dict, List
+from .cache import BoundedDict
+from .config import logger
 from .registry import get_bot
 
 
-# At most one extraction per user per window (protects the Gemini RPM budget).
-LEARN_COOLDOWN_SECONDS = 900.0
 FACT_CAP = 40
-_last_learn: Dict[int, float] = {}
 
 _SECRET_PATTERNS = re.compile(
     r"(كلمة\s*المرور|password|passwd|token|api[_\s-]?key|بطاقة|رقم\s*الهوية|cvv|محفظة|crypto\s*wallet)",
@@ -118,7 +117,8 @@ async def recall(user_id: int, prompt: str, limit: int = 12) -> List[Dict[str, A
     if len(merged) < limit:
       add(await db.get_profile_facts(user_id, min(limit, 8)))
     return merged[:limit]
-  except Exception:
+  except Exception as exc:
+    logger.debug("memory recall skipped: %s: %s", type(exc).__name__, exc)
     return []
 
 
@@ -135,7 +135,7 @@ async def learn_from_exchange(user_id: int, display_name: str, user_text: str, a
 
 
 
-_last_touch: Dict[int, float] = {}
+_last_touch: Dict[tuple, float] = BoundedDict(10000)
 TOUCH_COOLDOWN_SECONDS = 30.0
 
 

@@ -197,21 +197,27 @@ class MemoryRules(commands.Cog):
 
   @app_commands.command(name="budget", description="استهلاك أنجل من ميزانية النماذج اليوم (للإدارة فقط)")
   @app_commands.default_permissions(administrator=True)
+  @app_commands.guild_only()
   async def budget_cmd(self, interaction: discord.Interaction):
     is_admin = isinstance(interaction.user, discord.Member) and interaction.user.guild_permissions.administrator
     if not (is_mistress(interaction.user) or is_admin):
       await interaction.response.send_message("هذا الأمر للإدارة فقط.", ephemeral=True)
       return
     await interaction.response.defer(ephemeral=True, thinking=True)
-    day = cost.local_day()
-    spent = await self.bot.db.day_cost(day)
-    stats = self.bot.sender.stats() if self.bot.sender else {}
     embed = discord.Embed(title="💳 ميزانية اليوم", color=0x2B2D31)
-    embed.add_field(name="المصروف", value=f"${spent:.4f}", inline=True)
-    embed.add_field(name="حد التوقف (95%)", value=f"${cost.stop_at():.4f}", inline=True)
-    embed.add_field(name="وضع الاستماع", value="نعم" if self.bot.listening else "لا", inline=True)
-    if stats:
-      embed.add_field(name="الطابور", value=f"مرسل: {stats.get('sent', 0)} • معاد: {stats.get('retried', 0)} • معلّق: {stats.get('pending', 0)}", inline=False)
+    if is_mistress(interaction.user):
+      day = cost.local_day()
+      spent = await self.bot.db.day_cost(day)
+      stats = self.bot.sender.stats() if self.bot.sender else {}
+      embed.add_field(name="المصروف (عام)", value=f"${spent:.4f}", inline=True)
+      embed.add_field(name="حد التوقف (95%)", value=f"${cost.stop_at():.4f}", inline=True)
+      embed.add_field(name="وضع الاستماع", value="نعم" if self.bot.listening else "لا", inline=True)
+      if stats:
+        embed.add_field(name="الطابور", value=f"مرسل: {stats.get('sent', 0)} • معاد: {stats.get('retried', 0)} • معلّق: {stats.get('pending', 0)}", inline=False)
+    else:
+      used, limit = await self.bot.db.get_guild_ai_usage(interaction.guild.id)
+      embed.add_field(name="حصتك اليومية", value=f"`{used}` / `{limit}`", inline=True)
+      embed.add_field(name="المتبقي", value=f"`{max(0, limit - used)}`", inline=True)
     embed.set_footer(text="التوقيت: سلطنة عمان (UTC+4)")
     await interaction.followup.send(embed=embed, ephemeral=True)
 

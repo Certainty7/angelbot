@@ -350,23 +350,25 @@ async def on_message(message: discord.Message):
               pass
 
   # 1. AFK auto-remove: an O(1) RAM check first, so non-AFK users cost no SQLite queries
-  if message.author.id in bot.afk_cache:
-    bot.afk_cache.pop(message.author.id, None)
-    afk_removed = await bot.db.remove_afk(message.author.id)
-    if afk_removed:
-      try:
-        await message.channel.send(
-            f"👋 أهلاً بعودتك {message.author.mention}، تم إلغاء وضع الغياب.", delete_after=6
-        )
-      except Exception:
-        pass
+  if message.guild:
+    afk_key = (message.guild.id, message.author.id)
+    if afk_key in bot.afk_cache:
+      bot.afk_cache.pop(afk_key, None)
+      afk_removed = await bot.db.remove_afk(message.guild.id, message.author.id)
+      if afk_removed:
+        try:
+          await message.channel.send(
+              f"👋 أهلاً بعودتك {message.author.mention}، تم إلغاء وضع الغياب.", delete_after=6
+          )
+        except Exception:
+          pass
 
-  # 2. AFK Mention Responder (O(1) RAM lookup)
-  if message.mentions and bot.afk_cache:
+  # 2. AFK Mention Responder (O(1) RAM lookup, scoped to this guild)
+  if message.guild and message.mentions and bot.afk_cache:
     for mentioned in message.mentions:
       if mentioned.bot or mentioned.id == message.author.id:
         continue
-      afk_info = bot.afk_cache.get(mentioned.id)
+      afk_info = bot.afk_cache.get((message.guild.id, mentioned.id))
       if afk_info:
         reason, _ = afk_info
         await safe_reply(
