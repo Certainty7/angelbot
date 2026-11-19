@@ -51,6 +51,7 @@ class AutonomyEngine:
     self.daily_count = 0
     self.day = _oman_now().strftime("%Y-%m-%d")
     self._running = False
+    self._tick_lock: Optional[asyncio.Lock] = None
 
   # ---------- limits ----------
   def _roll_day(self):
@@ -99,10 +100,19 @@ class AutonomyEngine:
       prefs = await get_bot().db.get_user_prefs(user_id)
       return not bool(prefs.get("opt_out"))
     except Exception:
-      return True
+      # Fail closed: a database hiccup must never expose an opted-out member.
+      return False
 
   # ---------- main tick ----------
   async def tick(self) -> int:
+    if self._tick_lock is None:
+      self._tick_lock = asyncio.Lock()
+    if self._tick_lock.locked():
+      return 0
+    async with self._tick_lock:
+      return await self._tick_locked()
+
+  async def _tick_locked(self) -> int:
     if get_bot() is None:
       return 0
     # Mood and behaviour settings drift once per local day, always inside hard ranges.
@@ -220,15 +230,18 @@ class AutonomyEngine:
     if self._running:
       return
     self._running = True
-    await get_bot().wait_until_ready()
-    while not get_bot().is_closed():
-      try:
-        await self.tick()
-      except asyncio.CancelledError:
-        raise
-      except Exception as exc:
-        logger.warning("autonomy tick error: %s", exc)
-      await asyncio.sleep(TICK_SECONDS)
+    try:
+      await get_bot().wait_until_ready()
+      while not get_bot().is_closed():
+        try:
+          await self.tick()
+        except asyncio.CancelledError:
+          raise
+        except Exception as exc:
+          logger.warning("autonomy tick error: %s", exc)
+        await asyncio.sleep(TICK_SECONDS)
+    finally:
+      self._running = False
 
 
 def discord_allowed():

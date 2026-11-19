@@ -60,6 +60,9 @@ class Owner(commands.Cog):
       value: int = 15,
       custom_reply: str = "",
   ):
+    if not interaction.guild:
+      await interaction.response.send_message("⚠️ هذا الأمر يعمل داخل السيرفرات فقط.", ephemeral=True)
+      return
     gid = interaction.guild.id
     if mode == "list":
       triggers = await self.bot.db.get_action_triggers(gid)

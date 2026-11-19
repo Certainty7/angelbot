@@ -8,9 +8,10 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from angel.config import has_perm_or_mistress, is_mistress
+from angel.config import is_mistress
 from angel.media import chunk_slides, perform_storage_cleanup, process_social_media_url_multi
 from angel.net import _MEDIA_DOWNLOAD_SEMAPHORE
+from angel.output_filter import filter_outgoing
 
 # One `/fix` per member every few seconds: a loop of distinct links otherwise keeps several
 # yt-dlp subprocesses and large downloads in flight on a 580 MB cgroup.
@@ -36,24 +37,30 @@ class MediaTools(commands.Cog):
     if now - _FIX_LAST_AT.get(interaction.user.id, 0.0) < _FIX_COOLDOWN_S:
       await interaction.response.send_message("⏳ انتظر بضع ثوانٍ قبل الرابط التالي.", ephemeral=True)
       return
+    # Prune only expired entries; clearing the whole map on size lets a loop of
+    # distinct users bypass the cooldown.
     if len(_FIX_LAST_AT) > 2000:
-      _FIX_LAST_AT.clear()
+      for uid, stamp in list(_FIX_LAST_AT.items()):
+        if now - stamp >= _FIX_COOLDOWN_S:
+          _FIX_LAST_AT.pop(uid, None)
     _FIX_LAST_AT[interaction.user.id] = now
     await interaction.response.defer()
     max_b = min(getattr(interaction.guild, "filesize_limit", 10 * 1024 * 1024), 25 * 1024 * 1024) if interaction.guild else 10 * 1024 * 1024
     async with _MEDIA_DOWNLOAD_SEMAPHORE:
       media_files, fixed_url, caption = await process_social_media_url_multi(url.strip(), max_bytes=max_b)
+    caption = filter_outgoing((caption or "")[:1900]) if caption else None
+    no_mentions = discord.AllowedMentions.none()
     if media_files:
       default_icon = "🎬" if any(fn.endswith(".mp4") for _, fn in media_files) else "📸"
       # Discord caps a message at 10 attachments: every batch goes out, no slide is dropped.
       for index, batch in enumerate(chunk_slides(media_files)):
         files = [discord.File(io.BytesIO(b), filename=fn) for b, fn in batch]
         if index == 0:
-          await interaction.followup.send(content=caption or default_icon, files=files)
+          await interaction.followup.send(content=caption or default_icon, files=files, allowed_mentions=no_mentions)
         else:
-          await interaction.followup.send(files=files)
+          await interaction.followup.send(files=files, allowed_mentions=no_mentions)
     elif fixed_url:
-      await interaction.followup.send(content=fixed_url)
+      await interaction.followup.send(content=fixed_url, allowed_mentions=no_mentions)
     else:
       await interaction.followup.send("⚠️ تعذر استخراج الوسائط من هذا الرابط (قد يكون الحساب خاصاً أو الرابط غير مدعوم).", ephemeral=True)
 
@@ -63,8 +70,11 @@ class MediaTools(commands.Cog):
       description="تنظيف تخزين البوت من الملفات المؤقتة والقمامة وضغط قاعدة البيانات",
   )
   @app_commands.default_permissions(manage_guild=True)
-  @has_perm_or_mistress(manage_guild=True)
   async def cleanup_cmd(self, interaction: discord.Interaction):
+    # This deletes GLOBAL storage, so a server admin is not allowed to trigger it.
+    if not is_mistress(interaction.user):
+      await interaction.response.send_message("🚫 أمر التنظيف الشامل مخصص للمالكة فقط.", ephemeral=True)
+      return
     await interaction.response.defer(ephemeral=False, thinking=True)
     stats = await perform_storage_cleanup(deep=True)
     freed_str = (

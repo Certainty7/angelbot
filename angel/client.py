@@ -8,7 +8,8 @@ import asyncio
 import os
 import random
 import time
-from collections import Counter, defaultdict, deque
+from collections import Counter, deque
+from .cache import BoundedDefaultDict, BoundedDict, WeakLockMap, channel_buffer, cooldown_map
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -36,7 +37,7 @@ from angel.media import perform_storage_cleanup
 from angel.net import close_shared_http_session
 from angel.nl_router import execute_ai_inferred_action
 from angel.output_filter import filter_outgoing
-from angel.persona import humanize as persona_humanize, trim_emoji
+from angel.persona import humanize as persona_humanize, humanize_reply, reply_directives, detect_reply_rhythm, trim_emoji
 from angel.quota import QuotaGuard
 from angel.ui import GiveawayJoinView, TicketCloseView, TicketPanelView
 
@@ -62,48 +63,48 @@ class AngelDiscordBot(commands.Bot):
     self.db = db
     self.ai = ai
     self.quota = quota
-    self.user_locks: Dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
+    self.user_locks = WeakLockMap()
     self.start_time = datetime.now(timezone.utc)
     self._InitialSyncDone = False
 
-    self.snipe_cache: Dict[int, Dict[str, Any]] = {}
-    self.editsnipe_cache: Dict[int, Dict[str, Any]] = {}
-    self.xp_cooldowns: Dict[Tuple[int, int], float] = {}
-    self.rep_cooldowns: Dict[int, float] = {}
-    self.auto_triggers_cache: Dict[int, Dict[str, str]] = {}
-    self.action_triggers_cache: Dict[int, Dict[str, Dict[str, Any]]] = {}
-    self.harem_cache: Dict[int, Dict[str, Any]] = {}
-    self.stickies_cache: Dict[int, Dict[str, Any]] = {}
-    self.sticky_cooldowns: Dict[int, float] = {}
-    self.guard_modes_cache: Dict[int, str] = {}
-    self.afk_cache: Dict[int, Tuple[str, str]] = {}
-    self.modlog_cache: Dict[int, Optional[int]] = {}
-    self.autorole_cache: Dict[int, Optional[int]] = {}
-    self.spam_tracker: Dict[Tuple[int, int], deque] = defaultdict(lambda: deque(maxlen=8))
-    self.channel_activity_counter: Dict[int, Counter] = defaultdict(Counter)
-    self.pending_step: Dict[Any, Any] = {}
-    self.last_target_channel: Dict[int, int] = {}
-    self.last_social_target: Dict[int, int] = {}
-    self.recent_channel_msgs: Dict[int, deque] = defaultdict(lambda: deque(maxlen=12))
-    self.active_chat_window: Dict[Tuple[int, int], float] = {}
-    self.social_url_cooldowns: Dict[int, float] = {}
+    self.snipe_cache: Dict[int, Dict[str, Any]] = BoundedDict(2000)
+    self.editsnipe_cache: Dict[int, Dict[str, Any]] = BoundedDict(2000)
+    self.xp_cooldowns: Dict[Tuple[int, int], float] = cooldown_map()
+    self.rep_cooldowns: Dict[int, float] = cooldown_map()
+    self.auto_triggers_cache: Dict[int, Dict[str, str]] = BoundedDict(2000)
+    self.action_triggers_cache: Dict[int, Dict[str, Dict[str, Any]]] = BoundedDict(2000)
+    self.harem_cache: Dict[int, Dict[str, Any]] = BoundedDict(10000)
+    self.stickies_cache: Dict[int, Dict[str, Any]] = BoundedDict(5000)
+    self.sticky_cooldowns: Dict[int, float] = cooldown_map()
+    self.guard_modes_cache: Dict[int, str] = BoundedDict(5000)
+    self.afk_cache: Dict[int, Tuple[str, str]] = BoundedDict(10000)
+    self.modlog_cache: Dict[int, Optional[int]] = BoundedDict(5000)
+    self.autorole_cache: Dict[int, Optional[int]] = BoundedDict(5000)
+    self.spam_tracker: Dict[Tuple[int, int], deque] = BoundedDefaultDict(lambda: deque(maxlen=8), maxsize=10000)
+    self.channel_activity_counter: Dict[int, Counter] = BoundedDefaultDict(Counter, maxsize=5000)
+    self.pending_step: Dict[Any, Any] = BoundedDict(2000)
+    self.last_target_channel: Dict[int, int] = BoundedDict(5000)
+    self.last_social_target: Dict[int, int] = BoundedDict(5000)
+    self.recent_channel_msgs: Dict[int, deque] = channel_buffer(12)
+    self.active_chat_window: Dict[Tuple[int, int], float] = cooldown_map()
+    self.social_url_cooldowns: Dict[int, float] = cooldown_map()
     self._bg_tasks: Set[asyncio.Task] = set()
     # Interaction state: silence map, recent speakers (for autonomy), audit timers
-    self.silent_cache: Dict[int, set] = {}
+    self.silent_cache: Dict[int, set] = BoundedDict(5000)
     self.autonomy_guilds: set = set()
-    self.recent_speakers: Dict[int, deque] = defaultdict(lambda: deque(maxlen=60))
+    self.recent_speakers: Dict[int, deque] = channel_buffer(60)
     # url hash -> monotonic timestamp, so a re-posted link is not downloaded twice
-    self.recent_social_links: Dict[str, float] = {}
-    self.angel_last_spoke: Dict[int, float] = {}
+    self.recent_social_links: Dict[str, float] = BoundedDict(512)
+    self.angel_last_spoke: Dict[int, float] = BoundedDict(5000)
     # Merged from the Malak build: evolving mood/settings, listening mode, send queue
     self.mood: float = 0.55
     self.settings: Dict[str, float] = {"verbosity": 0.4, "emoji_rate": 0.05, "typo_rate": 0.01, "curiosity": 0.55}
     self.listening: bool = False
     self.sender: Optional[sendqueue.Sender] = None
     # Destructive [EXEC] commands wait here for an explicit "تأكيد" from the same user.
-    self.pending_confirm: Dict[Any, Dict[str, Any]] = {}
+    self.pending_confirm: Dict[Any, Dict[str, Any]] = BoundedDict(2000)
     # /summarize_channel and the natural-language twin share one per-user cooldown.
-    self.summarize_cooldowns: Dict[int, float] = {}
+    self.summarize_cooldowns: Dict[int, float] = cooldown_map()
 
   async def setup_hook(self):
     await self.db.initialize()
@@ -433,6 +434,7 @@ class AngelDiscordBot(commands.Bot):
           profile_facts=profile_facts,
           cmd=cmd,
           culture=await persona_notes.current(getattr(getattr(user, "guild", None), "id", None)),
+          rhythm_hint=reply_directives(detect_reply_rhythm(prompt)),
       )
 
       clean_reply, gif_action, image_prompt, exec_cmds = parse_ai_special_tags(
@@ -442,6 +444,7 @@ class AngelDiscordBot(commands.Bot):
       )
       if not clean_reply:
         clean_reply = "تم." if is_mistress(user) else "حسناً."
+      clean_reply = humanize_reply(clean_reply)
       clean_reply = trim_emoji(persona_humanize(clean_reply, self.settings), 1)
 
       action_status = "none"

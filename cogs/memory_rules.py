@@ -64,12 +64,12 @@ class MemoryRules(commands.Cog):
       )
       embed.add_field(
           name="📌 التفضيلات والملاحظات الدائمة",
-          value=prefs.get("pinned_facts") or "*لا توجد ملاحظات مثبتة بعد.*",
+          value=(prefs.get("pinned_facts") or "*لا توجد ملاحظات مثبتة بعد.*")[:1024],
           inline=False,
       )
       embed.add_field(
           name="📝 ملخص المحادثة الحالية",
-          value=summary if summary else "*لا توجد ملاحظات مسجلة بعد.*",
+          value=(summary or "*لا توجد ملاحظات مسجلة بعد.*")[:1024],
           inline=False,
       )
       embed.add_field(name="🎭 نمط الأسلوب", value=f"`{prefs.get('style_mode', 'realistic')}`", inline=True)
@@ -78,8 +78,8 @@ class MemoryRules(commands.Cog):
       if not text:
         await interaction.response.send_message("⚠️ اكتبي المعلومة أو التفضيل المراد تثبيته في `text`.", ephemeral=True)
         return
-      await self.bot.db.pin_user_fact(uid, text)
-      await interaction.response.send_message(f"📌 تم تثبيت هذه المعلومة في خزنة ذاكرتكِ الدائمة: **{text}**", ephemeral=True)
+      await self.bot.db.pin_user_fact(uid, text[:1024])
+      await interaction.response.send_message(f"📌 تم تثبيت هذه المعلومة في خزنة ذاكرتكِ الدائمة: **{text[:1024]}**", ephemeral=True)
     elif action == "forget":
       if not text:
         await interaction.response.send_message("⚠️ اكتبي الكلمة أو المعلومة المراد حذفها في `text`.", ephemeral=True)
@@ -151,6 +151,24 @@ class MemoryRules(commands.Cog):
       return
 
     counts = await self.bot.db.delete_all_user_data(uid)
+    # `/data delete` must also drop the in-memory copies: duplicate prevention, ambient
+    # buffers and per-user locks survive a DB delete otherwise.
+    for buffer in getattr(self.bot, "recent_speakers", {}).values():
+      if hasattr(buffer, "clear"):
+        kept = [row for row in buffer if int(row.get("user_id") or 0) != uid]
+        buffer.clear()
+        buffer.extend(kept)
+    for channel_id, target in list(getattr(self.bot, "last_social_target", {}).items()):
+      if target == uid:
+        self.bot.last_social_target.pop(channel_id, None)
+    for key in list(getattr(self.bot, "active_chat_window", {})):
+      if isinstance(key, tuple) and key[-1] == uid:
+        self.bot.active_chat_window.pop(key, None)
+    for cache in (getattr(self.bot, "pending_step", {}), getattr(self.bot, "pending_confirm", {})):
+      for key in list(cache):
+        if isinstance(key, tuple) and key[-1] == uid:
+          cache.pop(key, None)
+    self.bot.user_locks.pop(uid, None)
     await interaction.response.send_message(
         "🗑️ حُذفت بياناتك: "
         f"`{counts.get('archived_messages', 0)}` رسالة مؤرشفة، "

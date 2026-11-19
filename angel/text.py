@@ -6,6 +6,8 @@ from typing import List
 
 
 def split_message(text: str, max_len: int = 1950) -> List[str]:
+  if max_len <= 0:
+    raise ValueError("max_len must be positive")
   chunks = []
   while text:
     if len(text) <= max_len:

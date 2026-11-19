@@ -1,8 +1,15 @@
-"""Leaky-bucket sender with Retry-After handling and a never-drop pending list."""
+"""Per-channel Discord sender: bounded queues, isolated 429 handling, idle eviction.
+
+The old design had one queue and one worker for every channel: a 429 sleep in
+channel A delayed channel B for every other server, a dead channel's jobs stayed in
+`pending` forever, and the task outlived shutdown. Each channel now owns a bounded
+queue, its own token bucket and its own worker, and an idle worker exits.
+"""
 import asyncio
 import time
+from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Deque, Dict, List, Optional
 
 import discord
 
@@ -20,7 +27,7 @@ class SendJob:
 class LeakyBucket:
     def __init__(self, capacity: int = 5, rate_per_sec: float = 1.0):
         self.capacity = capacity
-        self.rate = rate_per_sec
+        self.rate = max(0.01, rate_per_sec)
         self.tokens = float(capacity)
         self.updated = time.monotonic()
         self._lock = asyncio.Lock()
@@ -40,42 +47,104 @@ class LeakyBucket:
                 await asyncio.sleep(min((1.0 - self.tokens) / self.rate, 2.0))
 
 
+class _ChannelWorker:
+    def __init__(self, sender: "Sender", channel_id: int):
+        self.sender = sender
+        self.channel_id = channel_id
+        self.queue: asyncio.Queue = asyncio.Queue(maxsize=sender.max_queue)
+        self.bucket = LeakyBucket(sender.capacity, sender.rate_per_sec)
+        self.task: Optional[asyncio.Task] = None
+        self.last_active = time.monotonic()
+
+
 class Sender:
-    def __init__(self, client, capacity: int = 5, rate_per_sec: float = 1.0, max_attempts: int = 4):
+    """Bounded per-channel sender used by `bot.sender`."""
+
+    def __init__(
+        self,
+        client,
+        capacity: int = 5,
+        rate_per_sec: float = 1.0,
+        max_attempts: int = 4,
+        max_channels: int = 500,
+        idle_ttl_seconds: float = 300.0,
+        max_queue: int = 50,
+    ):
         self.client = client
-        self.bucket = LeakyBucket(capacity, rate_per_sec)
-        self.queue: asyncio.Queue = asyncio.Queue()
+        self.capacity = capacity
+        self.rate_per_sec = rate_per_sec
         self.max_attempts = max_attempts
-        self.pending: List[SendJob] = []
+        self.max_channels = max_channels
+        self.idle_ttl_seconds = idle_ttl_seconds
+        self.max_queue = max_queue
+        self._workers: Dict[int, _ChannelWorker] = {}
+        self.dead_letters: Deque[SendJob] = deque(maxlen=100)
         self.sent = 0
         self.retried = 0
-        self._task: Optional[asyncio.Task] = None
+        self._stopped = False
 
     def start(self):
-        if self._task is None or self._task.done():
-            self._task = asyncio.create_task(self._worker())
-
-    async def stop(self):
-        if self._task:
-            self._task.cancel()
+        # Workers are created on first enqueue; nothing to do here.
+        self._stopped = False
 
     async def enqueue(self, job: SendJob):
-        await self.queue.put(job)
-
-    async def _worker(self):
-        await self.client.wait_until_ready()
-        while not self.client.is_closed():
-            job = await self.queue.get()
+        if self._stopped:
+            self.dead_letters.append(job)
+            return
+        worker = self._workers.get(job.channel_id)
+        if worker is None:
+            self._evict_oldest_if_full()
+            worker = _ChannelWorker(self, job.channel_id)
+            self._workers[job.channel_id] = worker
+            worker.task = asyncio.create_task(self._run(worker))
+        worker.last_active = time.monotonic()
+        try:
+            worker.queue.put_nowait(job)
+        except asyncio.QueueFull:
+            # Bounded: drop the oldest queued message for this channel, keep the newest.
             try:
-                await self._deliver(job)
-            finally:
-                self.queue.task_done()
+                worker.queue.get_nowait()
+                worker.queue.task_done()
+            except Exception:
+                pass
+            worker.queue.put_nowait(job)
 
-    async def _deliver(self, job: SendJob):
+    def _evict_oldest_if_full(self):
+        if len(self._workers) < self.max_channels:
+            return
+        oldest_id = min(self._workers, key=lambda cid: self._workers[cid].last_active)
+        worker = self._workers.pop(oldest_id, None)
+        if worker and worker.task and not worker.task.done():
+            worker.task.cancel()
+
+    async def _run(self, worker: _ChannelWorker):
+        try:
+            await self.client.wait_until_ready()
+            while not self.client.is_closed():
+                try:
+                    job = await asyncio.wait_for(worker.queue.get(), timeout=self.idle_ttl_seconds)
+                except asyncio.TimeoutError:
+                    if worker.queue.empty():
+                        break  # idle: this worker ends here
+                    continue
+                try:
+                    await self._deliver(worker, job)
+                finally:
+                    worker.queue.task_done()
+                worker.last_active = time.monotonic()
+        except asyncio.CancelledError:
+            raise
+        finally:
+            if self._workers.get(worker.channel_id) is worker:
+                self._workers.pop(worker.channel_id, None)
+
+    async def _deliver(self, worker: _ChannelWorker, job: SendJob):
         channel = self.client.get_channel(job.channel_id)
         if channel is None:
+            job.attempts = self.max_attempts + 1
+            self.dead_letters.append(job)
             return
-        await self.bucket.acquire()
+        await worker.bucket.acquire()
         try:
             kwargs = {"allowed_mentions": discord.AllowedMentions(everyone=False, roles=False, users=True)}
             if job.reply_to:
@@ -86,22 +155,34 @@ class Sender:
             job.attempts += 1
             self.retried += 1
             retry_after = float(getattr(exc, "retry_after", 0) or 0)
-            if getattr(exc, "status", 0) == 429 and job.attempts <= self.max_attempts:
-                await asyncio.sleep(max(0.5, retry_after))
-                await self.queue.put(job)
-                return
             if job.attempts <= self.max_attempts:
-                await asyncio.sleep(min(8.0, 1.5 * job.attempts))
-                await self.queue.put(job)
+                # Only THIS channel's worker sleeps; every other channel keeps flowing.
+                await asyncio.sleep(max(0.5, retry_after) if getattr(exc, "status", 0) == 429
+                                    else min(8.0, 1.5 * job.attempts))
+                await worker.queue.put(job)
                 return
-            self.pending.append(job)
+            self.dead_letters.append(job)
         except Exception:
             job.attempts += 1
             if job.attempts <= self.max_attempts:
-                await self.queue.put(job)
+                await worker.queue.put(job)
             else:
-                self.pending.append(job)
+                self.dead_letters.append(job)
+
+    async def stop(self):
+        self._stopped = True
+        tasks = [w.task for w in list(self._workers.values()) if w.task]
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._workers.clear()
 
     def stats(self) -> Dict[str, int]:
-        return {"queued": self.queue.qsize(), "sent": self.sent, "retried": self.retried,
-                "pending": len(self.pending)}
+        return {
+            "queued": sum(w.queue.qsize() for w in self._workers.values()),
+            "sent": self.sent,
+            "retried": self.retried,
+            "pending": len(self.dead_letters),
+            "channels": len(self._workers),
+        }
