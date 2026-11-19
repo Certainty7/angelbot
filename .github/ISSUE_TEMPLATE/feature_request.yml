@@ -1,0 +1,17 @@
+name: Feature Request / اقتراح ميزة
+description: اقترحي ميزة جديدة أو تحسيناً لمجتمع AngelBot
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: ما المشكلة التي تحلّها الميزة؟
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: الحل المقترح
+    validations:
+      required: true
