@@ -78,6 +78,7 @@ class Music(commands.Cog):
       )
       return
     state = self.engine.state(guild.id)
+    state.text_channel_id = interaction.channel_id
     if len(state.tracks) >= MAX_QUEUE:
       await interaction.followup.send(
           f"📚 القائمة ممتلئة (`{MAX_QUEUE}`). استخدمي `/skip` أو انتظري.", ephemeral=True
@@ -243,6 +244,7 @@ class Music(commands.Cog):
       await interaction.followup.send(self._check_failure_reply(), ephemeral=True)
       return
     state = self.engine.state(guild_id)
+    state.text_channel_id = interaction.channel_id
     room = MAX_QUEUE - len(state.tracks)
     if room <= 0:
       await interaction.followup.send(
@@ -250,6 +252,13 @@ class Music(commands.Cog):
       )
       return
     tracks = tracks[:room]
+    voice = interaction.guild.voice_client
+    if voice is not None and voice.is_connected() and voice.channel and voice.channel.id != channel.id:
+      await interaction.followup.send(
+          f"🎧 أنجل مشغّلة في {voice.channel.mention} الآن. انضمي لنفس الروم أولاً.",
+          ephemeral=True,
+      )
+      return
     try:
       await self.engine.ensure_connected(channel)
     except Exception as exc:  # noqa: BLE001 - answer the failure instead of crashing the interaction

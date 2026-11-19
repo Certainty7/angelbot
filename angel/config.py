@@ -10,7 +10,15 @@ import site
 import subprocess
 import sys
 from typing import Any, Dict, List, Optional, Set, Tuple
+
+from dotenv import load_dotenv
+
 from .registry import get_bot
+
+# Load .env before the first os.getenv: FFMPEG_PATH, ANGEL_TIMEZONE and
+# ANGEL_AUTO_INSTALL used to be read before this call, so a .env-only host
+# silently ignored them (and could pick the crashing static ffmpeg).
+load_dotenv()
 
 
 def _resolve_timezone(name: str):
@@ -66,7 +74,6 @@ _ensure_dependencies()
 
 import discord
 from discord import app_commands
-from dotenv import load_dotenv
 
 try:
   import yt_dlp
@@ -84,12 +91,14 @@ def _resolve_working_ffmpeg_exe() -> str:
   env_ff = (os.getenv("FFMPEG_PATH") or "").strip()
   if env_ff:
     candidates.append(env_ff)
-  sys_ff = shutil.which("ffmpeg")
-  if sys_ff:
-    candidates.append(sys_ff)
+  # Prefer the distro binary before PATH: a broken /usr/local or snap shim can
+  # answer `-version` and still fail on the first HTTPS stream.
   for std_p in ("/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg"):
     if os.path.isfile(std_p) and std_p not in candidates:
       candidates.append(std_p)
+  sys_ff = shutil.which("ffmpeg")
+  if sys_ff and sys_ff not in candidates:
+    candidates.append(sys_ff)
   if not candidates and sys.platform.startswith("linux"):
     print(
         "ffmpeg is missing. Install it on the host (sudo apt install ffmpeg) or set "
@@ -112,6 +121,11 @@ def _resolve_working_ffmpeg_exe() -> str:
           timeout=3,
       )
       if res.returncode == 0:
+        if sys.platform.startswith("linux") and "imageio_ffmpeg" in cand:
+          print(
+              "WARNING: using imageio_ffmpeg's static binary. Known SIGSEGV on Ubuntu "
+              "when opening https:// streams; install the host ffmpeg or set FFMPEG_PATH."
+          )
         return cand
     except Exception:
       continue
@@ -126,7 +140,7 @@ except ImportError:
   Image = None
 
 # 0. Environment & Core Configuration
-load_dotenv()
+# (load_dotenv() already ran at the top of this module, before ANGEL_TIMEZONE/FFMPEG_PATH.)
 
 DISCORD_TOKEN = (os.getenv("DISCORD_TOKEN") or "").strip()
 GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY") or "").strip()

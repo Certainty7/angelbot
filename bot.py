@@ -237,6 +237,12 @@ async def _play_from_message(message: discord.Message, query: str) -> None:
   if not isinstance(channel, discord.VoiceChannel):
     await safe_reply(message, "🎧 ادخل روم صوتي أولاً وأنا أشغّلها لك.")
     return
+  voice = message.guild.voice_client if message.guild else None
+  if voice is not None and voice.is_connected() and voice.channel and voice.channel.id != channel.id:
+    await safe_reply(message, f"🎧 أنجل مشغّلة في {voice.channel.mention} الآن. انضم لنفس الروم أولاً.")
+    return
+  state = cog.engine.state(message.guild.id)
+  state.text_channel_id = message.channel.id
   try:
     async with message.channel.typing():
       await cog.engine.ensure_connected(channel)
