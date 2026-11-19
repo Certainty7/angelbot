@@ -1,7 +1,7 @@
 # Architecture — Angel bot, website, and hosting
 
-Status: final for the closeout. Every value below was measured on 2026-11-15, not copied from an
-earlier report. Commit identifiers are the ones that were serving at the time of writing.
+Status: current as of 2026-11-19. The website moved to Cloudflare Pages; the bot and data
+hosting are unchanged.
 
 ## 1. Components
 
@@ -10,20 +10,20 @@ earlier report. Commit identifiers are the ones that were serving at the time of
 | Discord bot `Angel` | the bot host, `angelbot.service` | Python 3 process (`bot.py` + `angel/` + `cogs/`), discord.py, SQLite |
 | Bot database | same host, `chat_history.db` | one SQLite file: archive, FTS5 index, memory, DM logs, summaries |
 | Scheduled jobs | same host, systemd timers | maintenance, learning, backup and metrics timers |
-| Angel website | GitHub Pages, repo `Certainty7/angel-web` | static build of `angelbot/website` (Astro), custom domain `angel.aetherisnode.cloud` |
-| Aetheris portal | GitHub Pages, repo `Certainty7/aetherisnode-home` | static site, custom domain `aetherisnode.cloud` |
-| DNS | the domain's authoritative nameservers | apex `A` → four GitHub Pages addresses; `www`/`angel` `CNAME` → `certainty7.github.io` |
-| TLS | GitHub Pages managed certificates | Let's Encrypt, valid to 2027-02-13 |
-| CI | GitHub Actions | `checks` (selftest + website), `build` (portal), Cloudflare Pages check |
+| Angel website | Cloudflare Pages project `angel-site` | static build of `angelbot/website` (Astro), custom domain `angel.aetherisnode.cloud` |
+| Aetheris site | Cloudflare Worker `aetheris-node` | static/edge site for `aetherisnode.cloud` and `www` |
+| DNS | Cloudflare (`aetherisnode.cloud` zone) | proxied `angel` CNAME to Pages; Worker routes for apex/www |
+| TLS | Cloudflare Pages / Cloudflare edge | managed certificates |
+| CI | GitHub Actions | `checks` (bot + probes) and `website` (build + type-check + e2e) |
 
-There is no application server behind either website, no database exposed to the internet, and no
-traffic from the websites to the bot host.
+There is no application server behind the Angel site, no database exposed to the internet, and no
+traffic from the website to the bot host.
 
 ## 2. Request path
 
 ```
-visitor → authoritative DNS → GitHub Pages edge (Fastly)
-        → angel-web/main (static files, CNAME, .nojekyll, CSP <meta>)
+visitor → Cloudflare DNS → Cloudflare Pages edge
+        → angel-site production deployment (static files from website/dist)
 ```
 
 ```
@@ -38,13 +38,12 @@ The bot host serves no web traffic.
 | Artefact | Canonical location | Published copy |
 |---|---|---|
 | Bot code | `Certainty7/angelbot` `master` | `<deploy-dir>` on the bot host, same commit |
-| Website source | `angelbot` `website/` (Astro + `src/i18n/content.ts`) | `Certainty7/angel-web` `main`, byte-identical to `website/dist` |
-| Portal source | `Certainty7/aetherisnode-home` `main` | `gh-pages` branch of the same repository |
-| Deployment contract | `website/scripts/build.sh` | run by CI and by manual publish |
-| Drift gate | `website/scripts/check-published.sh` | compares a fresh build to `angel-web` |
+| Website source | `angelbot` `website/` (Astro + `src/i18n/content.ts`) | `angel-site` deployment built by `bash website/scripts/build.sh` |
+| Generated facts | `tools/website-data-generator/generate.py` | `website/src/data/{commands,invite,changelog,site}.json` |
+| Deployment contract | `website/scripts/build.sh` | run by Cloudflare Pages and by CI |
+| Drift gate | `generate.py --check` + `tests/website/` | fails the build on stale data |
 
-`angel-web` is a **publish artefact repository**, not a second source tree. The drift gate exists
-because publishing is a manual copy today; it fails on any byte difference.
+`angel-web` no longer exists; there is no publish copy to drift from.
 
 ## 4. Data model (bot)
 
@@ -73,11 +72,9 @@ This is a documented limitation, not a control.
 
 ## 6. Known limitations
 
-- GitHub Pages ignores `_headers`: no HSTS, no `X-Frame-Options`, no CSP response header. Angel
-  pages carry a CSP `<meta>` (which cannot express `frame-ancestors`); the portal carries a
-  stricter `default-src 'none'` meta policy.
-- `cache-control: max-age=600` on HTML and assets; a publish can take up to ten minutes to be
-  visible everywhere.
-- Publishing is manual: a build followed by a forward-only commit to `angel-web`.
+- HTML is revalidated; `_astro/*` is immutable. A Pages deployment is usually visible within a
+  minute, but edge caches may serve the previous HTML until it revalidates.
+- Publishing is automatic on `master`; if Cloudflare leaves a build queued, trigger the
+  production deployment from the dashboard.
 - The bot keeps the privileged `members` intent for autorole, member-name matching and voice
   channel matching; that caps the application at 100 guilds without Discord verification.

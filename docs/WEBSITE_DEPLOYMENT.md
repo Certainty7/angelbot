@@ -11,8 +11,8 @@ Last verified: **2026-11-19**.
 | `angel.aetherisnode.cloud` | **Cloudflare Pages project `angel-site`** | this repository, branch `master` |
 
 The Angel site used to be a manual copy in `Certainty7/angel-web` served by GitHub Pages.
-That path is retired: `angel-web` still exists as an archive but nothing serves from it, and
-the Pages project now builds directly from `angelbot` on every push to `master`.
+That path is retired and the repository was deleted on 2026-11-19; the Pages project now
+builds directly from `angelbot` on every push to `master`.
 
 ## 2. Build and deploy
 
@@ -74,7 +74,7 @@ curl -sI https://angel.aetherisnode.cloud/privacy/ | head -1
 Expected: `200 OK`, the three security headers, and `data-count="71"` /
 `data-count="14"` on the home page.
 
-The same checks run in CI (`website` workflow) against a local build, plus 63 Playwright
+The same checks run in CI (`website` workflow) against a local build, plus 67 Playwright
 tests covering every page in Arabic and English.
 
 ## 6. Rollback
@@ -82,12 +82,14 @@ tests covering every page in Arabic and English.
 - **Fastest:** Cloudflare dashboard → Pages → `angel-site` → Deployments → previous
   deployment → *Rollback to this deployment*.
 - **From code:** `git revert <bad-commit>` and push to `master`; Pages rebuilds.
-- **Danger only:** delete the `angel` CNAME and re-add it pointing at GitHub Pages
-  (`certainty7.github.io`, DNS only) while re-enabling Pages on `angel-web`.
+- **Last resort:** restore the previous deployment from Cloudflare; there is no GitHub Pages
+  fallback repository anymore.
 
 ## 7. Notes
 
-- The `angel-aetherisnode` Pages project is an older, unused project; its custom domain was
-  moved to `angel-site` on 2026-11-19.
-- `Certainty7/angel-web` is no longer in the serving path; keep it only as a publish archive
-  or delete it when the history is no longer useful.
+- The `angel-aetherisnode` Pages project and the `angel-web` publish repository were
+  removed on 2026-11-19 after the cutover; `angel-site` is the only Pages project left.
+- `aetheris-node` is the Worker that serves the apex and `www`; it is unrelated to the
+  Angel site build.
+- If a Pages build stays queued for more than a few minutes, trigger a production
+  deployment from the Cloudflare dashboard; the build itself is the same command.
