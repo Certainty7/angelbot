@@ -13,7 +13,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from angel.audio_source import ResolveError, clean_reason
-from angel.config import logger
+from angel.config import is_mistress, logger
 from angel.voice_engine import MusicEngine
 
 MUSIC_ENABLED = os.environ.get("MUSIC_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
@@ -59,6 +59,7 @@ class Music(commands.Cog):
 
   # ---- commands ----------------------------------------------------------
   @app_commands.command(name="play", description="تشغيل أغنية أو قائمة من رابط أو بحث")
+  @app_commands.guild_only()
   @app_commands.describe(query="رابط SoundCloud/YouTube أو نص للبحث")
   async def play(self, interaction: discord.Interaction, query: str):
     await interaction.response.defer()
@@ -69,6 +70,13 @@ class Music(commands.Cog):
       return
 
     guild = interaction.guild
+    voice = guild.voice_client
+    if voice is not None and voice.is_connected() and voice.channel and voice.channel.id != channel.id:
+      await interaction.followup.send(
+          f"🎧 أنجل مشغّلة في {voice.channel.mention} الآن. انضمي لنفس الروم أو أوقفيها أولاً.",
+          ephemeral=True,
+      )
+      return
     state = self.engine.state(guild.id)
     if len(state.tracks) >= MAX_QUEUE:
       await interaction.followup.send(
@@ -89,10 +97,17 @@ class Music(commands.Cog):
       )
       return
 
+    if len(state.tracks) > MAX_QUEUE:
+      state.remove_at(len(state.tracks) - 1)
+      await interaction.followup.send(
+          f"📚 القائمة ممتلئة (`{MAX_QUEUE}`). استخدمي `/skip` أو انتظري.", ephemeral=True
+      )
+      return
+
     playing = await self.engine.start(guild)
     if playing is track:
       msg = f"🎶 أشغّل الآن: **{track.title}** (`{track.duration_text}`) من `{track.source}`"
-      dave = self.engine.last_dave or {}
+      dave = self.engine.last_dave.get(guild.id) or {}
       if dave.get("ver") and not dave.get("can_encrypt"):
         msg += "\n🔇 التشفير الصوتي لم يكتمل بعد — إن لم تسمعي شيئاً أعيدي المحاولة بعد ثانية."
       await interaction.followup.send(msg)
@@ -103,10 +118,22 @@ class Music(commands.Cog):
       )
 
   @app_commands.command(name="skip", description="تخطي الأغنية الحالية")
+  @app_commands.guild_only()
   async def skip(self, interaction: discord.Interaction):
     await interaction.response.defer()
-    if interaction.guild is None or interaction.guild.voice_client is None:
+    try:
+      channel = await self._require_voice(interaction)
+    except app_commands.CheckFailure:
+      await interaction.followup.send(self._check_failure_reply(), ephemeral=True)
+      return
+    voice = interaction.guild.voice_client if interaction.guild else None
+    if voice is None:
       await interaction.followup.send("🔇 لا يوجد تشغيل الآن.", ephemeral=True)
+      return
+    if voice.channel and voice.channel.id != channel.id:
+      await interaction.followup.send(
+          f"🎧 انضمي إلى {voice.channel.mention} حتى تتمكني من التخطي.", ephemeral=True
+      )
       return
     skipped = await self.engine.skip(interaction.guild)
     nxt = self.engine.state(interaction.guild.id).current
@@ -118,10 +145,9 @@ class Music(commands.Cog):
       await interaction.followup.send(f"⏭️ تخطيت **{skipped.title}** → **{nxt.title}**")
 
   @app_commands.command(name="queue", description="عرض قائمة التشغيل الحالية")
+  @app_commands.guild_only()
   async def queue(self, interaction: discord.Interaction):
     await interaction.response.defer(ephemeral=True)
-    if interaction.guild is None:
-      return
     state = self.engine.state(interaction.guild.id)
     embed = discord.Embed(title="🎧 قائمة التشغيل", color=0x2B2D31)
     current = state.current
@@ -146,6 +172,7 @@ class Music(commands.Cog):
     await interaction.followup.send(embed=embed, ephemeral=True)
 
   @app_commands.command(name="playlist", description="حفظ قائمة أو استعراضها أو حذفها")
+  @app_commands.guild_only()
   @app_commands.describe(action="list أو save أو load أو delete", name="اسم القائمة", query="رابط أو بحث (مع save)")
   @app_commands.choices(
       action=[
@@ -163,8 +190,6 @@ class Music(commands.Cog):
       query: Optional[str] = None,
   ):
     await interaction.response.defer(ephemeral=action.value != "load")
-    if interaction.guild is None:
-      return
     guild_id = interaction.guild.id
 
     if action.value == "list":
@@ -195,6 +220,11 @@ class Music(commands.Cog):
       return
 
     if action.value == "delete":
+      if not (is_mistress(interaction.user) or interaction.user.guild_permissions.manage_guild):
+        await interaction.followup.send(
+            "🚫 حذف قائمة محفوظة متاح لإدارة السيرفر فقط.", ephemeral=True
+        )
+        return
       removed = await self.bot.db.delete_playlist_track(guild_id, name.strip())
       await interaction.followup.send(
           f"🗑️ حُذفت **{name}**." if removed else f"⚠️ لا توجد قائمة باسم **{name}**.", ephemeral=True
@@ -212,7 +242,20 @@ class Music(commands.Cog):
     except app_commands.CheckFailure:
       await interaction.followup.send(self._check_failure_reply(), ephemeral=True)
       return
-    await self.engine.ensure_connected(channel)
+    state = self.engine.state(guild_id)
+    room = MAX_QUEUE - len(state.tracks)
+    if room <= 0:
+      await interaction.followup.send(
+          f"📚 القائمة ممتلئة (`{MAX_QUEUE}`).", ephemeral=True
+      )
+      return
+    tracks = tracks[:room]
+    try:
+      await self.engine.ensure_connected(channel)
+    except Exception as exc:  # noqa: BLE001 - answer the failure instead of crashing the interaction
+      logger.warning(f"music-playlist join failed: {type(exc).__name__}: {exc}")
+      await interaction.followup.send("⚠️ تعذر الدخول للروم الصوتي.", ephemeral=True)
+      return
     added, failed = 0, 0
     for item in tracks:
       try:

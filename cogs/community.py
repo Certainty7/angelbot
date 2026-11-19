@@ -21,6 +21,9 @@ class Community(commands.Cog):
     self.bot = bot
 
   @app_commands.command(name="snipe", description="كشف آخر رسالة حُذفت في القناة")
+  @app_commands.guild_only()
+  @app_commands.default_permissions(manage_messages=True)
+  @has_perm_or_mistress(manage_messages=True)
   async def snipe_cmd(self, interaction: discord.Interaction):
     data = self.bot.snipe_cache.get(interaction.channel.id)
     if not data:
@@ -39,6 +42,9 @@ class Community(commands.Cog):
 
 
   @app_commands.command(name="editsnipe", description="كشف آخر رسالة تم تعديلها في القناة")
+  @app_commands.guild_only()
+  @app_commands.default_permissions(manage_messages=True)
+  @has_perm_or_mistress(manage_messages=True)
   async def editsnipe_cmd(self, interaction: discord.Interaction):
     data = self.bot.editsnipe_cache.get(interaction.channel.id)
     if not data:

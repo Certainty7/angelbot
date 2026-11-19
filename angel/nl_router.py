@@ -738,7 +738,7 @@ async def try_execute_natural_command(
         img_bytes, _ = await bot.ai.generate_image_bytes(art_prompt)
         file = discord.File(io.BytesIO(img_bytes), filename="angel_art.png")
         caption = "🎨 هذي الرسمة جهزتها لكِ على ذوقك:" if (mistress or harem_title) else "🎨 هذه اللوحة التي طلبتها:"
-        await safe_reply(message, content=caption, file=file, view=ArtStudioView(art_prompt, bot))
+        await safe_reply(message, content=caption, file=file, view=ArtStudioView(art_prompt, bot, getattr(message.author, "id", 0)))
       except Exception as exc:
         await safe_reply(message, f"⚠️ {exc}")
     return True
@@ -1432,6 +1432,10 @@ async def try_execute_natural_command(
   if nick_match and target_member:
     if not (mistress or author.guild_permissions.manage_nicknames):
       await safe_reply(message, "⚡ لا تملك صلاحية تغيير الألقاب.")
+      return True
+    allowed, why = can_moderate_member(author, target_member, message.guild)
+    if not allowed:
+      await safe_reply(message, why)
       return True
     new_nick = nick_match.group(1).strip()[:32]
     try:

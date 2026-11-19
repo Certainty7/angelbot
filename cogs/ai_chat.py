@@ -132,7 +132,7 @@ class AiChat(commands.Cog):
           timestamp=datetime.now(timezone.utc),
       )
       embed.set_image(url="attachment://angel_creation.png")
-      await interaction.followup.send(embed=embed, file=file, view=ArtStudioView(prompt, self.bot))
+      await interaction.followup.send(embed=embed, file=file, view=ArtStudioView(prompt, self.bot, interaction.user.id))
     except AI_ERRORS as err:
       await interaction.followup.send(f"⚠️ {err}", ephemeral=True)
 
