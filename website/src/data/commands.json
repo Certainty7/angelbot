@@ -794,11 +794,15 @@
       "description_ar": "كشف آخر رسالة جرى تعديلها في القناة",
       "description_discord": "كشف آخر رسالة تم تعديلها في القناة",
       "config_scope": "guild",
-      "caller_gate": [],
+      "caller_gate": [
+        "manage_messages"
+      ],
       "owner_only": false,
       "options": [],
       "description_en": "Reveal the last edited message in the channel",
-      "bot_permissions": []
+      "bot_permissions": [
+        "manage_messages"
+      ]
     },
     {
       "name": "giveaway",
@@ -929,11 +933,15 @@
       "description_ar": "كشف آخر رسالة جرى حذفها في القناة",
       "description_discord": "كشف آخر رسالة حُذفت في القناة",
       "config_scope": "guild",
-      "caller_gate": [],
+      "caller_gate": [
+        "manage_messages"
+      ],
       "owner_only": false,
       "options": [],
       "description_en": "Reveal the last deleted message in the channel",
-      "bot_permissions": []
+      "bot_permissions": [
+        "manage_messages"
+      ]
     },
     {
       "name": "ticket_panel",

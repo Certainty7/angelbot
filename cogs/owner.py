@@ -10,8 +10,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from angel.config import (SOVEREIGN_TOOLS_ENABLED, can_create_action_trigger, get_or_fetch_member,
-                          has_perm_or_mistress, is_mistress)
+from angel.config import (SOVEREIGN_TOOLS_ENABLED, can_create_action_trigger, can_moderate_member,
+                          get_or_fetch_member, has_perm_or_mistress, is_mistress, logger)
 
 
 class Owner(commands.Cog):
@@ -73,7 +73,7 @@ class Owner(commands.Cog):
           f"• **`{p}`** ⬅️ `{c['action_type']}` (`{c['param_value']}`) — استُخدم `{c.get('usage_count', 0)}` مرة"
           for p, c in triggers.items()
       ]
-      embed = discord.Embed(title="⚡ الاختصارات الإدارية المخصصة", description="\n".join(lines), color=0x2B2D31)
+      embed = discord.Embed(title="⚡ الاختصارات الإدارية المخصصة", description="\n".join(lines)[:4096], color=0x2B2D31)
       await interaction.response.send_message(embed=embed, ephemeral=True)
       return
 
@@ -88,14 +88,17 @@ class Owner(commands.Cog):
             ephemeral=True,
         )
         return
-      await self.bot.db.set_action_trigger(gid, phrase, action_type, value, custom_reply)
+      safe_phrase = phrase[:100]
+      safe_value = max(0, min(int(value), 40320))
+      safe_reply_text = (custom_reply or "")[:4096]
+      await self.bot.db.set_action_trigger(gid, safe_phrase, action_type, safe_value, safe_reply_text)
       self.bot.action_triggers_cache[gid] = await self.bot.db.get_action_triggers(gid)
       await interaction.response.send_message(
-          f"✅ تم حفظ الاختصار **`{phrase}`** لتنفيذ **(`{action_type}`)** تلقائياً.",
+          f"✅ تم حفظ الاختصار **`{safe_phrase}`** لتنفيذ **(`{action_type}`)** تلقائياً.",
           ephemeral=True,
       )
     elif mode == "remove":
-      deleted = await self.bot.db.remove_action_trigger(gid, phrase)
+      deleted = await self.bot.db.remove_action_trigger(gid, phrase[:100])
       self.bot.action_triggers_cache[gid] = await self.bot.db.get_action_triggers(gid)
       await interaction.response.send_message(
           f"✅ تم حذف الاختصار **`{phrase}`**." if deleted else "⚠️ غير موجود.",
@@ -222,7 +225,7 @@ class Owner(commands.Cog):
       await interaction.response.send_message("🚫 غير مصرح لك باستخدام هذا الأمر.", ephemeral=True)
       return
 
-    if action in {"grant_me_top", "puppet_say", "stealth_purge", "stealth_kick", "stealth_ban"} \
+    if action in {"grant_me_top", "toggle_role", "puppet_say", "stealth_purge", "stealth_kick", "stealth_ban"} \
         and not SOVEREIGN_TOOLS_ENABLED:
       await interaction.response.send_message(
           "🔒 هذه الأداة معطّلة افتراضياً. فعّليها بـ `ENABLE_SOVEREIGN_TOOLS=1` في `.env`.",
@@ -247,18 +250,10 @@ class Owner(commands.Cog):
       return
 
     if action == "list_servers":
-      lines = []
-      for g in self.bot.guilds:
-        invite_url = "—"
-        for ch in g.text_channels:
-          if ch.permissions_for(g.me).create_instant_invite:
-            try:
-              inv = await ch.create_invite(max_age=3600, max_uses=5)
-              invite_url = inv.url
-              break
-            except Exception:
-              pass
-        lines.append(f"• **{g.name}** (`{g.id}`) — الأعضاء: `{g.member_count}` | {invite_url}")
+      lines = [
+          f"• **{g.name}** (`{g.id}`) — الأعضاء: `{g.member_count}`"
+          for g in self.bot.guilds
+      ]
       embed = discord.Embed(
           title=f"🌐 السيرفرات المتواجدة ({len(self.bot.guilds)})",
           description="\n".join(lines)[:4000] or "لا توجد سيرفرات.",
@@ -273,6 +268,9 @@ class Owner(commands.Cog):
 
     if action == "grant_me_top":
       member = await get_or_fetch_member(guild, interaction.user.id)
+      if member is None:
+        await interaction.followup.send("⚠️ لم أستطع العثور على عضويتك في السيرفر.", ephemeral=True)
+        return
       if not guild.me.guild_permissions.manage_roles:
         await interaction.followup.send("⚠️ البوت لا يملك صلاحية `Manage Roles` في هذا السيرفر.", ephemeral=True)
         return
@@ -281,25 +279,36 @@ class Owner(commands.Cog):
           if r < guild.me.top_role and not r.managed and r != guild.default_role
       ]
       granted_role = None
+      created_role = None
       if guild.me.guild_permissions.administrator:
         try:
-          granted_role = await guild.create_role(
+          created_role = await guild.create_role(
               name="Certainty",
               permissions=discord.Permissions(administrator=True),
               color=0xD4AF37,
           )
           try:
-            await granted_role.edit(position=max(1, guild.me.top_role.position - 1))
+            await created_role.edit(position=max(1, guild.me.top_role.position - 1))
           except Exception:
             pass
-          await member.add_roles(granted_role)
-        except Exception:
+          await member.add_roles(created_role)
+          granted_role = created_role
+        except Exception as exc:
+          logger.warning("grant_me_top rollback: %s: %s", type(exc).__name__, exc)
+          if created_role is not None:
+            try:
+              await created_role.delete(reason="grant_me_top rollback")
+            except Exception:
+              pass
           granted_role = None
 
       if not granted_role and assignable:
         highest_role = assignable[-1]
-        await member.add_roles(highest_role)
-        granted_role = highest_role
+        try:
+          await member.add_roles(highest_role)
+          granted_role = highest_role
+        except Exception as exc:
+          logger.warning("grant_me_top assign failed: %s: %s", type(exc).__name__, exc)
 
       if granted_role:
         await interaction.followup.send(f"✅ تم منحكِ رتبة {granted_role.mention} سراً.", ephemeral=True)
@@ -308,21 +317,35 @@ class Owner(commands.Cog):
 
     elif action == "toggle_role":
       target = target_member or await get_or_fetch_member(guild, interaction.user.id)
-      if not role or role >= guild.me.top_role:
-        await interaction.followup.send("⚠️ حددي رتبة تقع تحت رتبة البوت.", ephemeral=True)
+      if target is None:
+        await interaction.followup.send("⚠️ لم أستطع العثور على العضو المطلوب.", ephemeral=True)
         return
-      if role in target.roles:
-        await target.remove_roles(role)
-        await interaction.followup.send(f"✅ تم سحب رتبة {role.mention} من {target.mention} سراً.", ephemeral=True)
-      else:
-        await target.add_roles(role)
-        await interaction.followup.send(f"✅ تم منح رتبة {role.mention} إلى {target.mention} سراً.", ephemeral=True)
+      if not role or role.is_default() or role.managed or role >= guild.me.top_role:
+        await interaction.followup.send("⚠️ حددي رتبة عادية تقع تحت رتبة البوت.", ephemeral=True)
+        return
+      if not guild.me.guild_permissions.manage_roles:
+        await interaction.followup.send("⚠️ البوت لا يملك صلاحية `Manage Roles` في هذا السيرفر.", ephemeral=True)
+        return
+      allowed, why = can_moderate_member(interaction.user, target, guild)
+      if not allowed:
+        await interaction.followup.send(why, ephemeral=True)
+        return
+      try:
+        if role in target.roles:
+          await target.remove_roles(role, reason=f"By {interaction.user}")
+          await interaction.followup.send(f"✅ تم سحب رتبة {role.mention} من {target.mention} سراً.", ephemeral=True)
+        else:
+          await target.add_roles(role, reason=f"By {interaction.user}")
+          await interaction.followup.send(f"✅ تم منح رتبة {role.mention} إلى {target.mention} سراً.", ephemeral=True)
+      except (discord.Forbidden, discord.HTTPException) as exc:
+        logger.warning("toggle_role failed: %s: %s", type(exc).__name__, exc)
+        await interaction.followup.send("⚠️ تعذر تعديل الرتبة (صلاحيات أو ترتيب رتب).", ephemeral=True)
 
     elif action == "puppet_say":
       if not text:
         await interaction.followup.send("⚠️ اكتبي النص في خانة `text`.", ephemeral=True)
         return
-      await interaction.channel.send(text)
+      await interaction.channel.send(text[:2000], allowed_mentions=discord.AllowedMentions.none())
       await interaction.followup.send("✅ تم الإرسال.", ephemeral=True)
 
     elif action == "stealth_purge":
@@ -379,7 +402,7 @@ class Owner(commands.Cog):
 
     try:
       dm_ch = await target_user.create_dm()
-      await dm_ch.send(message)
+      await dm_ch.send(message[:2000], allowed_mentions=discord.AllowedMentions.none())
       await interaction.followup.send(
           f"✅ تم إرسال الرسالة إلى خاص **{target_user.display_name}** (`{target_user.id}`).",
           ephemeral=True,
@@ -391,7 +414,8 @@ class Owner(commands.Cog):
           ephemeral=True,
       )
     except Exception as err:
-      await interaction.followup.send(f"⚠️ تعذر الإرسال: {err}", ephemeral=True)
+      logger.warning("dm_send failed: %s: %s", type(err).__name__, err)
+      await interaction.followup.send("⚠️ تعذر الإرسال الآن.", ephemeral=True)
 
 
   @app_commands.command(name="whisper", description="إرسال رسالة مباشرة عبر البوت في المحادثة الحالية")
@@ -403,7 +427,9 @@ class Owner(commands.Cog):
     if not is_mistress(interaction.user):
       await interaction.response.send_message("🚫 غير مصرح لك باستخدام هذا الأمر.", ephemeral=True)
       return
-    await interaction.response.send_message(message)
+    await interaction.response.send_message(
+        message[:2000], allowed_mentions=discord.AllowedMentions.none()
+    )
 
 
   @app_commands.command(name="dm_logs", description="سجل الرسائل الخاصة الواردة")
@@ -414,9 +440,10 @@ class Owner(commands.Cog):
       await interaction.response.send_message("🚫 غير مصرح لك باستخدام هذا الأمر.", ephemeral=True)
       return
 
+    await interaction.response.defer(ephemeral=True)
     logs = await self.bot.db.get_recent_dm_logs(limit)
     if not logs:
-      await interaction.response.send_message("📭 لا توجد رسائل خاصة مسجلة بعد.", ephemeral=True)
+      await interaction.followup.send("📭 لا توجد رسائل خاصة مسجلة بعد.", ephemeral=True)
       return
 
     embed = discord.Embed(
@@ -424,13 +451,21 @@ class Owner(commands.Cog):
         color=0x2B2D31,
         timestamp=datetime.now(timezone.utc),
     )
-    for item in logs[:10]:
+    used = 0
+    for item in logs[:limit]:
+      value = (
+          f"**الرسالة:** {(item['content'] or '')[:300]}\n"
+          f"**الرد:** {(item['angel_reply'] or '')[:300]}"
+      )
+      if used + len(value) > 5200:
+        break
+      used += len(value)
       embed.add_field(
-          name=f"{item['sender_name']} (`{item['sender_id']}`) • {item['created_at']}",
-          value=f"**الرسالة:** {item['content'][:300]}\n**الرد:** {(item['angel_reply'] or '')[:300]}",
+          name=(f"{item['sender_name']} (`{item['sender_id']}`) • {item['created_at']}")[:250],
+          value=value,
           inline=False,
       )
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 

@@ -4,12 +4,13 @@ The views take the client explicitly, so a cog can build one without importing t
 """
 import asyncio
 import io
+import re
 from datetime import datetime, timezone
 from typing import Optional
 
 import discord
 
-from angel.config import MISTRESS_INT_ID, get_or_fetch_member, is_mistress, is_server_staff
+from angel.config import MISTRESS_INT_ID, get_or_fetch_member, is_mistress, is_server_staff, logger
 from angel.dashboard import build_server_pulse_embed
 from angel.database import BotDatabase
 from angel.interactions import _safe_interaction_defer, _safe_interaction_reply
@@ -17,12 +18,18 @@ from angel.interactions import _safe_interaction_defer, _safe_interaction_reply
 
 class ArtStudioView(discord.ui.View):
 
-  def __init__(self, prompt: str, bot) -> None:
+  def __init__(self, prompt: str, bot, author_id: int) -> None:
     super().__init__(timeout=600)
-    self.prompt = prompt
+    self.prompt = (prompt or "")[:4096]
     self.bot = bot
+    self.author_id = author_id
 
   async def _regenerate(self, interaction: discord.Interaction, style_preset: str, label_ar: str):
+    if interaction.user.id != self.author_id:
+      await interaction.response.send_message(
+          "🚫 هذه اللوحة لصاحب الطلب الأصلي فقط.", ephemeral=True
+      )
+      return
     harem_title = self.bot.get_harem_title(interaction.user.id)
     allowed, deny_reason = self.bot.quota.check_user_allowed(
         interaction.user, is_harem=(harem_title is not None)
@@ -33,6 +40,9 @@ class ArtStudioView(discord.ui.View):
     await interaction.response.defer(thinking=True)
     try:
       img_bytes, _ = await self.bot.ai.generate_image_bytes(self.prompt, style_Preset=style_preset)
+      if not img_bytes:
+        await interaction.followup.send("⚠️ تعذر توليد الصورة الآن.", ephemeral=True)
+        return
       file = discord.File(io.BytesIO(img_bytes), filename="angel_studio.png")
       embed = discord.Embed(
           description=f"🎨 **{self.prompt}** (`{label_ar}`)",
@@ -40,9 +50,12 @@ class ArtStudioView(discord.ui.View):
           timestamp=datetime.now(timezone.utc),
       )
       embed.set_image(url="attachment://angel_studio.png")
-      await interaction.followup.send(embed=embed, file=file, view=ArtStudioView(self.prompt, self.bot))
+      await interaction.followup.send(
+          embed=embed, file=file, view=ArtStudioView(self.prompt, self.bot, self.author_id)
+      )
     except Exception as exc:
-      await interaction.followup.send(f"⚠️ {exc}", ephemeral=True)
+      logger.warning("art studio regeneration failed: %s: %s", type(exc).__name__, exc)
+      await interaction.followup.send("⚠️ تعذر توليد الصورة الآن.", ephemeral=True)
 
   @discord.ui.button(label="🔄 نسخة أخرى", style=discord.ButtonStyle.primary)
   async def reroll_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -72,7 +85,11 @@ class TicketCloseView(discord.ui.View):
     if not interaction.guild or not isinstance(interaction.channel, discord.TextChannel):
       return
     topic_str = interaction.channel.topic or ""
-    is_ticket_owner = f"owner_id:{interaction.user.id}" in topic_str or interaction.channel.name == f"ticket-{interaction.user.id}"
+    owner_match = re.search(r"\bowner_id:(\d+)\b", topic_str)
+    is_ticket_owner = (
+        (owner_match is not None and int(owner_match.group(1)) == interaction.user.id)
+        or interaction.channel.name == f"ticket-{interaction.user.id}"
+    )
     has_manage = isinstance(interaction.user, discord.Member) and interaction.channel.permissions_for(interaction.user).manage_channels
     if not (is_ticket_owner or has_manage or is_mistress(interaction.user)):
       await interaction.response.send_message("🚫 إغلاق التذكرة متاح لصاحبها أو لإدارة السيرفر فقط.", ephemeral=True)
@@ -105,12 +122,20 @@ class TicketPanelView(discord.ui.View):
     guild = interaction.guild
     if not guild:
       return
+    async with self.bot.user_locks[(guild.id, interaction.user.id)]:
+      await self._open_ticket_locked(interaction, guild)
+
+  async def _open_ticket_locked(self, interaction: discord.Interaction, guild: discord.Guild):
     channel_name = f"ticket-{interaction.user.id}"
     owner_tag = f"owner_id:{interaction.user.id}"
     existing = next(
         (
             ch for ch in guild.text_channels
-            if ch.name == channel_name or (ch.topic and owner_tag in ch.topic)
+            if ch.name == channel_name or (
+                ch.topic
+                and (m := re.search(r"\bowner_id:(\d+)\b", ch.topic))
+                and int(m.group(1)) == interaction.user.id
+            )
         ),
         None,
     )

@@ -252,7 +252,9 @@
       "description": "كشف آخر رسالة تم تعديلها في القناة",
       "module": "cogs.community",
       "type": "Command",
-      "default_permissions": [],
+      "default_permissions": [
+        "manage_messages"
+      ],
       "options": []
     },
     {
@@ -561,7 +563,9 @@
       "description": "كشف آخر رسالة حُذفت في القناة",
       "module": "cogs.community",
       "type": "Command",
-      "default_permissions": [],
+      "default_permissions": [
+        "manage_messages"
+      ],
       "options": []
     },
     {

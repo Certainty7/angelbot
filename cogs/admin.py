@@ -107,6 +107,10 @@ class Admin(commands.Cog):
   @app_commands.describe(member="العضو")
   @has_perm_or_mistress(moderate_members=True)
   async def untimeout_cmd(self, interaction: discord.Interaction, member: discord.Member):
+    allowed, why = can_moderate_member(interaction.user, member, interaction.guild)
+    if not allowed:
+      await interaction.response.send_message(why, ephemeral=True)
+      return
     await member.timeout(None)
     await interaction.response.send_message(f"🔊 تم رفع الكتم عن {member.mention}.")
     await self.bot.send_modlog(interaction.guild, "🔊 رفع الكتم", f"**العضو:** {member.mention}")
@@ -134,6 +138,10 @@ class Admin(commands.Cog):
   @app_commands.describe(member="العضو", reason="السبب")
   @has_perm_or_mistress(moderate_members=True)
   async def warn_cmd(self, interaction: discord.Interaction, member: discord.Member, reason: str):
+    allowed, why = can_moderate_member(interaction.user, member, interaction.guild)
+    if not allowed:
+      await interaction.response.send_message(why, ephemeral=True)
+      return
     total = await self.bot.db.add_warning(interaction.guild.id, member.id, interaction.user.id, reason)
     await interaction.response.send_message(
         f"⚠️ تم توجيه إنذار إلى {member.mention} — السبب: **{reason}** (الإجمالي: `{total}`)."
