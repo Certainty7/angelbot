@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "version": "1.0.0",
+  "license": "MIT",
+  "license_url": "https://github.com/Certainty7/angelbot/blob/master/LICENSE",
+  "repository": "https://github.com/Certainty7/angelbot",
+  "release_url": "https://github.com/Certainty7/angelbot/releases",
+  "default_branch": "master",
+  "media_platforms": 14,
+  "latest_release": {
+    "version": "1.0.0",
+    "date": "2026-11-19",
+    "summary": {
+      "en": "First open-source release after the security and stability hardening pass.",
+      "ar": "أول إصدار مفتوح المصدر بعد جولة تقوية الأمان والاستقرار."
+    }
+  }
+}

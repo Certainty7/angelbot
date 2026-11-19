@@ -18,6 +18,8 @@ Usage:
 Outputs (relative to --out, default `website/src/data`):
     commands.json   categories, totals and every registered command
     invite.json     application id, required bot permissions (with evidence) and the invite URL
+    changelog.json  releases parsed from CHANGELOG.md and CHANGELOG.ar.md
+    site.json       version, license, repository and derived site facts
 """
 
 from __future__ import annotations
@@ -303,6 +305,117 @@ def invite(repo: pathlib.Path) -> dict:
     }
 
 
+RELEASE_HEADING = re.compile(r"^##\s+(\S+)\s+[—–-]\s+(\d{4}-\d{2}-\d{2})\s*$")
+SECTION_HEADING = re.compile(r"^###\s+(.+?)\s*$")
+BULLET = re.compile(r"^[-*]\s+(.+?)\s*$")
+
+
+def parse_changelog(path: pathlib.Path) -> dict:
+    """Parse `## <version> — <date>` sections with `### <topic>` bullet lists."""
+    releases: dict[str, dict] = {}
+    if not path.is_file():
+        return releases
+    current: dict | None = None
+    section: str | None = None
+    summary_lines: list[str] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.rstrip()
+        heading = RELEASE_HEADING.match(line)
+        if heading:
+            if current is not None:
+                current["summary"] = " ".join(summary_lines).strip()
+            version, date = heading.group(1), heading.group(2)
+            current = {"version": version, "date": date, "summary": "", "sections": []}
+            releases[version] = current
+            section = None
+            summary_lines = []
+            continue
+        if current is None:
+            continue
+        section_heading = SECTION_HEADING.match(line)
+        if section_heading:
+            section = section_heading.group(1).strip()
+            current["sections"].append({"title": section, "items": []})
+            continue
+        bullet = BULLET.match(line)
+        if bullet and section is not None:
+            current["sections"][-1]["items"].append(bullet.group(1))
+            continue
+        if section is not None and line.strip() and current["sections"][-1]["items"]:
+            # A wrapped bullet: keep it as one sentence for the site.
+            current["sections"][-1]["items"][-1] += " " + line.strip()
+            continue
+        if section is None and line.strip() and not line.startswith("#"):
+            summary_lines.append(line.strip())
+    if current is not None:
+        current["summary"] = " ".join(summary_lines).strip()
+    return releases
+
+
+def changelog(repo: pathlib.Path) -> dict:
+    """Bilingual releases: English text from CHANGELOG.md, Arabic from CHANGELOG.ar.md."""
+    english = parse_changelog(repo / "CHANGELOG.md")
+    arabic = parse_changelog(repo / "CHANGELOG.ar.md")
+    releases = []
+    for version, en in english.items():
+        ar = arabic.get(version, {})
+        ar_sections = ar.get("sections", [])
+        sections = []
+        for index, en_section in enumerate(en["sections"]):
+            ar_section = ar_sections[index] if index < len(ar_sections) else {}
+            ar_items = ar_section.get("items", [])
+            sections.append({
+                "title": {"en": en_section["title"], "ar": ar_section.get("title") or en_section["title"]},
+                "items": [
+                    {"en": item, "ar": ar_items[i] if i < len(ar_items) else item}
+                    for i, item in enumerate(en_section["items"])
+                ],
+            })
+        releases.append({
+            "version": version,
+            "date": en["date"],
+            "summary": {"en": en["summary"], "ar": ar.get("summary") or en["summary"]},
+            "sections": sections,
+        })
+    return {
+        "schema": 1,
+        "source": ["CHANGELOG.md", "CHANGELOG.ar.md"],
+        "releases": releases,
+    }
+
+
+def site_facts(repo: pathlib.Path, release_data: dict) -> dict:
+    """Project facts the site may publish, derived from the checked-out tree."""
+    version_match = re.search(
+        r'^__version__\s*=\s*["\']([^"\']+)["\']',
+        (repo / "angel" / "__init__.py").read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    if not version_match:
+        raise SystemExit("angel/__init__.py has no __version__")
+    media_platforms = len(list((repo / "tests" / "fixtures" / "gallery").glob("*.case.json")))
+    releases = release_data["releases"]
+    latest = releases[0] if releases else None
+    return {
+        "schema": 1,
+        "version": version_match.group(1),
+        "license": "MIT",
+        "license_url": "https://github.com/Certainty7/angelbot/blob/master/LICENSE",
+        "repository": "https://github.com/Certainty7/angelbot",
+        "release_url": "https://github.com/Certainty7/angelbot/releases",
+        "default_branch": "master",
+        "media_platforms": media_platforms,
+        "latest_release": (
+            {
+                "version": latest["version"],
+                "date": latest["date"],
+                "summary": latest["summary"],
+            }
+            if latest else None
+        ),
+    }
+
+
 def build(repo: pathlib.Path) -> tuple[dict, dict]:
     found = collect(repo)
     if found["errors"]:
@@ -380,9 +493,13 @@ def main(argv: list[str]) -> int:
     repo = args.repo_root.resolve()
     out = args.out or (repo / "website" / "src" / "data")
     catalogue, invite_data = build(repo)
+    release_data = changelog(repo)
+    facts = site_facts(repo, release_data)
     payloads = {
         out / "commands.json": public_catalogue(catalogue),
         out / "invite.json": public_invite(invite_data),
+        out / "changelog.json": release_data,
+        out / "site.json": facts,
     }
     stale = []
     for path, payload in payloads.items():
@@ -403,6 +520,8 @@ def main(argv: list[str]) -> int:
               f"| eager {counts['eager']} + lazy {counts['lazy']} | categories {counts['categories']}")
         print(f"invite: {invite_data['invite_url']}  mask={invite_data['permissions_value']}")
         print(f"missing English descriptions: {len(catalogue['missing_english_descriptions'])}")
+        print(f"version: {facts['version']} | releases: {len(release_data['releases'])} | "
+              f"media platforms: {facts['media_platforms']}")
     return 0
 
 

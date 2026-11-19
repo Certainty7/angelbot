@@ -10,7 +10,7 @@ Pipeline:
 bot source (cogs/, bot.py, angel/client.py)
         │  tools/website-data-generator/generate.py   (AST, standard library only)
         ▼
-website/src/data/commands.json      website/src/data/invite.json
+website/src/data/commands.json  invite.json  changelog.json  site.json
         │  Astro build
         ▼
 website/dist  →  Cloudflare Pages  →  angel.aetherisnode.cloud
@@ -36,18 +36,19 @@ choices), the Discord permission the command carries (`app_commands.default_perm
 runtime `has_perm_or_mistress` gate), and whether the handler refuses everyone but the owner (an
 `if not is_mistress(...)` before any work — including one disjunct of an `or`).
 
-## Counts (verified 2026-11-14)
+## Counts (verified 2026-11-19)
 
 | Measure | Value |
 |---|---|
-| Commands registered when music is enabled | 68 |
-| Slash commands | 65 |
+| Commands in the catalogue | 71 |
+| Slash commands | 68 |
 | Message context menus | 3 |
-| Eager tree at startup | 64 (61 slash + 3 context menus) |
+| Eager tree at startup | 67 |
 | Music commands, loaded from `setup_hook` | 4 |
+| Command categories | 14 |
 
-`64` is the startup tree and `68` is the full surface; both are true and neither is a typo. Source
-files scanned: 14 (`cogs/*.py`), 13 categories.
+`67` is the startup tree and `71` is the full surface (including the four lazy music
+commands); both are true. Source files scanned: 15 (`cogs/*.py`).
 
 The generator's output is compared against `tests/website/fixtures/runtime_census.json`, which was
 captured by importing every cog's `install()` against a stub command tree on the production host:
@@ -63,6 +64,14 @@ invite link, and the generator refuses to run if `administrator` ever appears in
 `administrator` and `manage_guild` do appear in the source, but only as command gates
 (`app_commands.default_permissions`): Discord checks those against the member who runs the command,
 not against the bot. Requesting them at invite time would grant the bot rights no code path uses.
+
+## Releases, version and licence
+
+`CHANGELOG.md` and `CHANGELOG.ar.md` are parsed into `changelog.json`; the page renders
+releases, not raw commits, so internal commit subjects never become public copy. `site.json`
+reads `angel/__init__.py` for the version, fixes the licence to the repository `LICENSE`,
+and counts `tests/fixtures/gallery/*.case.json` for the media-platform figure. The footer,
+the home page and the stat band read those files instead of hard-coded numbers.
 
 The application id (`1559932443102941284`) was read from `GET /oauth2/applications/@me` with the
 live bot token on 2026-11-14, and the application reports `bot_public: true` and

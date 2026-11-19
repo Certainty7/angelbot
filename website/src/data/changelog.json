@@ -1,29 +1,135 @@
 {
   "schema": 1,
-  "entries": [
+  "source": [
+    "CHANGELOG.md",
+    "CHANGELOG.ar.md"
+  ],
+  "releases": [
     {
-      "date": "2026-11-15",
-      "subject": "Bilingual Arabic/English website with a command explorer and a privacy page"
-    },
-    {
-      "date": "2026-11-15",
-      "subject": "Privacy controls: /data shows and deletes what the bot stores about you"
-    },
-    {
-      "date": "2026-11-14",
-      "subject": "Media resolver for TikTok, Instagram, X and Reddit links"
-    },
-    {
-      "date": "2026-11-13",
-      "subject": "Guarded moderation: permission re-checks and confirmation for model-proposed actions"
-    },
-    {
-      "date": "2026-11-12",
-      "subject": "Memory: /memory pin, /memory forget and a searchable server archive"
-    },
-    {
-      "date": "2026-11-11",
-      "subject": "Music playback: /play, /skip, /queue and /playlist"
+      "version": "1.0.0",
+      "date": "2026-11-19",
+      "summary": {
+        "en": "First open-source release after the security and stability hardening pass.",
+        "ar": "أول إصدار مفتوح المصدر بعد جولة تقوية الأمان والاستقرار."
+      },
+      "sections": [
+        {
+          "title": {
+            "en": "Security",
+            "ar": "الأمان"
+          },
+          "items": [
+            {
+              "en": "All outbound HTTP now goes through one shared network layer: strict URL syntax (no userinfo, control characters or non-canonical IPv4), every resolved address must be public, the async resolver re-checks at connect time, redirects are followed manually with each hop validated, and auth/cookie headers are dropped on cross-origin hops.",
+              "ar": "كل طلبات HTTP الصادرة تمر الآن عبر طبقة شبكة واحدة مشتركة: تحقّق صارم من صيغة الرابط (بلا بيانات مستخدم أو أحرف تحكّم أو IPv4 غير قياسي)، وكل عنوان يُحلّ يجب أن يكون عامًا، ومحلّل DNS غير المتزامن يعيد الفحص عند الاتصال، وتُتبع إعادة التوجيه يدويًا مع التحقق من كل قفزة، وتُحذف رؤوس المصادقة والكوكيز عند الانتقال إلى نطاق آخر."
+            },
+            {
+              "en": "`yt-dlp` is invoked with `--ignore-config`, `--use-extractors default,-generic` and `--` before the target; operator cookies are sent only on plain YouTube media pages.",
+              "ar": "يُشغَّل `yt-dlp` بـ `--ignore-config` و`--use-extractors default,-generic` و`--` قبل الهدف؛ ولا تُرسل كوكيز المشغّل إلا لصفحات يوتيوب الإعلامية العادية."
+            },
+            {
+              "en": "Extracted stream URLs are DNS-validated before FFmpeg, which now runs with `-protocol_whitelist https,http,tcp,tls,crypto`.",
+              "ar": "تُتحقق روابط البث المستخرجة عبر DNS قبل FFmpeg، الذي يعمل الآن بـ `-protocol_whitelist https,http,tcp,tls,crypto`."
+            },
+            {
+              "en": "`sudo` removed from the bot process; the systemd unit sets `NoNewPrivileges=true` and only the bot's data directory is writable.",
+              "ar": "أُزيل `sudo` من عملية البوت؛ ووحدة systemd تضبط `NoNewPrivileges=true` ولا تجعل قابلًا للكتابة سوى مجلد بيانات البوت."
+            },
+            {
+              "en": "Output filter redacts GitHub/Bearer/env-style secrets and neutralises role mentions.",
+              "ar": "فلتر المخرجات يحجب أسرار GitHub وBearer وصيغ `.env` ويُبطل منشنات الرتب."
+            }
+          ]
+        },
+        {
+          "title": {
+            "en": "Privacy",
+            "ar": "الخصوصية"
+          },
+          "items": [
+            {
+              "en": "Opt-out is fail-closed everywhere: message logging, snipe/edit-snipe, modlog, ambient context, autonomy targets and `/data delete` caches.",
+              "ar": "الانسحاب (opt-out) مغلق افتراضيًا في كل المسارات: تسجيل الرسائل، وsnipe/edit-snipe، وسجل الإشراف، وسياق المحادثة، وأهداف الاستقلالية، وكاشات `/data delete`."
+            },
+            {
+              "en": "`/data delete` also clears the member from in-memory buffers and per-user locks.",
+              "ar": "`/data delete` يمسح العضو أيضًا من مخازن الذاكرة المؤقتة وأقفال المستخدمين."
+            },
+            {
+              "en": "`/catchup` drops opted-out authors before spending the guild quota and frames chat text as untrusted data.",
+              "ar": "`/catchup` يستبعد المنسحبين قبل صرف حصة السيرفر، ويُغلّف نص المحادثة كبيانات غير موثوقة."
+            }
+          ]
+        },
+        {
+          "title": {
+            "en": "Stability",
+            "ar": "الاستقرار"
+          },
+          "items": [
+            {
+              "en": "Per-channel send queue: a 429 in one channel no longer blocks the others; idle workers exit; dead letters are bounded.",
+              "ar": "طابور إرسال لكل قناة: خطأ 429 في قناة لم يعد يعطّل البقية؛ والعمال الخاملون يخرجون، وقائمة الرسائل الفاشلة محدودة."
+            },
+            {
+              "en": "Bounded LRU/TTL caches replace the long-lived unbounded dictionaries.",
+              "ar": "كاشات LRU/TTL محدودة تحل محل القواميس الطويلة غير المحدودة."
+            },
+            {
+              "en": "Guild daily AI quota is atomic; `/setup` stores dialect, guard level and social-fixer state per guild.",
+              "ar": "حصة الذكاء الاصطناعي اليومية للسيرفر ذرّية؛ و`/setup` يحفظ اللهجة ومستوى الحماية وحالة مصلّح الروابط لكل سيرفر."
+            },
+            {
+              "en": "Voice reconnect is serialised per guild, DAVE timeouts trigger one clean reconnect, and the queue/byte counters are bounded.",
+              "ar": "إعادة اتصال الصوت متسلسلة لكل سيرفر، ومهلة DAVE تُطلق إعادة اتصال نظيفة واحدة، وعدّادات الطابور والبايتات محدودة."
+            }
+          ]
+        },
+        {
+          "title": {
+            "en": "Operations",
+            "ar": "التشغيل"
+          },
+          "items": [
+            {
+              "en": "CI runs compileall, pytest, the deploy gate, the security probe and the recall probe as blocking checks; ruff is advisory on changed files; pip-audit runs weekly.",
+              "ar": "CI يشغّل compileall وpytest وبوابة النشر والفحص الأمني وفحص الاستدعاء كفحوص حاجزة؛ وruff استشاري على الملفات المتغيرة؛ وpip-audit أسبوعي."
+            },
+            {
+              "en": "`scripts/backup_db.sh` creates a verified SQLite backup with 14-day retention.",
+              "ar": "`scripts/backup_db.sh` ينشئ نسخة SQLite موثّقة باحتفاظ 14 يومًا."
+            },
+            {
+              "en": "Hardened Dockerfile/docker-compose (non-root, read-only code, persisted `/app/data`) and a Windows launcher.",
+              "ar": "Dockerfile/docker-compose مقوّى (مستخدم غير جذري، شيفرة للقراءة فقط، `/app/data` دائم) ومشغّل Windows."
+            },
+            {
+              "en": "MIT license and bilingual documentation for installation, backup/restore and contribution.",
+              "ar": "رخصة MIT وتوثيق ثنائي اللغة للتثبيت والنسخ الاحتياطي والمساهمة."
+            }
+          ]
+        },
+        {
+          "title": {
+            "en": "Website",
+            "ar": "الموقع"
+          },
+          "items": [
+            {
+              "en": "Cloudflare Pages now builds the site from this repository on every push to `master` (`bash website/scripts/build.sh`), replacing the manual GitHub Pages copy.",
+              "ar": "Cloudflare Pages يبني الموقع من هذا المستودع عند كل دفع إلى `master` (`bash website/scripts/build.sh`)، بدل النسخة اليدوية على GitHub Pages."
+            },
+            {
+              "en": "HSTS, CSP with `frame-ancestors 'none'`, `X-Frame-Options: DENY`, COOP and Permissions-Policy are live response headers.",
+              "ar": "HSTS وCSP مع `frame-ancestors 'none'` و`X-Frame-Options: DENY` وCOOP و Permissions-Policy أصبحت رؤوس استجابة فعلية."
+            },
+            {
+              "en": "The command catalogue, media counts, version, license and changelog are generated from the repository at build time; a stale file fails the build.",
+              "ar": "كتالوج الأوامر وعدد منصات الوسائط والإصدار والرخصة وسجل التغييرات تُولَّد من المستودع وقت البناء؛ وأي ملف قديم يُفشل البناء."
+            }
+          ]
+        }
+      ]
     }
   ]
 }

@@ -1,11 +1,44 @@
 ---
 import changelog from '../data/changelog.json';
+import site from '../data/site.json';
+import { inline } from '../lib/inline';
+import type { Lang } from '../i18n/ui';
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+const releases = changelog.releases;
 ---
-<ol class="changelog">
-  {changelog.entries.map((entry) => (
-    <li class="changelog__item">
-      <time class="changelog__date" datetime={entry.date}>{entry.date}</time>
-      <span class="changelog__subject" lang="en" dir="ltr">{entry.subject}</span>
-    </li>
+
+<div class="changelog" data-changelog aria-label={lang === 'ar' ? 'الإصدارات المنشورة' : 'Published releases'}>
+  {releases.map((release) => (
+    <article class="release" data-release data-version={release.version}>
+      <header class="release__head">
+        <h2 class="release__version">
+          <span class="release__tag">v{release.version}</span>
+          <time class="release__date" datetime={release.date}>{release.date}</time>
+        </h2>
+        <a class="release__link" href={site.release_url} rel="noopener">
+          {lang === 'ar' ? 'الإصدار على GitHub' : 'Release on GitHub'}
+        </a>
+      </header>
+
+      <p class="release__summary" set:html={inline(release.summary[lang])} />
+
+      <div class="release__sections">
+        {release.sections.map((section) => (
+          <section class="release__section">
+            <h3 class="release__section-title">{section.title[lang]}</h3>
+            <ul class="release__list" role="list">
+              {section.items.map((item) => (
+                <li set:html={inline(item[lang])} />
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </article>
   ))}
-</ol>
+</div>
