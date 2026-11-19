@@ -6,7 +6,7 @@
 
 [**Website**](https://angel.aetherisnode.cloud/en/) · [العربية](README.ar.md)
 
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![discord.py](https://img.shields.io/badge/discord.py-2.7.1-5865F2?logo=discord&logoColor=white)](https://discordpy.readthedocs.io/) [![SQLite](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/fts5.html) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![discord.py](https://img.shields.io/badge/discord.py-2.7.1-5865F2?logo=discord&logoColor=white)](https://discordpy.readthedocs.io/) [![SQLite](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/fts5.html) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Release](https://img.shields.io/badge/release-v1.0.3-D4AF37)](https://github.com/Certainty7/angelbot/releases/tag/v1.0.3)
 
 [Overview](#overview) · [Features](#features) · [Architecture](#architecture) · [Quick start](#quick-start) · [Configuration](#configuration) · [Commands](#commands) · [Deployment](#deployment) · [Testing](#testing) · [Security](#security) · [Contributing](#contributing)
 
@@ -22,8 +22,10 @@ behind an explicit confirmation step, expands social media links into files, and
 an offline gate has passed.
 
 The bot is a single asyncio process. SQLite with FTS5 holds the archive, the pinned memory and
-the conversation state. systemd owns the lifecycle, and a model chain with cooldown and fallback
-produces the text. There is no external queue, cache or worker.
+the conversation state. systemd owns the lifecycle, and a free-tier-only model chain with cooldown
+and fallback produces the text: `gemini-3-flash-preview`, `gemini-3.1-flash-lite`,
+`gemini-3.5-flash-lite`, then `gemini-4-hydrogen`. A per-day free-tier `429` cools until midnight
+Pacific instead of retrying every message. There is no external queue, cache or worker.
 
 Most of the design is about restraint. The model can propose a moderation action, but it runs only
 after the person who asked confirms it, and the permission is checked again at execution. Durable personal memory is written by the member with `/memory pin`; the bot infers nothing from
@@ -123,7 +125,8 @@ python tools/selftest.py
 The gate should end with `50/50 checks passed`. It imports every module, builds a temporary
 database, checks the schema and the FTS triggers, exercises the memory and archive paths, counts
 the registered commands and runs the output-filter cases. It does not contact Discord or a model
-provider.
+provider. The full test story is: `pytest -q` (56 tests plus 322 subtests), `tools/selftest.py`
+(50/50), the security and recall probes, and the website suite (67 Playwright tests).
 
 ### Run
 
@@ -168,7 +171,7 @@ used by the operator scripts under `tools/`.
 | `MALAK_OWNER_ID` | yes | Owner Discord user ID, as a numeric ID. |
 | `GEMINI_API_KEY` | yes | Google AI Studio key. |
 | `GEMINI_API_KEY_2` | no | Second key. When both are set, this one is tried first and the chain falls back to `GEMINI_API_KEY`. |
-| `GEMINI_MODEL` | no | Primary model ID. Blank uses the code default. |
+| `GEMINI_MODEL` | no | Primary model ID. Blank uses the free-tier default `gemini-3-flash-preview`, then `3.1-flash-lite`, `3.5-flash-lite` and `4-hydrogen`. |
 | `MISTRESS_USER_ID` | no | Alias for `MALAK_OWNER_ID`, read only when that variable is empty. |
 | `ENABLE_MEMBERS_INTENT` | no | `1` after enabling Server Members in the portal. Unlocks autorole and the join log. |
 | `ANGEL_DB_PATH` | no | SQLite path. Defaults to `chat_history.db` in the project root. |
@@ -183,14 +186,14 @@ The full commented list, including the autonomy, archive and backfill tuning var
 
 ## Commands
 
-The runtime registers 65 commands: 62 slash commands and 3 message context menus. The music cog
-adds 4 more when it is enabled, and `/help` is a short in-Discord index.
+The runtime registers 71 commands: 68 slash commands and 3 message context menus. 67 load eagerly
+and the music cog adds 4 more lazily when it is enabled; `/help` is a short in-Discord index.
 
 | Group | Count | Examples |
 |---|---|---|
 | Moderation | 17 | `/ban`, `/timeout`, `/purge`, `/warn` |
 | Community | 11 | `/snipe`, `/poll`, `/giveaway`, `/ticket_panel` |
-| Memory | 6 | `/memory`, `/rules`, `/budget`, `/mood` |
+| Memory | 7 | `/memory`, `/rules`, `/budget`, `/mood` |
 | Chat | 4 | `/chat`, `/translate`, `/imagine`, `/summarize_channel` |
 | Media | 2 | `/fix`, `/cleanup` |
 | Fun and XP | 4 | `/gif`, `/lore`, `/rank`, `/leaderboard` |
@@ -198,6 +201,7 @@ adds 4 more when it is enabled, and `/help` is a short in-Discord index.
 | Owner | 6 | `/sovereign`, `/harem`, `/dm_send`, `/whisper`, `/dm_logs`, `/custom_action` |
 | Flagship | 6 | `/angel`, `/knowledge`, `/pulse`, `/guard`, `/diagnostics`, `/rep` |
 | Productivity | 2 | `/sticky`, `/autorole` |
+| Setup | 2 | `/setup`, `/catchup` |
 | Context menus | 3 | تلخيص الرسالة، ترجمة وتحليل، اقتراح رد ومهام |
 | Music (lazy) | 4 | `/play`, `/skip`, `/queue`, `/playlist` |
 
@@ -283,9 +287,11 @@ journalctl -u angelbot -n 30 --no-pager
 | Tool | Purpose |
 |---|---|
 | `tools/selftest.py` | 50 offline checks: imports, schema, FTS triggers, memory, archive scope, command census, output filter and deploy readiness. |
+| `pytest -q` | 56 unit/regression tests plus 322 subtests (security, cache, media, AI and database paths). |
 | `tools/security_probe.py` | Confirms that injection attempts are stopped by authorization. |
 | `tools/recall_probe.py` | Runs 10 representative recall questions against a temporary database. |
 | `tools/gate_checks.py` | Static checks used by the gate, including the no-shell subprocess rule. |
+| `npx playwright test` (in `website/`) | 67 browser tests over the built site: pages, commands, responsive layouts, theme, links and privacy. |
 
 ![Recall probe](docs/screenshots/recall-probe.png)
 
@@ -301,7 +307,13 @@ necessary but not sufficient: it cannot replace a real Discord server.
   to type `تأكيد` within 60 seconds. A cancel word clears it; anything else leaves it pending until
   the minute runs out. The permission check is repeated when the confirmation arrives.
 - Archive recall is scoped to the channels the requester can read. Direct messages are excluded
-  from the server archive.
+  from the server archive. AFK status and sticky messages are scoped per guild.
+- Every outbound HTTP session must use `SafeAsyncResolver`; redirects and cached stream URLs are
+  revalidated so a download cannot reach loopback, RFC1918 or cloud-metadata addresses.
+- Untrusted chat, summaries and ambient context are sanitised and delimited before they enter a
+  prompt; image fallbacks must pass magic-byte checks.
+- Send queues and caches are bounded, a closed client is rejected, and a per-day free-tier `429`
+  is cooled until the quota resets.
 - Direct messages are logged for the owner: the sender, the text, attachment links and Angel's reply
   go into `dm_logs`, and the message is forwarded to the owner. Tell members that before they write
   to the bot.
@@ -326,6 +338,9 @@ necessary but not sufficient: it cannot replace a real Discord server.
   another. The archive itself is scoped per server.
 - Voice is end-to-end encrypted (DAVE), and a bot alone in a channel cannot verify audible output.
   Testing the music path needs a second member in the room.
+- The model chain uses Google AI Studio free-tier quotas. A per-day `429` cools that model until
+  midnight Pacific; set `GEMINI_API_KEY_2` for a second project, or `GEMINI_MODEL` to choose a
+  different free-tier model.
 
 ## Documentation
 
@@ -338,8 +353,9 @@ necessary but not sufficient: it cannot replace a real Discord server.
 
 ## Status
 
-Angel runs in production on a single server. The repository is public and open source; issues and
-pull requests are welcome and reviewed on a best-effort basis.
+Angel runs in production on a single server. The current release is **v1.0.3** (2026-11-19); the
+repository is public and open source, and issues and pull requests are welcome and reviewed on a
+best-effort basis.
 
 ## Contributing
 
@@ -356,10 +372,6 @@ notice. "Angel" and the project branding belong to the maintainer.
 <p align="center">
   <a href="https://github.com/Certainty7"><img src="https://github.com/Certainty7.png?size=120" width="56" alt="Certainty"><br><sub><b>Certainty</b> · maintainer</sub></a>
 </p>
-
-## License
-
-MIT — see [LICENSE](LICENSE).
 
 ## Acknowledgements
 

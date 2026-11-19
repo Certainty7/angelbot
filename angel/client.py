@@ -550,5 +550,5 @@ class AngelDiscordBot(commands.Bot):
             new_summary = await self.ai.summarize_messages(summary, to_summarize)
             max_id = to_summarize[-1]["id"]
             await self.db.apply_summary_and_prune(user_id, new_summary, max_id)
-    except Exception:
-      pass
+    except Exception as exc:
+      logger.debug("background summarize skipped: %s: %s", type(exc).__name__, exc)

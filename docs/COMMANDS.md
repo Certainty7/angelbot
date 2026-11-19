@@ -1,6 +1,6 @@
 # Command reference
 
-Angel registers 65 commands at startup: 62 slash commands and 3 message context menus. The music cog adds 4 more when it is enabled.
+Angel registers 71 commands at startup: 68 slash commands and 3 message context menus. 67 load eagerly; the music cog adds 4 more lazily when it is enabled.
 
 Parameters use `<required>` and `[optional]` notation. The permission column is the Discord permission the command needs by default; the owner ID bypasses these checks. Command descriptions are Arabic inside Discord.
 
@@ -44,7 +44,7 @@ Eleven commands also refuse everyone but the owner at runtime: `/sync`, `/diagno
 | `/ticket_panel` | [title], [description] | `manage_channels` |
 | `/userinfo` | [member] | none |
 
-## Memory (6)
+## Memory (7)
 
 | Command | Parameters | Permission |
 |---|---|---|
@@ -117,6 +117,13 @@ Eleven commands also refuse everyone but the owner at runtime: `/sync`, `/diagno
 |---|---|---|
 | `/autorole` | [role] | `manage_roles` |
 | `/sticky` | <mode>, [message] | `manage_messages` |
+
+## Setup (2)
+
+| Command | Parameters | Permission |
+|---|---|---|
+| `/setup` |  | `manage_guild` |
+| `/catchup` | [count] | none |
 
 ## Context menus (3)
 

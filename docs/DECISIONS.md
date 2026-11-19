@@ -52,7 +52,7 @@ exception" is not evidence of success, and to name what now detects each one.
 |---|---|---|---|---|---|
 | 1 | DAVE/E2EE never established (lone bot in the channel) | `angel/voice_engine.py::dave_state`, `cogs/music.py` | `is_playing()` True, healthy ffmpeg, **total silence**, no exception | the play path logs `dave` state and answers the member with a refusal line when `can_encrypt` is false | audibility itself only provable by a human in the room |
 | 2 | Carousel degraded to one slide | `angel/media.py` (Instagram, SnapSave down) | user sees 1 image of an 8-slide post, caption unchanged | `gallery-shortfall` line, **only when `discovered` is right**, which it is not on that path | needs the secondary engine to report the true count (documented in `docs/GALLERY.md`) |
-| 3 | Summariser or background task dies | `angel/client.py` (`_background_summarize_user`, init steps) | history stops summarising; nothing user-visible | `except Exception: pass` (client.py:507) has **no** log; the init steps at least log a warning | a `logger.warning` with the exception class is the minimum fix |
+| 3 | Summariser or background task dies | `angel/client.py` (`_background_summarize_user`, init steps) | history stops summarising; nothing user-visible | `logger.debug` now records the exception class; init steps log a warning | a repeated failure still only shows at debug level |
 | 4 | Logger misuse | `logger.exception` outside an `except` block | `NoneType: None` in the journal, no context | fixed in the current tree; the place to check when a traceback looks empty | none |
 | 5 | A restart "succeeds" but the new code is not live | systemd + `Shard ID None session has been invalidated` | `is-active` says active while the bot is not ready for ~2 minutes | readiness is proven only by `Angel is online as:` in the journal | scripted checks must poll that line, never `is-active` |
 | 6 | Extraction engine returns `{}` and the caller posts a fallback | `angel/media.py` (the hoisted `_tikwm_quote` + `global` bug in `_LAST_TIKWM_CALL_AT`) | a photo post silently loses slides | the shortfall log + a fixture-driven `gallery` check | fixtures cannot see a live engine regression; only a live post does |
@@ -278,4 +278,8 @@ command re-sync — a separate card, out of scope here.
 **Evidence:** `generate.py` (`collect()`, `build()`, `is_owner_only()`),
 `tests/website/test_command_catalog.py` (census oracle on `description_discord`, editorial-copy pin,
 `owner_only` oracle), `generate.py --check` clean after regeneration.
+
+**Current count (v1.0.3):** the catalogue has **71** entries — 68 slash commands and 3 context
+menus; 67 load eagerly and the 4 music commands load lazily. The historical measurements above
+refer to the 68-entry census captured on 2026-11-14.
 
