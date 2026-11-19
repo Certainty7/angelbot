@@ -1,5 +1,6 @@
 ---
 import { ui, type Lang } from '../i18n/ui';
+import commands from '../data/commands.json';
 
 interface Props {
   lang: Lang;
@@ -8,8 +9,8 @@ interface Props {
 const { lang } = Astro.props;
 
 const items = [
-  { value: 69, label: lang === 'ar' ? 'أمرًا مسجّلًا' : 'registered commands' },
-  { value: 13, label: lang === 'ar' ? 'فئة أوامر' : 'command categories' },
+  { value: commands.totals.all, label: lang === 'ar' ? 'أمرًا مسجّلًا' : 'registered commands' },
+  { value: commands.totals.categories, label: lang === 'ar' ? 'فئة أوامر' : 'command categories' },
   { value: 14, label: lang === 'ar' ? 'منصة وسائط' : 'media platforms' },
   { value: 0, label: lang === 'ar' ? 'أداة تتبّع' : 'trackers' },
 ];
