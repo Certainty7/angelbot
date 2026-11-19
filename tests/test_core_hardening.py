@@ -6,7 +6,7 @@ import unittest
 
 from angel.database import BotDatabase
 from angel.guard import is_suspicious_arabic_scam
-from angel.text import clean_social_url
+from angel.text import clean_social_url, split_message
 
 
 class TestGuildQuota(unittest.TestCase):
@@ -117,6 +117,34 @@ class TestGuildQuota(unittest.TestCase):
         from angel.cost import cost_of
 
         self.assertEqual(cost_of(-10, -20), 0.0)
+
+    def test_zero_width_chars_do_not_bypass_scam_filter(self):
+        self.assertTrue(is_suspicious_arabic_scam("نيترو\u200b مجاني هدية"))
+
+    def test_split_message_never_emits_an_empty_chunk(self):
+        chunks = split_message("\nabc", 10)
+        self.assertTrue(all(chunk.strip() for chunk in chunks))
+        self.assertEqual("".join(chunks).strip(), "abc")
+
+    def test_raster_sniff_rejects_svg_and_html(self):
+        from angel.images import _sniff_raster_mime
+
+        self.assertIsNone(_sniff_raster_mime(b"<svg xmlns='http://www.w3.org/2000/svg'></svg>"))
+        self.assertIsNone(_sniff_raster_mime(b"<html>error</html>"))
+        self.assertEqual(_sniff_raster_mime(b"\x89PNG\r\n\x1a\nrest"), "image/png")
+        self.assertEqual(_sniff_raster_mime(b"GIF89arest"), "image/gif")
+
+    def test_instagram_json_walk_is_depth_limited(self):
+        from angel.media import _collect_ig_slides_from_json_obj
+
+        root = {}
+        cursor = root
+        for _ in range(100):
+            cursor["next"] = {}
+            cursor = cursor["next"]
+        slides = []
+        _collect_ig_slides_from_json_obj(root, slides, set())
+        self.assertEqual(slides, [])
 
     def test_arabizi_scam_guard(self):
         self.assertTrue(is_suspicious_arabic_scam("اربح 500 دولار مجانا https://x.example"))

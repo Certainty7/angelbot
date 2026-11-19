@@ -1710,6 +1710,11 @@ class BotDatabase:
       return _fuzzy_best(query, candidates, "content", limit) or _fuzzy_best(query, candidates, "topic", limit)
 
   # ---------- rules index ----------
+  async def clear_rules(self, guild_id: int) -> None:
+    async with self._connect() as db:
+      await db.execute("DELETE FROM rules WHERE guild_id = ?", (guild_id,))
+      await db.commit()
+
   async def upsert_rule(self, guild_id: int, key: str, content: str):
     async with self._connect() as db:
       await db.execute(
