@@ -6,6 +6,156 @@
   ],
   "releases": [
     {
+      "version": "1.0.5",
+      "date": "2026-11-20",
+      "summary": {
+        "en": "Recovery and security-hardening pass against an independent 35-finding audit, plus everything found while fixing it. Every claim below is backed by a test in `tests/`.",
+        "ar": "جولة استعادة وتحصين أمني مقابل تدقيق مستقل بـ35 ملاحظة، مع كل ما ظهر أثناء الإصلاح. كل بند أدناه محمي باختبار في `tests/`."
+      },
+      "sections": [
+        {
+          "title": {
+            "en": "Boot and deployment",
+            "ar": "الإقلاع والنشر"
+          },
+          "items": [
+            {
+              "en": "`--checkpoint-db` no longer fails on a fresh install: a missing database is a \"nothing to checkpoint\" success, while `--verify-db` still fails. systemd, Docker and the Windows launcher can boot an empty host again.",
+              "ar": "`--checkpoint-db` لم يعد يفشل على تثبيت جديد: غياب قاعدة البيانات يعني «لا شيء لعمله» وينجح، بينما `--verify-db` يبقى فاشلاً عند غياب الملف. عادت مسارات systemd وDocker وWindows تعمل من مضيف فارغ."
+            },
+            {
+              "en": "The systemd unit sets `ANGEL_DB_PATH`, bounds restarts (`StartLimitBurst`), stops on failure and waits 60 s for a clean shutdown. Backup and persona timers now ship in `deploy/`.",
+              "ar": "وحدة systemd تضبط `ANGEL_DB_PATH` وتحدّ إعادة التشغيل (`StartLimitBurst`) وتتوقف عند الفشل وتنتظر 60 ثانية لإغلاق نظيف. مؤقتا النسخ الاحتياطي وتحديث الشخصية أصبحا داخل `deploy/`."
+            },
+            {
+              "en": "Docker: Deno 2.9.8 with published hashes, `sqlite3` for the backup script, read-only root filesystem with `tmpfs`, `pids_limit` and a healthcheck; `.env.*` is excluded from the build.",
+              "ar": "Docker: Deno 2.9.8 ببصمات منشورة، و`sqlite3` لسكربت النسخ، وجذر نظام ملفات للقراءة فقط مع `tmpfs` و`pids_limit` وفحص صحة؛ وتُستثنى `.env.*` من البناء."
+            },
+            {
+              "en": "The Windows launcher reconciles dependencies on every run, refreshes `.venv` after a partial failure and switches the console to UTF-8. CLI output no longer crashes on a legacy code page.",
+              "ar": "مشغّل Windows يثبّت المتطلبات في كل تشغيل ويصلح `.venv` بعد فشل جزئي ويضبط الطرفية على UTF-8. مخرجات أدوات سطر الأوامر لم تعد تنهار على صفحات ترميز قديمة."
+            },
+            {
+              "en": "`tzdata` is pinned. A non-UTC `ANGEL_TIMEZONE` without it now fails loudly instead of silently running on UTC.",
+              "ar": "`tzdata` مثبّت. أي منطقة زمنية غير UTC بدونه تفشل بوضوح بدل التشغيل الصامت على UTC."
+            }
+          ]
+        },
+        {
+          "title": {
+            "en": "Security and authorization",
+            "ar": "الأمان والتفويض"
+          },
+          "items": [
+            {
+              "en": "Every registered command declares a policy in the authorization inventory (scope, `guild_only`, permission, intent); a test fails when the tree and the inventory disagree.",
+              "ar": "كل أمر مسجل يعلن سياسته في جرد التفويض (النطاق، السيرفر فقط، الصلاحية، الغاية)، واختبار يفشل إذا اختلفت الشجرة عن الجرد."
+            },
+            {
+              "en": "Natural-language actions share the slash-command guards: channel summaries require `Read Message History`, storage cleanup is owner-only, and nickname changes respect the role hierarchy.",
+              "ar": "أوامر اللغة الطبيعية تستخدم نفس حراس أوامر الشرطة المائلة: تلخيص القناة يتطلب `Read Message History`، وتنظيف التخزين للمالكة فقط، وتغيير اللقب يحترم تسلسل الرتب."
+            },
+            {
+              "en": "The confirmation gate is bound to the originating channel, reports the real execution result, covers every state-changing action, and no longer treats `نفذ`/`لا` as triggers.",
+              "ar": "بوابة التأكيد مرتبطة بالقناة التي طُلب فيها الإجراء، وتعلن النتيجة الفعلية، وتغطي كل إجراء يغيّر الحالة، ولم تعد تعتبر «نفذ» أو «لا» كلمات تأكيد."
+            },
+            {
+              "en": "`/announce` needs `mention_everyone` to ping everyone; administrative commands are guild-only.",
+              "ar": "`/announce` يحتاج `mention_everyone` لمنشن الجميع، والأوامر الإدارية للسيرفرات فقط."
+            },
+            {
+              "en": "`AllowedMentions` and the output filter neutralise `<@id>` mentions from model output, media titles and archive quotes.",
+              "ar": "`AllowedMentions` وفلتر المخرجات يحيدان منشن `<@id>` القادم من النموذج أو عنوان مقطع أو اقتباس."
+            },
+            {
+              "en": "AI quota gaps closed: `/translate`, `/rules`, `/summarize_channel` and the NL summary all consume the user and guild quotas; image generation skips cooling/dead models.",
+              "ar": "أُغلقت ثغرات حصص الذكاء الاصطناعي: `/translate` و`/rules` و`/summarize_channel` والملخص اللغوي تستهلك حصة العضو والسيرفر، وتوليد الصور يتخطى النماذج المبرّدة والميتة."
+            }
+          ]
+        },
+        {
+          "title": {
+            "en": "Privacy and data",
+            "ar": "الخصوصية والبيانات"
+          },
+          "items": [
+            {
+              "en": "`/data delete` erases every per-member table, including ambient lines, AFK state, harem membership, XP and the derived persona culture; the count it reports matches the deletion set, and a schema-driven test fails when a new member table is added without a policy.",
+              "ar": "`/data delete` يمحو كل جدول خاص بالعضو، بما فيه الملاحظات المحيطة وحالة الغياب وعضوية الحريم ونقاط الخبرة وثقافة الشخصية المشتقة؛ والعدد المعروض يطابق ما حُذف فعلاً، واختبار مبني على المخطط يفشل عند إضافة جدول عضو جديد بلا سياسة حذف."
+            },
+            {
+              "en": "Opt-out is enforced inside SQL, so a reply in flight cannot re-create a deleted member. DMs are covered too.",
+              "ar": "`opt_out` مفروض داخل SQL، فلا يستطيع رد جارٍ إعادة إنشاء عضو محذوف. والرسائل الخاصة مشمولة."
+            },
+            {
+              "en": "The summariser filters opted-out members before the prompt and wraps the transcript in an untrusted block. The persona-refresh tool resolves the configured database, filters opt-out, sends the key in a header and validates the payload.",
+              "ar": "الملخّص يستبعد المنسحبين قبل بناء الموجه ويضع النص داخل كتلة غير موثوقة. وأداة تحديث الشخصية تستخدم قاعدة البيانات المهيأة وتفلتر `opt_out` وترسل المفتاح في ترويسة وتتحقق من شكل البيانات."
+            },
+            {
+              "en": "`forget_user_keyword` treats `%` and `_` literally. `initialize()` no longer rewrites user data on every boot: legacy clean-up runs once behind `PRAGMA user_version`.",
+              "ar": "`forget_user_keyword` يعامل `%` و`_` كحروف عادية. و`initialize()` لم يعد يعيد كتابة بيانات الأعضاء في كل إقلاع: التنظيف القديم يعمل مرة واحدة خلف `PRAGMA user_version`."
+            }
+          ]
+        },
+        {
+          "title": {
+            "en": "Reliability",
+            "ar": "الموثوقية"
+          },
+          "items": [
+            {
+              "en": "The daily budget breaker fails closed when its database handle is missing, clamps `STOP_RATIO` to `(0, 1]`, and reserves estimated cost under a lock so concurrent calls cannot pass the same check.",
+              "ar": "قاطع الميزانية اليومية يفشل مغلقاً عند غياب مقبض قاعدة البيانات، ويقيّد `STOP_RATIO` في `(0, 1]`، ويحجز التكلفة التقديرية تحت قفل حتى لا تتجاوز الطلبات المتزامنة السقف."
+            },
+            {
+              "en": "Cancelled extractions kill and reap yt-dlp and FFmpeg; DNS validation runs off the event loop.",
+              "ar": "إلغاء الاستخراج يقتل yt-dlp وFFmpeg ويعيد حصدهما؛ والتحقق من DNS يعمل خارج حلقة الأحداث."
+            },
+            {
+              "en": "Media jobs share one download semaphore and a 50 MB per-job byte budget.",
+              "ar": "مهام الوسائط تتشارك سيمفور تنزيل واحداً وميزانية 50 ميغابايت لكل مهمة."
+            },
+            {
+              "en": "The anti-spam guard runs on message edits; a failed delete no longer cancels the timeout or the modlog entry; the ghost-ping detector no longer republishes deleted text.",
+              "ar": "حارس السبام يعمل على التعديلات أيضاً؛ وفشل الحذف لا يلغي المهلة ولا سجل الإشراف؛ وكاشف المنشن الخفي لم يعد يعيد نشر النص المحذوف."
+            },
+            {
+              "en": "The voice engine refuses to move out of another channel, leaves an empty channel, and still refuses to announce playback it cannot encrypt.",
+              "ar": "محرك الصوت يرفض الانتقال من قناة أخرى، ويغادر القناة الفارغة، ويبقى رافضاً إعلان تشغيل لا يستطيع تشفيره."
+            },
+            {
+              "en": "The archive search requires an explicit channel allow-list and folds Arabic diacritics; the rules index gains a delete trigger and an atomic replace.",
+              "ar": "بحث الأرشيف يتطلب قائمة قنوات مسموحة صريحة ويطوي التشكيل العربي؛ وفهرس القوانين اكتسب مشغّل حذف واستبدالاً ذرياً."
+            }
+          ]
+        },
+        {
+          "title": {
+            "en": "Tooling and documentation",
+            "ar": "الأدوات والتوثيق"
+          },
+          "items": [
+            {
+              "en": "The Cloudflare token verifier no longer reports transport errors, 429 or 5xx as PASS.",
+              "ar": "مدقق توكن Cloudflare لم يعد يعتبر فشل النقل أو 429 أو 5xx نجاحاً."
+            },
+            {
+              "en": "Gate checks fail closed: a `SyntaxError` propagates, any `shell` keyword and `sh -c` are detected, and the owner-id check reads the environment.",
+              "ar": "بوابات الجودة تفشل مغلقة: `SyntaxError` ينتشر، وأي `shell` و`sh -c` يُكتشفان، وفحص معرّف المالكة يقرأ متغيرات البيئة."
+            },
+            {
+              "en": "The website headers file is valid Cloudflare syntax and the site reports four media platforms, not fourteen.",
+              "ar": "ملف ترويسات الموقع صار صياغة Cloudflare صحيحة، والموقع يعرض أربع منصات وسائط لا أربع عشرة."
+            },
+            {
+              "en": "New: `AGENTS.md`, `KNOWN_ISSUES.md`, `docs/DATA_MODEL.md`, `docs/LIVE_VERIFICATION.md` and the `docs/recovery/` ledger, state and decision record.",
+              "ar": "جديد: `AGENTS.md` و`KNOWN_ISSUES.md` و`docs/DATA_MODEL.md` و`docs/LIVE_VERIFICATION.md` وسجل `docs/recovery/`."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.0.4",
       "date": "2026-11-19",
       "summary": {

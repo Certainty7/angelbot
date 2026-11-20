@@ -49,10 +49,16 @@ def _looks_like_raster_image(data: bytes) -> bool:
 
 def _seconds_until_pacific_midnight() -> float:
   """Free-tier RPD resets at midnight Pacific; cooling past that is cheaper than hourly retries."""
-  from datetime import datetime, timedelta
-  from zoneinfo import ZoneInfo
+  from datetime import datetime, timedelta, timezone
 
-  now = datetime.now(ZoneInfo("America/Los_Angeles"))
+  try:
+    from zoneinfo import ZoneInfo
+
+    now = datetime.now(ZoneInfo("America/Los_Angeles"))
+  except Exception:
+    # No tzdata on the host: a fixed PST offset is off by one hour across DST, which only
+    # means one extra hourly probe. Raising here dropped the reply on the first daily 429.
+    now = datetime.now(timezone(timedelta(hours=-8)))
   tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
   return max(60.0, (tomorrow - now).total_seconds())
 
@@ -73,6 +79,9 @@ class AngelBrainService:
     self.db = None  # injected by bot.py for USD accounting/breaker
     self._dead_models: Set[str] = set()
     self._rotation_lock = asyncio.Lock()
+    # Estimated cost of calls that are in flight but not yet recorded (C-003).
+    self._inflight_usd = 0.0
+    self._budget_lock = asyncio.Lock()
 
   def _get_endpoint(self, model_name: str) -> str:
     clean_model = model_name.replace("models/", "").strip()
@@ -95,8 +104,47 @@ class AngelBrainService:
         self._key_index = (self._key_index + 1) % len(self._keys)
         logger.warning("gemini key rotated -> slot %d of %d", self._key_index + 1, len(self._keys))
 
+  async def _reserve_budget(self, user: Any = None) -> bool:
+    """Claim `ESTIMATED_CALL_USD` before spending. False means the ceiling is reached.
+
+    The pre-check-only design let N concurrent calls all read the same `day_cost` and all
+    proceed. Reserving under a lock makes the sum of in-flight calls part of the check.
+    """
+    if cost.DAILY_LIMIT_USD <= 0:
+      return True
+    async with self._budget_lock:
+      spent = await self.db.day_cost(cost.local_day()) if self.db is not None else 0.0
+      if spent + self._inflight_usd + cost.ESTIMATED_CALL_USD <= cost.stop_at():
+        self._inflight_usd += cost.ESTIMATED_CALL_USD
+        return True
+    if is_mistress(user):
+      logger.warning(
+          "cost-guard owner_override=1 spent=%.4f reserved=%.4f stop_at=%.4f",
+          spent, self._inflight_usd, cost.stop_at(),
+      )
+      async with self._budget_lock:
+        self._inflight_usd += cost.ESTIMATED_CALL_USD
+      return True
+    return False
+
+  async def _release_budget(self) -> None:
+    async with self._budget_lock:
+      self._inflight_usd = max(0.0, self._inflight_usd - cost.ESTIMATED_CALL_USD)
+
   async def _post_with_retry(self, payload: dict, high_priority: bool = False,
                              cmd: str = "chat", user: Any = None) -> str:
+    if not await self._reserve_budget(user):
+      logger.info("ai-guard reason=budget")
+      if self.db is not None:
+        await self.db.add_usage(cost.local_day(), 0, 0, 0.0, blocked=True)
+      raise cost.BudgetExhausted("وصل البوت للحد اليومي للميزانية — وضع الاستماع.")
+    try:
+      return await self._post_models(payload, high_priority=high_priority, cmd=cmd, user=user)
+    finally:
+      await self._release_budget()
+
+  async def _post_models(self, payload: dict, high_priority: bool = False,
+                         cmd: str = "chat", user: Any = None) -> str:
     timeout = aiohttp.ClientTimeout(total=18)
     # A user-facing reply must never wait through five slow fallbacks: bound the whole
     # attempt chain, not just each request.
@@ -161,6 +209,12 @@ class AngelBrainService:
                   await self.db.add_usage(cost.local_day(), in_tok, out_tok, usd)
                 logger.info("ai-reply ms=%s model=%s usd=%.6f cmd=%s user=%s in=%s out=%s",
                             elapsed_ms, model_name, usd, cmd, _user_tag(user), in_tok, out_tok)
+                if not visible_text:
+                  # A thought-only or empty answer is not an answer: fail over to the next
+                  # model instead of returning "" (which the caller turned into "تم.").
+                  logger.info("ai-empty model=%s no visible text; trying the next model", model_name)
+                  self._cool(model_name, 30.0)
+                  break
                 return visible_text
 
               body_text = await response.text()
@@ -233,9 +287,12 @@ class AngelBrainService:
     The owner is never locked out of her own bot. A call made by the owner
     keeps working past the ceiling; every other caller is refused as before. The
     override is logged so the overspend is visible instead of silent.
+
+    A missing database handle fails closed: an unreadable breaker must not become an
+    unlimited budget (C-003). The only exception is an operator who disabled the cap.
     """
     if self.db is None:
-      return False
+      return cost.DAILY_LIMIT_USD > 0
     if (await self.db.day_cost(cost.local_day())) < cost.stop_at():
       return False
     if is_mistress(user):

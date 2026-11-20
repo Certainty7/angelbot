@@ -1,18 +1,18 @@
 {
   "schema": 1,
-  "version": "1.0.4",
+  "version": "1.0.5",
   "license": "MIT",
   "license_url": "https://github.com/Certainty7/angelbot/blob/master/LICENSE",
   "repository": "https://github.com/Certainty7/angelbot",
   "release_url": "https://github.com/Certainty7/angelbot/releases",
   "default_branch": "master",
-  "media_platforms": 14,
+  "media_platforms": 4,
   "latest_release": {
-    "version": "1.0.4",
-    "date": "2026-11-19",
+    "version": "1.0.5",
+    "date": "2026-11-20",
     "summary": {
-      "en": "Privacy and public-repository hygiene pass.",
-      "ar": "جولة خصوصية ونظافة للمستودع العام."
+      "en": "Recovery and security-hardening pass against an independent 35-finding audit, plus everything found while fixing it. Every claim below is backed by a test in `tests/`.",
+      "ar": "جولة استعادة وتحصين أمني مقابل تدقيق مستقل بـ35 ملاحظة، مع كل ما ظهر أثناء الإصلاح. كل بند أدناه محمي باختبار في `tests/`."
     }
   }
 }

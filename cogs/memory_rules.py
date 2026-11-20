@@ -181,18 +181,40 @@ class MemoryRules(commands.Cog):
 
 
   @app_commands.command(name="rules", description="اسألي أنجل عن قوانين السيرفر وتجيبك من الفهرس")
+  @app_commands.guild_only()
   @app_commands.describe(question="سؤالك عن القوانين")
   async def rules_cmd(self, interaction: discord.Interaction, question: str):
     if not interaction.guild:
       await interaction.response.send_message("هذا الأمر للسيرفرات فقط.", ephemeral=True)
       return
+    allowed, deny_reason = self.bot.quota.check_user_allowed(
+        interaction.user, is_harem=(self.bot.get_harem_title(interaction.user.id) is not None)
+    )
+    if not allowed:
+      await interaction.response.send_message(f"⚠️ {deny_reason}", ephemeral=True)
+      return
     await interaction.response.defer(thinking=True)
     try:
-      text = await rules_mod.answer(self.bot.ai, self.bot.db, interaction.guild.id, question)
+      # The index used to be populated only by a manual tool nobody ran, so /rules always
+      # answered "ما لقيت قاعدة" on a fresh deployment (C-022).
+      index = await self.bot.db.search_rules(interaction.guild.id, question, 1)
+      if not index:
+        target = (
+            interaction.guild.rules_channel
+            if getattr(interaction.guild, "rules_channel", None)
+            else interaction.channel
+        )
+        if target is not None:
+          await rules_mod.index_channel(
+              self.bot, self.bot.db, interaction.guild.id, target.id
+          )
+      text = await rules_mod.answer(
+          self.bot.ai, self.bot.db, interaction.guild.id, question, user=interaction.user
+      )
     except Exception as exc:
       logger.warning(f"rules command failed: {exc}")
       text = "ما قدرت أطلع القوانين الآن."
-    await interaction.followup.send(text[:1900])
+    await interaction.followup.send(text[:1900], allowed_mentions=discord.AllowedMentions.none())
 
 
   @app_commands.command(name="budget", description="استهلاك أنجل من ميزانية النماذج اليوم (للإدارة فقط)")

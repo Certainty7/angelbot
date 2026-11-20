@@ -61,15 +61,36 @@ def history(channel_id: int, limit: int, tok: str):
     return got[:limit]
 
 
+def database_path() -> str:
+    """ANGEL_DB_PATH, resolved exactly like the bot does."""
+    root = pathlib.Path(__file__).resolve().parent.parent
+    configured = (os.environ.get("ANGEL_DB_PATH") or "").strip()
+    if configured:
+        return configured
+    env_file = root / ".env"
+    try:
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            if line.startswith("ANGEL_DB_PATH="):
+                return line.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    return str(root / "chat_history.db")
+
+
 def main() -> None:
     tok = token()
-    db = sqlite3.connect("chat_history.db")
+    db = sqlite3.connect(database_path())
     db.execute(
         "CREATE TABLE IF NOT EXISTS server_messages ("
         " id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id INTEGER NOT NULL,"
         " channel_id INTEGER NOT NULL, user_id INTEGER NOT NULL,"
         " display_name TEXT, content TEXT NOT NULL, created_at TEXT NOT NULL)"
     )
+    try:
+        db.execute("ALTER TABLE server_messages ADD COLUMN message_id TEXT")
+    except sqlite3.Error:
+        pass  # already present
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_srv_msg_mid ON server_messages (message_id)")
     db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_srv_msg_unique ON server_messages (channel_id, user_id, created_at, content)")
 
     guilds = call("/users/@me/guilds", tok)
@@ -96,12 +117,18 @@ def main() -> None:
                     continue
                 created = datetime.fromisoformat(m["timestamp"].replace("Z", "+00:00")).astimezone(timezone.utc)
                 try:
+                    # message_id makes a backfilled line and the live archive one row, not two.
+                    # The opt-out predicate means a member who ran /data delete is never
+                    # re-imported by a later run (C-005).
                     db.execute(
                         "INSERT OR IGNORE INTO server_messages "
-                        "(guild_id, channel_id, user_id, display_name, content, created_at) VALUES (?,?,?,?,?,?)",
+                        "(guild_id, channel_id, user_id, display_name, content, created_at, message_id) "
+                        "SELECT ?,?,?,?,?,?,? WHERE NOT EXISTS ("
+                        "SELECT 1 FROM user_preferences WHERE user_id = ? AND opt_out = 1)",
                         (int(guild["id"]), int(ch["id"]), int(author["id"]),
                          (author.get("global_name") or author.get("username") or "")[:80],
-                         m["content"].strip()[:1500], created.isoformat(timespec="seconds")),
+                         m["content"].strip()[:1500], created.isoformat(timespec="seconds"),
+                         str(m.get("id") or "") or None, int(author["id"])),
                     )
                     saved += 1
                 except sqlite3.Error:
