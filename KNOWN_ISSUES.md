@@ -71,6 +71,18 @@ behaviour with a workaround; **Low** = cosmetic or tooling.
   change state.
 - **Related tests:** `tests/test_security_controls.py`.
 
+### KI-008 — User quota is consumed before the guild cap may refuse
+- **Severity:** Low
+- **Component:** `angel/quota.py`, summary paths in `angel/nl_router.py`, `cogs/ai_chat.py`
+- **Status:** Deferred-with-reason (CodeRabbit re-review note on the PR #9 remediation)
+- **Details:** Every gated command (`/translate`, `/chat`, `/imagine`, `/rules`, summaries)
+  admits the user (consuming their cooldown and daily count) before the guild daily cap may
+  refuse. A refund only in the summary paths would fork the semantics; a general refund would
+  make probing past a guild cap free for the prober. The cooldown-rejection path consumes
+  nothing, which is what the review required.
+- **Workaround:** none needed; the user quota is a per-member rate limit, not a payment.
+- **Verification required:** owner decision if quota admission should become transactional.
+
 ## Resolved in this pass
 
 | ID | Issue | Test |

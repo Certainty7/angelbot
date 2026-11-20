@@ -94,5 +94,47 @@ class ConcurrentDownloadBudgetTest(unittest.TestCase):
         self.assertLessEqual(sum(len(p) for p in kept), 100)
 
 
+class DuplicateSlideAccountingTest(unittest.TestCase):
+    """A repair may only claim bytes the discarded duplicate no longer occupies.
+
+    The Instagram wave releases duplicate claims after deduplication; if the gather
+    result still referenced the duplicates, the repair would claim released bytes
+    while the duplicate payload stayed in RAM, and real peak usage would pass the
+    per-job ceiling.
+    """
+
+    def test_dedup_reports_kept_discarded_bytes_and_missing_indices(self):
+        from angel.media import _dedupe_downloaded_slides
+
+        dup = b"x" * 40
+        items = [
+            (1, dup, "ig_1.jpg"),
+            (2, dup, "ig_2.jpg"),          # stale mirror: same placeholder
+            (3, b"y" * 30, "ig_3.jpg"),
+        ]
+        kept, discarded, missing = _dedupe_downloaded_slides(items, set())
+        self.assertEqual([i for i, _b, _f in kept], [1, 3])
+        self.assertEqual(discarded, 40)
+        self.assertEqual(missing, [2])
+
+    def test_released_budget_matches_retained_payloads_after_reference_drop(self):
+        from angel.media import _dedupe_downloaded_slides
+
+        budget = SharedByteBudget(100)
+        # Simulate two claimed reads: one original and its duplicate placeholder.
+        budget.claim(40)
+        budget.claim(40)
+        dup = b"x" * 40
+        items = [(1, dup, "ig_1.jpg"), (2, dup, "ig_2.jpg")]
+        _kept, discarded, _missing = _dedupe_downloaded_slides(items, set())
+        # The caller contract: clear the references, then release.
+        items.clear()
+        budget.release(discarded)
+        self.assertEqual(
+            budget.remaining, 100 - 40,
+            "after the duplicate is dropped and released, only the kept payload is accounted",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

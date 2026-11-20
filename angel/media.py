@@ -100,6 +100,31 @@ def _get_ffmpeg_semaphore(limit: int = 2) -> asyncio.Semaphore:
   return sem
 
 
+def _dedupe_downloaded_slides(
+    valid_items: List[Tuple[int, bytes, str]], seen_hashes: Set[str]
+) -> Tuple[List[Tuple[int, bytes, str]], int, List[int]]:
+  """Split downloaded slides into (kept, discarded_bytes, missing_indices).
+
+  The caller must drop its own references to the discarded payloads (clear the gather
+  result and the valid-item list) *before* releasing `discarded_bytes` from the job
+  budget: releasing while a duplicate is still referenced lets the repair download
+  claim memory the duplicate still occupies, and real peak RAM passes the ceiling.
+  """
+  kept: List[Tuple[int, bytes, str]] = []
+  missing: List[int] = []
+  discarded_bytes = 0
+  for item in valid_items:
+    idx, b_data, _fname = item
+    h = hashlib.md5(b_data).hexdigest()
+    if h not in seen_hashes:
+      seen_hashes.add(h)
+      kept.append(item)
+    else:
+      missing.append(idx)
+      discarded_bytes += len(b_data)
+  return kept, discarded_bytes, missing
+
+
 def _create_private_temp_dir(prefix: str = "angelbot_social_") -> str:
   path = tempfile.mkdtemp(prefix=prefix)
   try:
@@ -891,18 +916,13 @@ async def extract_instagram_media_items(
     # here, so the dropped indices are remembered and repaired instead of posting a short
     # carousel with no trace in the journal.
     seen_hashes: Set[str] = set()
-    kept: List[Tuple[int, bytes, str]] = []
-    missing: List[int] = []
-    for idx, b_data, fname in valid_items:
-      h = hashlib.md5(b_data).hexdigest()
-      if h not in seen_hashes:
-        seen_hashes.add(h)
-        kept.append((idx, b_data, fname))
-      else:
-        # A duplicate payload is discarded: give its claim back so repair downloads
-        # for the missing index still fit the job budget.
-        job_budget.release(len(b_data))
-        missing.append(idx)
+    kept, duplicate_bytes, missing = _dedupe_downloaded_slides(valid_items, seen_hashes)
+    # Drop every remaining reference to the discarded payloads *before* releasing their
+    # claims: the gather result and the valid-item list keep duplicates alive, and a
+    # repair that claims the released budget would push real peak RAM past the ceiling.
+    valid_items.clear()
+    dl_results.clear()
+    job_budget.release(duplicate_bytes)
     kept_indices = {i for i, _b, _f in kept}
     missing = sorted(set(missing) | {i for i in range(1, discovered + 1) if i not in kept_indices})
 
