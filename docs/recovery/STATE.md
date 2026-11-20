@@ -52,18 +52,29 @@ commit 1 of the branch (unchanged), so later changes to those files are reviewab
 | Command | Result |
 |---|---|
 | `python -m compileall -q bot.py angel cogs tools tests` | 0 |
-| `python -m pytest -q` | see the latest entry in `LEDGER.md` §Verification |
+| `python -m pytest -q` | 182 passed, 322 subtests passed (exits cleanly) |
 | `python tools/selftest.py` | 50/50 |
 | `python tools/security_probe.py` | PASS |
 | `python tools/recall_probe.py` | 10/10 |
-| `python tools/gate_checks.py` | PASS |
+| secret scan | no real credential; one documented placeholder |
+
+## Delivery
+
+| Item | Value |
+|---|---|
+| Pushed branch | `recovery/stabilization` |
+| Remote SHA | `3fe74a4` (verified with `git ls-remote`) |
+| Pull request | https://github.com/Certainty7/angelbot/pull/9 (base `master`, open, **not merged**) |
+| `master` | unchanged at `51090aa`; merging would trigger the Cloudflare Pages production build |
 
 ## Remaining work
 
-1. Final full-suite run after the last documentation edits.
-2. Independent adversarial review pass over the complete diff.
-3. Commit, push `recovery/stabilization`, open a pull request into `master` (do not merge).
-4. Record the remote SHA and the PR URL in this file.
+1. ~~Final full-suite run~~ — done: 182 tests + 322 subtests, suite exits cleanly.
+2. ~~Independent adversarial review~~ — done; the findings it produced are N-006..N-010 in
+   `LEDGER.md` and are fixed in commit `3fe74a4`.
+3. ~~Push and open the pull request~~ — done: PR #9, branch `recovery/stabilization`.
+4. Owner decision: merge PR #9 (this triggers the Cloudflare Pages production build) and restart
+   the bot service, then run `docs/LIVE_VERIFICATION.md` §1–§4.
 
 ## Resume instructions
 
