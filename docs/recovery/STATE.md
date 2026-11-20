@@ -57,15 +57,20 @@ commit 1 of the branch (unchanged), so later changes to those files are reviewab
 | `python tools/security_probe.py` | PASS |
 | `python tools/recall_probe.py` | 10/10 |
 | secret scan | no real credential; one documented placeholder |
+| `npx playwright test` (website) | 67/67 |
+| GitHub Actions on the PR | `checks`, `website-build`, `website-data`, `catalogue`, `build/typecheck/e2e` PASS |
 
 ## Delivery
 
 | Item | Value |
 |---|---|
 | Pushed branch | `recovery/stabilization` |
-| Remote SHA | `3fe74a4` (verified with `git ls-remote`) |
+| Verified green tip | `dfe227b` (`checks`, `website-build`, `website-data`, `catalogue`, `build/typecheck/e2e` all pass) |
 | Pull request | https://github.com/Certainty7/angelbot/pull/9 (base `master`, open, **not merged**) |
 | `master` | unchanged at `51090aa`; merging would trigger the Cloudflare Pages production build |
+
+After `dfe227b` the branch only receives documentation commits (this state update); the code and
+tests that CI verified are unchanged.
 
 ## Remaining work
 
