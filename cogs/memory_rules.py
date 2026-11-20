@@ -50,6 +50,7 @@ class MemoryRules(commands.Cog):
       action: str = "view",
       text: Optional[str] = None,
       style: Optional[str] = None,
+      confirm: bool = False,
   ):
     uid = interaction.user.id
     mistress = is_mistress(interaction.user)
@@ -83,6 +84,14 @@ class MemoryRules(commands.Cog):
     elif action == "forget":
       if not text:
         await interaction.response.send_message("⚠️ اكتبي الكلمة أو المعلومة المراد حذفها في `text`.", ephemeral=True)
+        return
+      if not confirm:
+        # This scrubs the archive too, so it is irreversible and needs an explicit second step.
+        await interaction.response.send_message(
+            f"⚠️ سيُحذف كل ذكر لـ **({text[:60]})** من محادثاتك وأرشيف السيرفر وملاحظاتك، "
+            "ولا يمكن التراجع. أعد الأمر مع `confirm` على «نعم» للتأكيد.",
+            ephemeral=True,
+        )
         return
       await self.bot.db.forget_user_keyword(uid, text)
       await interaction.response.send_message(f"🗑️ تم حذف أي إشارة إلى **({text})** من ذاكرتكِ.", ephemeral=True)
@@ -124,15 +133,29 @@ class MemoryRules(commands.Cog):
       embed = discord.Embed(
           title="🗂️ بياناتك عند أنجل",
           description=(
-              "أنجل لا يبني ملفاً تعريفياً عنك. ما يلي هو كل ما يُخزَّن، وحذفه متاح بأمر واحد."
+              "أنجل لا يبني ملفاً تعريفياً عنك. ما يلي هو كل ما يُخزَّن عنك شخصياً، وحذفه "
+              "متاح بأمر واحد. تبقى سجلات الإشراف (الإنذارات) لأنها ملك للسيرفر، لا لك."
           ),
           color=0x2B2D31,
       )
-      embed.add_field(name="رسائل مؤرشفة", value=f"`{counts['archived_messages']}`", inline=True)
-      embed.add_field(name="رسائل محادثة البوت", value=f"`{counts['chat_messages']}`", inline=True)
-      embed.add_field(name="ملاحظات مستنتجة", value=f"`{counts['profile_facts']}`", inline=True)
-      embed.add_field(name="رسائل خاصة مسجلة", value=f"`{counts['dm_logs']}`", inline=True)
+      # Keys are the table names the deletion path actually uses; the old aliases made this
+      # command raise KeyError right after the deletion set was widened (C-006).
+      embed.add_field(name="رسائل مؤرشفة", value=f"`{counts.get('server_messages', 0)}`", inline=True)
+      embed.add_field(name="رسائل محادثة البوت", value=f"`{counts.get('messages', 0)}`", inline=True)
+      embed.add_field(name="ملاحظات محفوظة", value=f"`{counts.get('user_profile', 0)}`", inline=True)
+      embed.add_field(name="رسائل خاصة مسجلة", value=f"`{counts.get('dm_logs', 0)}`", inline=True)
+      embed.add_field(name="نقاط الخبرة", value=f"`{counts.get('user_xp', 0)}`", inline=True)
+      embed.add_field(name="ملاحظات محيطة", value=f"`{counts.get('ambient_log', 0)}`", inline=True)
       embed.add_field(name="الحفظ التلقائي", value="موقوف" if prefs.get("opt_out") else "مفعّل", inline=True)
+      failed_tables = counts.get("_failed_tables") or []
+      if failed_tables:
+        # A locked or damaged table must not vanish from the list the member is told is
+        # complete: the counts above are partial until these tables are readable.
+        embed.add_field(
+            name="⚠️ جداول لم يمكن عدّها",
+            value="`" + "`, `".join(failed_tables) + "` — القائمة أعلاه غير مكتملة لهذه الجداول.",
+            inline=False,
+        )
       embed.add_field(
           name="ملاحظاتك المثبتة بنفسك",
           value=(prefs.get("pinned_facts") or "*لا شيء*")[:1000],
@@ -161,38 +184,109 @@ class MemoryRules(commands.Cog):
     for channel_id, target in list(getattr(self.bot, "last_social_target", {}).items()):
       if target == uid:
         self.bot.last_social_target.pop(channel_id, None)
-    for key in list(getattr(self.bot, "active_chat_window", {}).items()):
+    for key in list(getattr(self.bot, "active_chat_window", {})):
       if isinstance(key, tuple) and key[-1] == uid:
         self.bot.active_chat_window.pop(key, None)
     for cache in (getattr(self.bot, "pending_step", {}), getattr(self.bot, "pending_confirm", {})):
       for key in list(cache):
         if isinstance(key, tuple) and key[-1] == uid:
           cache.pop(key, None)
+    # The DB is not the only copy: AFK reasons, harem titles and the ambient buffer are
+    # injected into other members' prompts and must drop the deleted member too.
+    getattr(self.bot, "afk_cache", {}).pop((interaction.guild.id if interaction.guild else 0, uid), None)
+    for afk_key in [k for k in getattr(self.bot, "afk_cache", {}) if isinstance(k, tuple) and k[-1] == uid]:
+      self.bot.afk_cache.pop(afk_key, None)
+    getattr(self.bot, "harem_cache", {}).pop(uid, None)
+    ambient = getattr(self.bot, "recent_channel_msgs", {})
+    for channel_id in list(ambient):
+      buffer = ambient[channel_id]
+      try:
+        # Entries are (author_id, text) tuples. A plain string is a legacy entry whose
+        # author cannot be identified: privacy-safe cleanup drops it rather than keep a
+        # deleted member's line flowing into other members' prompts.
+        kept_lines = [
+            entry for entry in list(buffer)
+            if isinstance(entry, tuple) and entry[0] != uid
+        ]
+        buffer.clear()
+        buffer.extend(kept_lines)
+      except Exception:
+        ambient.pop(channel_id, None)
     self.bot.user_locks.pop(uid, None)
-    await interaction.response.send_message(
+
+    failed = counts.get("_failed_tables") or []
+    receipt = (
         "🗑️ حُذفت بياناتك: "
-        f"`{counts.get('archived_messages', 0)}` رسالة مؤرشفة، "
-        f"`{counts.get('chat_messages', 0)}` رسالة محادثة، "
-        f"`{counts.get('profile_facts', 0)}` ملاحظة، "
+        f"`{counts.get('server_messages', 0)}` رسالة مؤرشفة، "
+        f"`{counts.get('messages', 0)}` رسالة محادثة، "
+        f"`{counts.get('user_profile', 0)}` ملاحظة، "
         f"`{counts.get('dm_logs', 0)}` رسالة خاصة. "
-        "أُوقف الحفظ التلقائي عنك، ولن يُخزَّن جديد.",
-        ephemeral=True,
+        "أُوقف الحفظ التلقائي عنك، ولن يُخزَّن جديد."
     )
+    if failed:
+      receipt += (
+          "\n⚠️ تعذّر حذف بعض الجداول الآن: " + ", ".join(failed) +
+          ". راسلي المالكة قبل اعتبار الحذف مكتملاً."
+      )
+    await interaction.response.send_message(receipt, ephemeral=True)
 
 
   @app_commands.command(name="rules", description="اسألي أنجل عن قوانين السيرفر وتجيبك من الفهرس")
-  @app_commands.describe(question="سؤالك عن القوانين")
-  async def rules_cmd(self, interaction: discord.Interaction, question: str):
+  @app_commands.guild_only()
+  @app_commands.describe(question="سؤالك عن القوانين", refresh="إعادة فهرسة قناة القوانين (للإدارة فقط)")
+  async def rules_cmd(
+      self, interaction: discord.Interaction, question: str, refresh: bool = False
+  ):
     if not interaction.guild:
       await interaction.response.send_message("هذا الأمر للسيرفرات فقط.", ephemeral=True)
       return
+    allowed, deny_reason = self.bot.quota.check_user_allowed(
+        interaction.user, is_harem=(self.bot.get_harem_title(interaction.user.id) is not None)
+    )
+    if not allowed:
+      await interaction.response.send_message(f"⚠️ {deny_reason}", ephemeral=True)
+      return
     await interaction.response.defer(thinking=True)
+    is_staff = is_mistress(interaction.user) or (
+        isinstance(interaction.user, discord.Member)
+        and interaction.user.guild_permissions.manage_guild
+    )
+    rules_channel = getattr(interaction.guild, "rules_channel", None)
     try:
-      text = await rules_mod.answer(self.bot.ai, self.bot.db, interaction.guild.id, question)
+      index = await self.bot.db.search_rules(interaction.guild.id, question, 1)
+      # Separate "the corpus is empty" from "the question matched nothing": a populated
+      # corpus with no match must answer normally, not trigger a rebuild that replaced
+      # staff rules with whatever channel the caller is standing in.
+      has_corpus = await self.bot.db.rules_corpus_exists(interaction.guild.id)
+      if refresh or not has_corpus:
+        if refresh and not is_staff:
+          await interaction.followup.send("🚫 إعادة الفهرسة للإدارة فقط.", ephemeral=True)
+          return
+        if rules_channel is None:
+          if not has_corpus:
+            await interaction.followup.send(
+                "📭 ما فيه فهرس قوانين بعد. اضبطي قناة القوانين في السيرفر ثم أعيدي المحاولة، "
+                "أو شغّلي `/rules refresh: نعم` من قناة القوانين (للإدارة فقط).",
+                ephemeral=True,
+            )
+            return
+        elif is_staff:
+          await rules_mod.index_channel(
+              self.bot, self.bot.db, interaction.guild.id, rules_channel.id
+          )
+        elif not has_corpus:
+          await interaction.followup.send(
+              "📭 فهرس القوانين غير جاهز بعد. اطلبي من الإدارة تشغيل `/rules refresh: نعم`.",
+              ephemeral=True,
+          )
+          return
+      text = await rules_mod.answer(
+          self.bot.ai, self.bot.db, interaction.guild.id, question, user=interaction.user
+      )
     except Exception as exc:
       logger.warning(f"rules command failed: {exc}")
       text = "ما قدرت أطلع القوانين الآن."
-    await interaction.followup.send(text[:1900])
+    await interaction.followup.send(text[:1900], allowed_mentions=discord.AllowedMentions.none())
 
 
   @app_commands.command(name="budget", description="استهلاك أنجل من ميزانية النماذج اليوم (للإدارة فقط)")

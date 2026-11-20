@@ -39,6 +39,10 @@ def _render(raw) -> str:
         data = json.loads(raw) if isinstance(raw, str) else raw
     except (TypeError, ValueError):
         return ""
+    # A list, a bare string or null in this column used to raise AttributeError on .get,
+    # which took down every AI reply in the guild (C-010).
+    if not isinstance(data, dict):
+        return ""
     parts = []
     for key, label in (
         ("tone", "نبرة المكان"),

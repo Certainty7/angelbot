@@ -25,7 +25,18 @@ LOCAL_TZ = ANGEL_TZ
 
 
 DAILY_LIMIT_USD = _f("ANGEL_DAILY_COST_LIMIT_USD", 0.0)  # 0 = no daily ceiling
-STOP_RATIO = _f("ANGEL_COST_STOP_RATIO", 0.95)
+
+
+def _ratio(name: str, default: float) -> float:
+  """A stop ratio outside (0, 1] raises the ceiling or blocks everyone; snap to default."""
+  value = _f(name, default)
+  return value if 0.0 < value <= 1.0 else float(default)
+
+
+STOP_RATIO = _ratio("ANGEL_COST_STOP_RATIO", 0.95)
+# What one call may cost, reserved before it is made. The ceiling is enforced against
+# spent + reserved, so N concurrent requests cannot all pass the same check (C-003).
+ESTIMATED_CALL_USD = _f("ANGEL_ESTIMATED_CALL_USD", 0.002)
 PRICE_INPUT_PER_MTOK = _f("ANGEL_PRICE_INPUT_PER_MTOK", 0.10)
 PRICE_OUTPUT_PER_MTOK = _f("ANGEL_PRICE_OUTPUT_PER_MTOK", 0.40)
 

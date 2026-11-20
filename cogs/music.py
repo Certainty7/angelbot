@@ -14,7 +14,7 @@ from discord.ext import commands
 
 from angel.audio_source import ResolveError, clean_reason
 from angel.config import is_mistress, logger
-from angel.voice_engine import MusicEngine
+from angel.voice_engine import MusicEngine, VoiceBusyError
 
 MUSIC_ENABLED = os.environ.get("MUSIC_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
 MAX_QUEUE = 50
@@ -87,6 +87,11 @@ class Music(commands.Cog):
     try:
       await self.engine.ensure_connected(channel)
       track = await self.engine.enqueue(channel, query, interaction.user)
+    except VoiceBusyError as exc:
+      await interaction.followup.send(
+          f"🎧 أنجل مشغّلة في {exc.channel.mention} الآن. انضم لنفس الروم أولاً.", ephemeral=True
+      )
+      return
     except ResolveError as exc:
       await interaction.followup.send(f"⚠️ تعذر إيجاد الصوت: `{clean_reason(str(exc))}`", ephemeral=True)
       return
@@ -96,6 +101,10 @@ class Music(commands.Cog):
           f"⚠️ تعذر الدخول للروم الصوتي: `{type(exc).__name__}`", ephemeral=True
       )
       return
+    # Set only after admission: a rejected request must not retarget the active
+    # session's notification channel (the queue-full and busy rejections ran later
+    # in the old order and claimed the channel first).
+    state.text_channel_id = interaction.channel_id
 
     if len(state.tracks) > MAX_QUEUE:
       state.remove_at(len(state.tracks) - 1)
@@ -106,15 +115,17 @@ class Music(commands.Cog):
 
     playing = await self.engine.start(guild)
     if playing is track:
-      msg = f"🎶 أشغّل الآن: **{track.title}** (`{track.duration_text}`) من `{track.source}`"
+      msg = f"🎶 أشغّل الآن: **{track.title[:180]}** (`{track.duration_text}`) من `{track.source}`"
       dave = self.engine.last_dave.get(guild.id) or {}
       if dave.get("ver") and not dave.get("can_encrypt"):
         msg += "\n🔇 التشفير الصوتي لم يكتمل بعد — إن لم تسمعي شيئاً أعيدي المحاولة بعد ثانية."
-      await interaction.followup.send(msg)
+      # The title comes from YouTube/SoundCloud: never let it ping a member.
+      await interaction.followup.send(msg, allowed_mentions=discord.AllowedMentions.none())
     else:
       position = len(state.tracks)
       await interaction.followup.send(
-          f"➕ أُضيفت للقائمة (#{position}): **{track.title}** (`{track.duration_text}`)"
+          f"➕ أُضيفت للقائمة (#{position}): **{track.title[:180]}** (`{track.duration_text}`)",
+          allowed_mentions=discord.AllowedMentions.none(),
       )
 
   @app_commands.command(name="skip", description="تخطي الأغنية الحالية")
@@ -250,12 +261,28 @@ class Music(commands.Cog):
       )
       return
     tracks = tracks[:room]
+    voice = interaction.guild.voice_client
+    if voice is not None and voice.is_connected() and voice.channel and voice.channel.id != channel.id:
+      await interaction.followup.send(
+          f"🎧 أنجل مشغّلة في {voice.channel.mention} الآن. انضمي لنفس الروم أولاً.",
+          ephemeral=True,
+      )
+      return
     try:
       await self.engine.ensure_connected(channel)
+    except VoiceBusyError as exc:
+      await interaction.followup.send(
+          f"🎧 أنجل مشغّلة في {exc.channel.mention} الآن. انضمي لنفس الروم أولاً.",
+          ephemeral=True,
+      )
+      return
     except Exception as exc:  # noqa: BLE001 - answer the failure instead of crashing the interaction
       logger.warning(f"music-playlist join failed: {type(exc).__name__}: {exc}")
       await interaction.followup.send("⚠️ تعذر الدخول للروم الصوتي.", ephemeral=True)
       return
+    # Set only after admission so a rejected playlist load cannot retarget the active
+    # session's notification channel.
+    state.text_channel_id = interaction.channel_id
     added, failed = 0, 0
     for item in tracks:
       try:

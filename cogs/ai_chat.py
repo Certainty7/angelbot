@@ -16,7 +16,7 @@ from angel.brain import AI_ERRORS
 from angel.config import is_mistress, logger
 from angel.images import download_media_as_base64
 from angel.summarize import analyze_channel_history_deep
-from angel.text import split_message
+from angel.text import plan_reply_delivery
 from angel.ui import ArtStudioView
 
 
@@ -48,36 +48,33 @@ class AiChat(commands.Cog):
           interaction.user, message, media_items=media_items, cmd="chat"
       )
 
-      chunks = split_message(reply or "")
-      if not chunks or not (reply or "").strip():
+      # An image-only or GIF-only reply is valid and must be delivered (the old early
+      # return dropped generated media because the prose was empty).
+      delivery = plan_reply_delivery(reply, gif_bytes, gif_url, img_bytes)
+      if delivery is None:
         await interaction.followup.send(
             "⚠️ لم أستطع توليد رد الآن.", ephemeral=True,
             allowed_mentions=discord.AllowedMentions.none(),
         )
         return
+      first_msg, rest_chunks, has_files, use_gif_url = delivery
       files_to_send = []
-      if img_bytes:
-        files_to_send.append(discord.File(io.BytesIO(img_bytes), filename="angel_art.png"))
-      if gif_bytes:
-        files_to_send.append(discord.File(io.BytesIO(gif_bytes), filename="angel_reaction.gif"))
+      if has_files:
+        if img_bytes:
+          files_to_send.append(discord.File(io.BytesIO(img_bytes), filename="angel_art.png"))
+        if gif_bytes:
+          files_to_send.append(discord.File(io.BytesIO(gif_bytes), filename="angel_reaction.gif"))
 
-      first_msg = chunks[0]
       gif_embed = None
-      if gif_url and not gif_bytes:
+      if use_gif_url:
         gif_embed = discord.Embed(color=0xD4AF37 if (is_mistress(interaction.user) or self.bot.get_harem_title(interaction.user.id)) else 0x2B2D31)
         gif_embed.set_image(url=gif_url)
 
-      if gif_embed:
-        await interaction.followup.send(
-            content=first_msg, embed=gif_embed, files=files_to_send,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-      else:
-        await interaction.followup.send(
-            content=first_msg, files=files_to_send,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
-      for chunk in chunks[1:]:
+      await interaction.followup.send(
+          content=first_msg, embed=gif_embed, files=files_to_send,
+          allowed_mentions=discord.AllowedMentions.none(),
+      )
+      for chunk in rest_chunks:
         await interaction.followup.send(
             content=chunk, allowed_mentions=discord.AllowedMentions.none()
         )
@@ -97,6 +94,21 @@ class AiChat(commands.Cog):
       self,
       interaction: discord.Interaction, text: str, target_language: str
   ):
+    # Translation is a paid model call like any other; it used to skip both the user quota
+    # and the guild daily cap (C-014).
+    allowed, deny_reason = self.bot.quota.check_user_allowed(
+        interaction.user, is_harem=(self.bot.get_harem_title(interaction.user.id) is not None)
+    )
+    if not allowed:
+      await interaction.response.send_message(f"⚠️ {deny_reason}", ephemeral=True)
+      return
+    if interaction.guild and not is_mistress(interaction.user):
+      allowed_g, used_g = await self.bot.db.consume_guild_ai_quota(interaction.guild.id)
+      if not allowed_g:
+        await interaction.response.send_message(
+            f"⚠️ وصل السيرفر لحد استهلاك الذكاء الاصطناعي اليومي (`{used_g}`).", ephemeral=True
+        )
+        return
     await interaction.response.defer(thinking=True)
     try:
       prompt = (
@@ -193,11 +205,31 @@ class AiChat(commands.Cog):
         return
       # A 500-message summary is a real model call; keep a member from making it a loop.
       limit = min(limit, 200)
+      # Cooldown first, and claim it before the quota awaits: a request inside the
+      # window consumes no quota, and two simultaneous requests cannot both pass.
       now_m = time.monotonic()
       last_sum = self.bot.summarize_cooldowns.get(interaction.user.id)
       if last_sum is not None and now_m - last_sum < 120.0:
         wait_s = int(120.0 - (now_m - last_sum)) + 1
         await interaction.response.send_message(f"⏳ انتظر **{wait_s} ثانية** قبل تلخيص آخر.", ephemeral=True)
+        return
+      self.bot.summarize_cooldowns[interaction.user.id] = now_m
+      allowed_q, deny_q = self.bot.quota.check_user_allowed(
+          interaction.user, is_harem=(self.bot.get_harem_title(interaction.user.id) is not None)
+      )
+      if not allowed_q:
+        # A refused request must not burn the cooldown window either.
+        if self.bot.summarize_cooldowns.get(interaction.user.id) == now_m:
+          self.bot.summarize_cooldowns.pop(interaction.user.id, None)
+        await interaction.response.send_message(f"⚠️ {deny_q}", ephemeral=True)
+        return
+      allowed_g, used_g = await self.bot.db.consume_guild_ai_quota(interaction.guild.id)
+      if not allowed_g:
+        if self.bot.summarize_cooldowns.get(interaction.user.id) == now_m:
+          self.bot.summarize_cooldowns.pop(interaction.user.id, None)
+        await interaction.response.send_message(
+            f"⚠️ وصل السيرفر لحد استهلاك الذكاء الاصطناعي اليومي (`{used_g}`).", ephemeral=True
+        )
         return
     await interaction.response.defer(thinking=True)
     try:
@@ -205,8 +237,6 @@ class AiChat(commands.Cog):
           self.bot,
           interaction.channel, interaction.user, limit=limit, focus_query=question or ""
       )
-      if not is_mistress(interaction.user):
-        self.bot.summarize_cooldowns[interaction.user.id] = time.monotonic()
       embed = discord.Embed(
           title=f"📝 ملخص المحادثة (آخر {limit} رسالة)",
           description=report[:4000],

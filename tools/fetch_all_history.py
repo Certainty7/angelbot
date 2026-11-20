@@ -66,12 +66,27 @@ def ensure_schema(db: sqlite3.Connection) -> None:
         "CREATE TABLE IF NOT EXISTS fetch_state ("
         " channel_id INTEGER PRIMARY KEY, oldest_id TEXT, fetched INTEGER DEFAULT 0, updated_at TEXT)"
     )
+    # The opt-out predicate below reads user_preferences; without this DDL a fresh
+    # database made every insert fail with "no such table" (C-005).
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS user_preferences ("
+        " user_id INTEGER PRIMARY KEY, pinned_facts TEXT DEFAULT '',"
+        " style_mode TEXT DEFAULT 'realistic', opt_out INTEGER DEFAULT 0,"
+        " updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
     db.commit()
+
+
+def database_path() -> str:
+    """ANGEL_DB_PATH, resolved with the same rules as angel.config."""
+    import dbpath  # tools/ is on sys.path when a tool runs from the repository root
+
+    return dbpath.resolve()
 
 
 def main() -> None:
     tok = token()
-    db = sqlite3.connect("chat_history.db", timeout=30)
+    db = sqlite3.connect(database_path(), timeout=30)
     ensure_schema(db)
 
     total = db.execute("select count(*) from server_messages").fetchone()[0]
@@ -106,24 +121,41 @@ def main() -> None:
                     break
                 before = batch[-1]["id"]
                 added = 0
+                failed = 0
                 for m in batch:
                     a = m.get("author") or {}
                     if a.get("bot") or not (m.get("content") or "").strip():
                         continue
-                    ts = datetime.fromisoformat(m["timestamp"].replace("Z", "+00:00")).astimezone(timezone.utc)
                     try:
+                        # Never re-import a member who ran /data delete (C-005).
+                        ts = datetime.fromisoformat(m["timestamp"].replace("Z", "+00:00")).astimezone(timezone.utc)
                         db.execute(
                             "INSERT OR IGNORE INTO server_messages "
                             "(guild_id, channel_id, user_id, display_name, content, created_at, message_id) "
-                            "VALUES (?,?,?,?,?,?,?)",
+                            "SELECT ?,?,?,?,?,?,? WHERE NOT EXISTS ("
+                            "SELECT 1 FROM user_preferences WHERE user_id = ? AND opt_out = 1)",
                             (int(guild["id"]), cid, int(a["id"]),
                              (a.get("global_name") or a.get("username") or "")[:80],
-                             m["content"].strip()[:1500], ts.isoformat(timespec="seconds"), m["id"]),
+                             m["content"].strip()[:1500], ts.isoformat(timespec="seconds"),
+                             m["id"], int(a["id"])),
                         )
                         added += 1
-                    except sqlite3.Error:
-                        pass
+                    except (sqlite3.Error, ValueError) as exc:
+                        # A failed row (insert error or malformed timestamp) must not be
+                        # swallowed: the page is not marked done, so a rerun retries
+                        # exactly the missing window.
+                        failed += 1
+                        print(f"  #{name}: insert failed mid={m.get('id')}: {exc}", flush=True)
                 db.commit()
+                if failed:
+                    # Do not advance fetch_state.oldest_id: `before` stays at the last
+                    # fully-stored page, and the unique message_id index makes the
+                    # retry never duplicate what this pass did store.
+                    print(
+                        f"  #{name}: {failed} insert(s) failed; page not marked done, retry this channel",
+                        flush=True,
+                    )
+                    break
                 got += len(batch)
                 total += added
                 db.execute(

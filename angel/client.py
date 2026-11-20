@@ -133,18 +133,26 @@ class AngelDiscordBot(commands.Bot):
     self.background_scheduler.start()
     self.event_loop_lag_monitor.start()
     try:
-      self.silent_cache = await self.db.get_silent_map()
+      silent_map = await self.db.get_silent_map()
+      # Keep the bounded container: assigning a plain dict defeated the cache limit.
+      self.silent_cache.clear()
+      self.silent_cache.update(silent_map or {})
+    except Exception as silence_err:
+      logger.warning(f"Silence map init notice: {silence_err}")
+    try:
       await self._load_autonomy_guilds()
       self._autonomy_task = asyncio.create_task(autonomy.engine.run_forever())
-    except Exception as silence_err:
-      logger.warning(f"Interaction state init notice: {silence_err}")
+    except Exception as autonomy_err:
+      logger.warning(f"Autonomy init notice: {autonomy_err}")
+    # The budget breaker must keep its handle even when an unrelated evolution row is
+    # malformed: the old placement inside the try silently disabled the ceiling (C-003).
+    self.ai.db = self.db
+    self.sender = sendqueue.Sender(self, capacity=5, rate_per_sec=0.6)
+    self.sender.start()
     try:
       state = await evolution.load(self.db)
       self.mood = float(state["mood"])
       self.settings = dict(state["settings"])
-      self.ai.db = self.db
-      self.sender = sendqueue.Sender(self, capacity=5, rate_per_sec=0.6)
-      self.sender.start()
       logger.info(f"Interaction engine ready: mood={self.mood:.2f} settings={self.settings}")
     except Exception as merge_err:
       logger.warning(f"Interaction engine init notice: {merge_err}")
@@ -183,6 +191,43 @@ class AngelDiscordBot(commands.Bot):
           await self.db.close()
         finally:
           await super().close()
+
+  async def on_voice_state_update(self, member, before, after):
+    """Leave a voice channel once the last human does (C-016).
+
+    Without this the bot idled in an empty room forever, holding a voice connection and
+    an FFmpeg process.
+    """
+    if member.bot or self.user is None or member.id == self.user.id:
+      return
+    guild = member.guild
+    voice = guild.voice_client
+    if voice is None or voice.channel is None:
+      return
+    if before.channel is None or before.channel.id != voice.channel.id:
+      return
+    if after.channel is not None and after.channel.id == voice.channel.id:
+      return
+    cog = self.get_cog("Music")
+    engine = getattr(cog, "engine", None)
+    if engine is None:
+      return
+
+    async def _leave_if_alone() -> None:
+      # A grace period: people switch channels and come back, and a reconnect looks like a
+      # leave for a moment.
+      await asyncio.sleep(3.0)
+      current = guild.voice_client
+      if current is None or current.channel is None:
+        return
+      if any(not m.bot for m in current.channel.members):
+        return
+      logger.info("music-left-empty guild=%s channel=%s", guild.id, current.channel.id)
+      await engine.stop(guild)
+
+    task = asyncio.create_task(_leave_if_alone())
+    self._bg_tasks.add(task)
+    task.add_done_callback(self._bg_tasks.discard)
 
   def get_harem_title(self, user_id: int) -> Optional[str]:
     info = self.harem_cache.get(user_id)
@@ -491,7 +536,10 @@ class AngelDiscordBot(commands.Bot):
           allow_romantic=allow_romantic,
       )
       if not clean_reply:
-        clean_reply = "تم." if is_mistress(user) else "حسناً."
+        # Reaching here means every model returned no visible text after the failover loop
+        # above. A confident "تم." hid a failed call; say nothing instead.
+        logger.warning("ai-empty after failover cmd=handle_conversation")
+        clean_reply = ""
       clean_reply = humanize_reply(clean_reply)
       clean_reply = trim_emoji(persona_humanize(clean_reply, self.settings), 1)
 

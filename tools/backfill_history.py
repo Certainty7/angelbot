@@ -61,16 +61,42 @@ def history(channel_id: int, limit: int, tok: str):
     return got[:limit]
 
 
-def main() -> None:
-    tok = token()
-    db = sqlite3.connect("chat_history.db")
+def database_path() -> str:
+    """ANGEL_DB_PATH, resolved with the same rules as angel.config."""
+    import dbpath  # tools/ is on sys.path when a tool runs from the repository root
+
+    return dbpath.resolve()
+
+
+def ensure_schema(db: sqlite3.Connection) -> None:
     db.execute(
         "CREATE TABLE IF NOT EXISTS server_messages ("
         " id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id INTEGER NOT NULL,"
         " channel_id INTEGER NOT NULL, user_id INTEGER NOT NULL,"
         " display_name TEXT, content TEXT NOT NULL, created_at TEXT NOT NULL)"
     )
+    try:
+        db.execute("ALTER TABLE server_messages ADD COLUMN message_id TEXT")
+    except sqlite3.Error:
+        pass  # already present
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_srv_msg_mid ON server_messages (message_id)")
     db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_srv_msg_unique ON server_messages (channel_id, user_id, created_at, content)")
+    # The opt-out predicate below reads user_preferences; without this DDL a fresh
+    # database made every insert fail with "no such table" and each message was
+    # silently counted as skipped (C-005).
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS user_preferences ("
+        " user_id INTEGER PRIMARY KEY, pinned_facts TEXT DEFAULT '',"
+        " style_mode TEXT DEFAULT 'realistic', opt_out INTEGER DEFAULT 0,"
+        " updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    db.commit()
+
+
+def main() -> None:
+    tok = token()
+    db = sqlite3.connect(database_path())
+    ensure_schema(db)
 
     guilds = call("/users/@me/guilds", tok)
     print("guilds:", [(g["name"], g["id"]) for g in guilds])
@@ -96,12 +122,18 @@ def main() -> None:
                     continue
                 created = datetime.fromisoformat(m["timestamp"].replace("Z", "+00:00")).astimezone(timezone.utc)
                 try:
+                    # message_id makes a backfilled line and the live archive one row, not two.
+                    # The opt-out predicate means a member who ran /data delete is never
+                    # re-imported by a later run (C-005).
                     db.execute(
                         "INSERT OR IGNORE INTO server_messages "
-                        "(guild_id, channel_id, user_id, display_name, content, created_at) VALUES (?,?,?,?,?,?)",
+                        "(guild_id, channel_id, user_id, display_name, content, created_at, message_id) "
+                        "SELECT ?,?,?,?,?,?,? WHERE NOT EXISTS ("
+                        "SELECT 1 FROM user_preferences WHERE user_id = ? AND opt_out = 1)",
                         (int(guild["id"]), int(ch["id"]), int(author["id"]),
                          (author.get("global_name") or author.get("username") or "")[:80],
-                         m["content"].strip()[:1500], created.isoformat(timespec="seconds")),
+                         m["content"].strip()[:1500], created.isoformat(timespec="seconds"),
+                         str(m.get("id") or "") or None, int(author["id"])),
                     )
                     saved += 1
                 except sqlite3.Error:

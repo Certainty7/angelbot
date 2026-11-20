@@ -65,11 +65,11 @@ jobs:
         run: python tools/recall_probe.py
 
   dependency-audit:
-    # Advisory and scheduled only; never blocks a PR hotfix.
+    # Weekly gate: a known high/critical CVE must fail the job. It never runs on a PR, so it
+    # cannot freeze a hotfix; silently passing defeated the purpose (P-007).
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    continue-on-error: true
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -77,10 +77,30 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
         with:
           python-version: "3.12"
-      - name: pip-audit (advisory)
+      - name: pip-audit
         run: |
           pip install pip-audit
           pip-audit -r requirements.txt
+
+  website-dependency-audit:
+    # The npm audit must run in its own scheduled job: sharing the Python job meant a
+    # pip-audit failure skipped the Node setup and the weekly run reported no website
+    # result at all.
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+      - name: npm audit
+        working-directory: website
+        run: npm audit --omit=dev --audit-level=high
 
   website-data:
     runs-on: ubuntu-latest

@@ -19,6 +19,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from .config import BASE_DIR, FFMPEG_EXE, Image, _safe_gc_collect, logger, yt_dlp
 from .images import _is_safe_public_http_url
 from .net import (
+    SharedByteBudget,
     get_shared_http_session,
     is_allowed_hostname,
     read_bounded_stream,
@@ -49,6 +50,44 @@ def _allowed_social_host(url: str) -> bool:
 
 
 _FFMPEG_SEMS: Dict[int, asyncio.Semaphore] = {}
+
+# One media job may hold at most this much image/video data in RAM. The container is capped
+# at 1 GB and also runs Python, Pillow and the Discord client; 20 carousel slides at the
+# 25 MB upload ceiling would be 500 MB for a single job (C-007).
+MAX_JOB_BYTES = 50 * 1024 * 1024
+
+
+def _fit_byte_budget(
+    items: List[Tuple[int, bytes, str]], budget: int = MAX_JOB_BYTES
+) -> Tuple[List[Tuple[int, bytes, str]], int]:
+    """Keep slides until their combined payload reaches `budget`; return (kept, dropped)."""
+    kept: List[Tuple[int, bytes, str]] = []
+    total = 0
+    dropped = 0
+    for item in items:
+        size = len(item[1])
+        if kept and total + size > budget:
+            dropped += 1
+            continue
+        kept.append(item)
+        total += size
+    return kept, dropped
+
+
+def _fit_file_budget(
+    files: List[Tuple[bytes, str]], budget: int = MAX_JOB_BYTES
+) -> Tuple[List[Tuple[bytes, str]], int]:
+    """Same budget for the (bytes, filename) shape the extractors return."""
+    kept: List[Tuple[bytes, str]] = []
+    total = 0
+    dropped = 0
+    for data, name in files:
+        if kept and total + len(data) > budget:
+            dropped += 1
+            continue
+        kept.append((data, name))
+        total += len(data)
+    return kept, dropped
 
 
 def _get_ffmpeg_semaphore(limit: int = 2) -> asyncio.Semaphore:
@@ -127,7 +166,8 @@ async def resolve_social_redirect_and_clean(url: str) -> str:
   ):
     # A share short-link is still a URL from a member: never fetch loopback, the VPN subnet or
     # the cloud metadata address just because the text happens to contain "/share/".
-    if not _is_safe_public_http_url(clean_url):
+    # getaddrinfo is blocking; running it inline froze the event loop (and voice) on a slow DNS.
+    if not await asyncio.to_thread(_is_safe_public_http_url, clean_url):
       return clean_url
     try:
       session = await get_shared_http_session()
@@ -143,7 +183,7 @@ async def resolve_social_redirect_and_clean(url: str) -> str:
           q_params = urllib.parse.parse_qs(urllib.parse.urlsplit(final_u).query)
           red_list = q_params.get("redirect_url")
           if red_list and red_list[0].startswith("http") and _allowed_social_host(red_list[0]):
-            if _is_safe_public_http_url(red_list[0]):
+            if await asyncio.to_thread(_is_safe_public_http_url, red_list[0]):
               final_u = red_list[0]
         clean_url = final_u
     except Exception:
@@ -273,9 +313,18 @@ async def _ensure_discord_playable_mp4(video_bytes: bytes, max_bytes: int = 10 *
       try:
         await asyncio.wait_for(proc.wait(), timeout=14.0)
       except asyncio.TimeoutError:
-        proc.kill()
-        await proc.wait()
         raise
+      finally:
+        # A cancelled transcode used to delete tmp_dir while ffmpeg was still writing.
+        if proc.returncode is None:
+          try:
+            proc.kill()
+          except ProcessLookupError:
+            pass
+          try:
+            asyncio.get_running_loop().create_task(proc.wait())
+          except RuntimeError:
+            pass
       if os.path.isfile(out_p):
         sz = os.path.getsize(out_p)
         if 4096 < sz <= max_bytes:
@@ -776,8 +825,14 @@ async def extract_instagram_media_items(
 
   # Download all discovered slides in parallel (up to 15 slides)
   dl_sem = asyncio.Semaphore(4)
+  # One shared ceiling for every download in this job, including the repair passes:
+  # the old shape finished `asyncio.gather` first and only then trimmed the result, so
+  # twenty 25 MiB slides were all held in RAM before the filter ran (C-007).
+  job_budget = SharedByteBudget(MAX_JOB_BYTES)
 
   async def _download_slide(idx: int, kind: str, media_u: str) -> Optional[Tuple[int, bytes, str]]:
+    if job_budget.remaining <= 0:
+      return None  # the job budget is exhausted: do not start another download
     async with dl_sem:
       try:
         _final, status, m_ctype, raw_bytes = await safe_fetch_response(
@@ -785,10 +840,13 @@ async def extract_instagram_media_items(
             max_bytes=max_bytes,
             headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", "Referer": "https://www.instagram.com/"},
             session=session,
+            budget=job_budget,
         )
         if status != 200 or len(raw_bytes or b"") < 500:
+          job_budget.release(len(raw_bytes or b""))
           return None
         if "text/html" in m_ctype or "application/json" in m_ctype:
+          job_budget.release(len(raw_bytes))
           return None
         if kind == "video" or "video/" in m_ctype:
           if not _is_valid_mp4_video_bytes(raw_bytes, m_ctype):
@@ -797,12 +855,14 @@ async def extract_instagram_media_items(
               norm_img = await _normalize_image_bytes(raw_bytes)
               if norm_img:
                 return (idx, norm_img, f"ig_{idx}.jpg")
+            job_budget.release(len(raw_bytes))
             return None
           clean_vid = await _ensure_discord_playable_mp4(raw_bytes, max_bytes=max_bytes)
           return (idx, clean_vid, f"ig_{idx}.mp4")
         else:
           norm_img = await _normalize_image_bytes(raw_bytes)
           if not norm_img:
+            job_budget.release(len(raw_bytes))
             return None
           ext = "png" if norm_img.startswith(b"\x89PNG") else "jpg"
           return (idx, norm_img, f"ig_{idx}.{ext}")
@@ -839,6 +899,9 @@ async def extract_instagram_media_items(
         seen_hashes.add(h)
         kept.append((idx, b_data, fname))
       else:
+        # A duplicate payload is discarded: give its claim back so repair downloads
+        # for the missing index still fit the job budget.
+        job_budget.release(len(b_data))
         missing.append(idx)
     kept_indices = {i for i, _b, _f in kept}
     missing = sorted(set(missing) | {i for i in range(1, discovered + 1) if i not in kept_indices})
@@ -900,6 +963,12 @@ async def extract_instagram_media_items(
           await _repair_from(fresh_list)
 
     kept.sort(key=lambda x: x[0])
+    kept, over_budget = _fit_byte_budget(kept)
+    if over_budget:
+        logger.info(
+            "gallery-budget platform=instagram dropped=%d kept=%d budget_mb=%d url=%s",
+            over_budget, len(kept), MAX_JOB_BYTES // (1024 * 1024), clean_ig_url,
+        )
     downloaded_files = [(b, f) for _i, b, f in kept]
     if discovered and len(downloaded_files) < discovered:
       # Never degrade silently: journalctl -u angelbot has to show the loss.
@@ -960,9 +1029,14 @@ async def extract_tiktok_media_items(
   session = await get_shared_http_session()
   timeout = aiohttp.ClientTimeout(total=14)
   dl_sem = asyncio.Semaphore(2)  # TikTok's photo CDN answers 403 to bursts above ~2 concurrent
+  # Shared ceiling for every media download in this job, including photo retries: claims
+  # are taken per chunk, so concurrent downloads cannot retain more than the ceiling (C-007).
+  job_budget = SharedByteBudget(MAX_JOB_BYTES)
 
   async def _download_photo_list(img_urls: List[str], requote=None) -> List[Tuple[bytes, str]]:
     async def _dl_one_img(idx: int, u: str) -> Optional[Tuple[int, bytes, str]]:
+      if job_budget.remaining <= 0:
+        return None  # job budget exhausted: do not start another download
       async with dl_sem:
         try:
           _final, istatus, _ict, raw = await safe_fetch_response(
@@ -970,13 +1044,16 @@ async def extract_tiktok_media_items(
               max_bytes=max_bytes,
               headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", "Referer": "https://www.tiktok.com/"},
               session=session,
+              budget=job_budget,
           )
           if istatus != 200 or not raw or len(raw) < 400:
+            job_budget.release(len(raw or b""))
             return None
           norm = await _normalize_image_bytes(raw)
           if norm:
             ext = "png" if norm.startswith(b"\x89PNG") else "jpg"
             return (idx, norm, f"tiktok_{idx}.{ext}")
+          job_budget.release(len(raw))
         except Exception:
           pass
         return None
@@ -990,6 +1067,7 @@ async def extract_tiktok_media_items(
       if total_bytes <= 25 * 1024 * 1024:
         break
       total_bytes -= len(got[idx][0])
+      job_budget.release(len(got[idx][0]))
       got.pop(idx)
     if requote and len(got) < len(urls):
       # TikTok signs every slide to one CDN node and sometimes refuses the node TikWM
@@ -1015,6 +1093,8 @@ async def extract_tiktok_media_items(
       if h not in seen_h:
         seen_h.add(h)
         out_files.append((b_data, fn))
+      else:
+        job_budget.release(len(b_data))  # duplicate payload discarded
     return out_files
 
   async def _tikwm_quote() -> Dict[str, Any]:
@@ -1081,6 +1161,7 @@ async def extract_tiktok_media_items(
               max_bytes=max_bytes,
               headers={"User-Agent": "Mozilla/5.0", "Referer": "https://www.tikwm.com/"},
               session=session,
+              budget=job_budget,
           )
           if v_status == 200 and video_bytes and len(video_bytes) >= 4096:
             if _is_valid_mp4_video_bytes(video_bytes, v_ctype):
@@ -1088,6 +1169,7 @@ async def extract_tiktok_media_items(
               _safe_gc_collect()
               cap = f"🎬 **{author_name}**" + (f" — {title}" if title else "")
               return [(clean_vid, "video.mp4")], None, cap
+          job_budget.release(len(video_bytes or b""))
         except Exception:
           continue
 
@@ -1130,12 +1212,13 @@ async def extract_tiktok_media_items(
               async with session.get(v_cand, headers={"User-Agent": "Mozilla/5.0"}, timeout=timeout) as vresp:
                 if vresp.status == 200:
                   v_ctype = (vresp.headers.get("Content-Type") or "").lower()
-                  v_bytes = await read_bounded_stream(vresp, max_bytes=max_bytes, min_bytes=4096)
+                  v_bytes = await read_bounded_stream(vresp, max_bytes=max_bytes, min_bytes=4096, budget=job_budget)
                   if _is_valid_mp4_video_bytes(v_bytes, v_ctype):
                     clean_vid = await _ensure_discord_playable_mp4(v_bytes, max_bytes=max_bytes)
                     _safe_gc_collect()
                     cap = f"🎬 **{t_author}**" + (f" — {t_title}" if t_title else "")
                     return [(clean_vid, "video.mp4")], None, cap
+                  job_budget.release(len(v_bytes or b""))
     except Exception:
       continue
 
@@ -1150,6 +1233,7 @@ async def extract_tiktok_media_items(
           max_bytes=max_bytes,
           headers={"User-Agent": "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)"},
           session=session,
+          budget=job_budget,
       )
       if p_status == 200:
           if "video/" in p_ct:
@@ -1157,6 +1241,12 @@ async def extract_tiktok_media_items(
             if _is_valid_mp4_video_bytes(v_bytes, p_ct):
               clean_vid = await _ensure_discord_playable_mp4(v_bytes, max_bytes=max_bytes)
               return [(clean_vid, "video.mp4")], None, "🎬 **TikTok**"
+            job_budget.release(len(v_bytes or b""))
+          phtml = (p_body or b"").decode("utf-8", "replace")
+          if p_body:
+            # An HTML page is parsed and dropped: give its claim back for the media
+            # download the tags below will trigger.
+            job_budget.release(len(p_body))
           phtml = (p_body or b"").decode("utf-8", "replace")
           if "Due to a legal request" in phtml:
             continue
@@ -1171,10 +1261,11 @@ async def extract_tiktok_media_items(
                 if vu.startswith("http"):
                   _dv_final, dv_status, dv_ct, v_bytes = await safe_fetch_response(
                       vu, max_bytes=max_bytes,
-                      headers={"User-Agent": "Mozilla/5.0"}, session=session)
+                      headers={"User-Agent": "Mozilla/5.0"}, session=session, budget=job_budget)
                   if dv_status == 200 and _is_valid_mp4_video_bytes(v_bytes, dv_ct):
                     clean_vid = await _ensure_discord_playable_mp4(v_bytes, max_bytes=max_bytes)
                     return [(clean_vid, "video.mp4")], None, "🎬 **TikTok**"
+                  job_budget.release(len(v_bytes or b""))
           # Check og:image tags for TikTok photo posts
           og_imgs: List[str] = []
           for og_ipat in (
@@ -1206,10 +1297,11 @@ async def extract_tiktok_media_items(
         if isinstance(v_u, str) and v_u.startswith("http"):
           async with session.get(v_u, headers=v_hdrs, timeout=timeout) as vresp:
             if vresp.status == 200:
-              v_bytes = await read_bounded_stream(vresp, max_bytes=max_bytes, min_bytes=4096)
+              v_bytes = await read_bounded_stream(vresp, max_bytes=max_bytes, min_bytes=4096, budget=job_budget)
               if _is_valid_mp4_video_bytes(v_bytes, vresp.headers.get("Content-Type", "")):
                 clean_vid = await _ensure_discord_playable_mp4(v_bytes, max_bytes=max_bytes)
                 return [(clean_vid, "video.mp4")], None, "🎬 **TikTok**" + (f" — {v_title}" if v_title else "")
+              job_budget.release(len(v_bytes or b""))
     except Exception:
       pass
 
@@ -1243,7 +1335,8 @@ def _x_fallback_url(url: str) -> str:
 
 
 async def _download_photo_slides(img_urls: List[str], max_bytes: int, prefix: str,
-                                 referer: str = "") -> List[Tuple[bytes, str]]:
+                                 referer: str = "",
+                                 budget: Optional[SharedByteBudget] = None) -> List[Tuple[bytes, str]]:
   """Download every image in order and drop only the ones the CDN refuses.
 
   Same shape as the TikTok photo downloader (`_download_photo_list`) without the
@@ -1254,6 +1347,8 @@ async def _download_photo_slides(img_urls: List[str], max_bytes: int, prefix: st
   img_urls = list(img_urls)[:10]
 
   async def _one(idx: int, target: str) -> Optional[Tuple[int, bytes, str]]:
+    if budget is not None and budget.remaining <= 0:
+      return None  # job budget exhausted: do not start another download
     async with sem:
       try:
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
@@ -1262,11 +1357,13 @@ async def _download_photo_slides(img_urls: List[str], max_bytes: int, prefix: st
         async with session.get(target, headers=headers, timeout=aiohttp.ClientTimeout(total=12)) as resp:
           if resp.status != 200:
             return None
-          raw = await read_bounded_stream(resp, max_bytes=max_bytes, min_bytes=400)
+          raw = await read_bounded_stream(resp, max_bytes=max_bytes, min_bytes=400, budget=budget)
           norm = await _normalize_image_bytes(raw)
           if norm:
             ext = "png" if norm.startswith(b"\x89PNG") else "jpg"
             return (idx, norm, f"{prefix}_{idx}.{ext}")
+          if budget is not None:
+            budget.release(len(raw or b""))
       except Exception:
         pass
       return None
@@ -1277,14 +1374,17 @@ async def _download_photo_slides(img_urls: List[str], max_bytes: int, prefix: st
 
 
 async def _download_one_video(video_url: str, headers: Dict[str, str], max_bytes: int,
-                              name: str = "video.mp4") -> Optional[Tuple[bytes, str]]:
+                              name: str = "video.mp4",
+                              budget: Optional[SharedByteBudget] = None) -> Optional[Tuple[bytes, str]]:
   session = await get_shared_http_session()
   try:
     async with session.get(video_url, headers=headers, timeout=aiohttp.ClientTimeout(total=25)) as resp:
       if resp.status != 200:
         return None
-      body = await read_bounded_stream(resp, max_bytes=max_bytes, min_bytes=4096)
+      body = await read_bounded_stream(resp, max_bytes=max_bytes, min_bytes=4096, budget=budget)
       if not _is_valid_mp4_video_bytes(body, resp.headers.get("Content-Type", "")):
+        if budget is not None:
+          budget.release(len(body or b""))
         return None
       clean = await _ensure_discord_playable_mp4(body, max_bytes=max_bytes)
       return clean, name
@@ -1309,6 +1409,8 @@ async def extract_x_media_items(
 
   handle = (_X_HANDLE_RE.search(url).group(1) if _X_HANDLE_RE.search(url) else "i")
   session = await get_shared_http_session()
+  # Shared ceiling for the photos and video variants of this one post (C-007).
+  job_budget = SharedByteBudget(MAX_JOB_BYTES)
   tweet: Optional[Dict[str, Any]] = None
   try:
     api_url = f"https://api.fxtwitter.com/{handle}/status/{status_id}"
@@ -1338,7 +1440,8 @@ async def extract_x_media_items(
     ]
     if photos:
       files = await _download_photo_slides(
-          photos, max_bytes=max_bytes, prefix="x", referer=f"https://x.com/{handle}")
+          photos, max_bytes=max_bytes, prefix="x", referer=f"https://x.com/{handle}",
+          budget=job_budget)
       if files:
         _safe_gc_collect()
         return files, None, caption
@@ -1353,7 +1456,8 @@ async def extract_x_media_items(
       ]
       variants.sort(key=lambda v: int(v.get("bitrate") or 0), reverse=True)
       for variant in variants[:2]:
-        got = await _download_one_video(str(variant["url"]), {"User-Agent": "Mozilla/5.0"}, max_bytes)
+        got = await _download_one_video(
+            str(variant["url"]), {"User-Agent": "Mozilla/5.0"}, max_bytes, budget=job_budget)
         if got:
           _safe_gc_collect()
           return [got], None, f"🎬 {caption}"
@@ -1369,7 +1473,8 @@ async def extract_x_media_items(
       info = None
     if isinstance(info, dict) and isinstance(info.get("url"), str):
       got = await _download_one_video(
-          info["url"], info.get("http_headers") or {"User-Agent": "Mozilla/5.0"}, max_bytes)
+          info["url"], info.get("http_headers") or {"User-Agent": "Mozilla/5.0"}, max_bytes,
+          budget=job_budget)
       if got:
         return [got], None, "🎬 **X**"
 
@@ -1379,6 +1484,29 @@ async def extract_x_media_items(
 async def process_social_media_url_multi(
     url: str, max_bytes: int = 10 * 1024 * 1024
 ) -> Tuple[List[Tuple[bytes, str]], Optional[str], Optional[str]]:
+    """Extract media inside the per-job byte budget (C-007).
+
+    Each extractor claims against one shared `SharedByteBudget` while downloading, so
+    peak retained RAM is bounded during the parallel fetch, not filtered afterwards.
+    The final `_fit_file_budget` pass stays as a backstop for payloads that bypass the
+    claim path (for example a yt-dlp staged file read).
+    """
+    files, fixed_url, caption = await _process_social_media_url_multi(url, max_bytes)
+    if files:
+        kept, dropped = _fit_file_budget(files)
+        if dropped:
+            logger.info(
+                "gallery-budget url_sha=%s dropped=%d kept=%d budget_mb=%d",
+                hashlib.sha256(url.encode()).hexdigest()[:8], dropped, len(kept),
+                MAX_JOB_BYTES // (1024 * 1024),
+            )
+        files = kept
+    return files, fixed_url, caption
+
+
+async def _process_social_media_url_multi(
+    url: str, max_bytes: int = 10 * 1024 * 1024
+) -> Tuple[List[Tuple[bytes, str]], Optional[str], Optional[str]]:
   """
   Extract playable video(s) or full photo album from TikTok, Instagram, X, or Reddit.
   Returns: (list_of_(file_bytes, filename), fallback_fixed_url, caption)
@@ -1386,7 +1514,9 @@ async def process_social_media_url_multi(
   if not _allowed_social_host(url):
     return [], None, None
   resolved_url = await resolve_social_redirect_and_clean(url)
-  if not _allowed_social_host(resolved_url) or not _is_safe_public_http_url(resolved_url):
+  if not _allowed_social_host(resolved_url) or not await asyncio.to_thread(
+      _is_safe_public_http_url, resolved_url
+  ):
     return [], None, None
 
   # 1. TikTok (Videos + Multi-Photo Slideshows)

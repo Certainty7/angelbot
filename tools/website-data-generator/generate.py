@@ -30,6 +30,7 @@ import json
 import pathlib
 import re
 import sys
+from urllib.parse import urlparse
 
 HERE = pathlib.Path(__file__).resolve().parent
 REPO = HERE.parent.parent
@@ -394,7 +395,7 @@ def site_facts(repo: pathlib.Path, release_data: dict) -> dict:
     )
     if not version_match:
         raise SystemExit("angel/__init__.py has no __version__")
-    media_platforms = len(list((repo / "tests" / "fixtures" / "gallery").glob("*.case.json")))
+    media_platforms = count_media_platforms(repo)
     releases = release_data["releases"]
     latest = releases[0] if releases else None
     return {
@@ -481,6 +482,36 @@ def public_invite(invite_data: dict) -> dict:
         ],
         "notes": invite_data["notes"],
     }
+
+
+_PLATFORM_HOSTS = (
+    ("instagram", ("instagram.com", "instagr.am")),
+    ("tiktok", ("tiktok.com",)),
+    ("x", ("x.com", "twitter.com")),
+    ("reddit", ("reddit.com", "redd.it")),
+)
+
+
+def count_media_platforms(repo: pathlib.Path) -> int:
+    """Distinct platforms covered by the gallery fixtures.
+
+    Counting `*.case.json` files published 14 "platforms" for four sites: the fixtures are
+    one file per scenario, not per platform (C-033).
+    """
+    families = set()
+    for path in (repo / "tests" / "fixtures" / "gallery").glob("*.case.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        host = (urlparse(data.get("url", "")).hostname or "").lower()
+        for name, hosts in _PLATFORM_HOSTS:
+            if any(host == h or host.endswith("." + h) for h in hosts):
+                families.add(name)
+                break
+    if not families:
+        raise SystemExit("gallery fixtures name no known media platform")
+    return len(families)
 
 
 def main(argv: list[str]) -> int:

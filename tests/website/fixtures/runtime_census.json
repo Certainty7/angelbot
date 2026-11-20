@@ -404,7 +404,8 @@
       "options": [
         "action",
         "text",
-        "style"
+        "style",
+        "confirm"
       ]
     },
     {
@@ -502,7 +503,8 @@
       "type": "Command",
       "default_permissions": [],
       "options": [
-        "question"
+        "question",
+        "refresh"
       ]
     },
     {

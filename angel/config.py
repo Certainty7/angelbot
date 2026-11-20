@@ -2,39 +2,61 @@
 
 
 import gc
-import importlib
 import logging
 import os
 import shutil
-import site
 import subprocess
 import sys
 from typing import Any, Dict, List, Optional, Set, Tuple
+
+from dotenv import load_dotenv
+
 from .registry import get_bot
+
+# Load .env before the first os.getenv: FFMPEG_PATH, ANGEL_TIMEZONE and
+# ANGEL_AUTO_INSTALL used to be read before this call, so a .env-only host
+# silently ignored them (and could pick the crashing static ffmpeg).
+load_dotenv()
 
 
 def _resolve_timezone(name: str):
+  """Resolve an IANA zone, or fail loudly instead of silently pretending it is UTC.
+
+  The old fallback turned every deployment without `tzdata` into UTC while still running:
+  quiet hours, greetings and the daily budget were all an unknown number of hours off.
+  """
+  from datetime import timezone
+
+  clean = (name or "UTC").strip() or "UTC"
+  if clean.upper() in {"UTC", "ETC/UTC", "GMT"}:
+    return timezone.utc
   try:
     from zoneinfo import ZoneInfo
-    return ZoneInfo(name)
-  except Exception:
-    from datetime import timezone
-    return timezone.utc
+    return ZoneInfo(clean)
+  except Exception as exc:
+    raise RuntimeError(
+        f"ANGEL_TIMEZONE='{clean}' could not be resolved ({type(exc).__name__}: {exc}). "
+        "Install the 'tzdata' package (pip install tzdata) or set ANGEL_TIMEZONE=UTC."
+    ) from exc
 
 
 # All time-based behaviour (quiet hours, greetings, daily budget) follows this IANA zone.
 # The default is deliberately generic; a deployment sets ANGEL_TIMEZONE in its private .env.
 ANGEL_TIMEZONE = (os.getenv("ANGEL_TIMEZONE") or "UTC").strip() or "UTC"
 ANGEL_TZ = _resolve_timezone(ANGEL_TIMEZONE)
-if getattr(ANGEL_TZ, "key", "") != ANGEL_TIMEZONE:
-  ANGEL_TIMEZONE = "UTC"
 
 # Auto-Bootstrap Required Packages
 def _ensure_dependencies():
+  """Report missing packages; never install them.
+
+  The old path could pip-install unpinned packages at import time, inside a service
+  account, before logging existed (P-008). A server installs its requirements once.
+  """
   required = [
       ("yt_dlp", "yt-dlp"),
       ("imageio_ffmpeg", "imageio-ffmpeg"),
       ("PIL", "Pillow"),
+      ("tzdata", "tzdata"),
   ]
   missing = []
   for mod_name, pkg_name in required:
@@ -43,30 +65,18 @@ def _ensure_dependencies():
     except ImportError:
       missing.append(pkg_name)
   if missing:
-    # Installing packages at import time is off by default: a server installs its requirements
-    # once, and a bot that reaches PyPI on startup is a supply-chain surprise nobody asked for.
-    if os.environ.get("ANGEL_AUTO_INSTALL") != "1":
-      print(
-          "Missing packages: " + ", ".join(missing) + ". Install them with: "
-          + sys.executable + " -m pip install " + " ".join(missing)
-      )
-      return
-    try:
-      pip_args = [sys.executable, "-m", "pip", "install"]
-      # Inside a virtualenv `--user` installs outside the venv and is rejected by pip.
-      if sys.prefix == sys.base_prefix:
-        pip_args.append("--user")
-      subprocess.check_call(pip_args + missing)
-      importlib.reload(site)
-    except Exception as exc:
-      print(f"Package bootstrap notice: {exc}")
+    # stderr, not stdout: this is a diagnostic, and the CLI utilities print data to stdout.
+    print(
+        "Missing packages: " + ", ".join(missing) + ". Install them with: "
+        + sys.executable + " -m pip install -r requirements.txt",
+        file=sys.stderr,
+    )
 
 
 _ensure_dependencies()
 
 import discord
 from discord import app_commands
-from dotenv import load_dotenv
 
 try:
   import yt_dlp
@@ -84,12 +94,14 @@ def _resolve_working_ffmpeg_exe() -> str:
   env_ff = (os.getenv("FFMPEG_PATH") or "").strip()
   if env_ff:
     candidates.append(env_ff)
-  sys_ff = shutil.which("ffmpeg")
-  if sys_ff:
-    candidates.append(sys_ff)
+  # Prefer the distro binary before PATH: a broken /usr/local or snap shim can
+  # answer `-version` and still fail on the first HTTPS stream.
   for std_p in ("/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg"):
     if os.path.isfile(std_p) and std_p not in candidates:
       candidates.append(std_p)
+  sys_ff = shutil.which("ffmpeg")
+  if sys_ff and sys_ff not in candidates:
+    candidates.append(sys_ff)
   if not candidates and sys.platform.startswith("linux"):
     print(
         "ffmpeg is missing. Install it on the host (sudo apt install ffmpeg) or set "
@@ -112,6 +124,11 @@ def _resolve_working_ffmpeg_exe() -> str:
           timeout=3,
       )
       if res.returncode == 0:
+        if sys.platform.startswith("linux") and "imageio_ffmpeg" in cand:
+          print(
+              "WARNING: using imageio_ffmpeg's static binary. Known SIGSEGV on Ubuntu "
+              "when opening https:// streams; install the host ffmpeg or set FFMPEG_PATH."
+          )
         return cand
     except Exception:
       continue
@@ -126,7 +143,7 @@ except ImportError:
   Image = None
 
 # 0. Environment & Core Configuration
-load_dotenv()
+# (load_dotenv() already ran at the top of this module, before ANGEL_TIMEZONE/FFMPEG_PATH.)
 
 DISCORD_TOKEN = (os.getenv("DISCORD_TOKEN") or "").strip()
 GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY") or "").strip()
@@ -147,10 +164,12 @@ MISTRESS_USER_ID = (
     or os.getenv("MISTRESS_USER_ID")
     or ""
 ).strip()
-if not MISTRESS_USER_ID.isdigit():
+# ASCII digits only: str.isdigit() also accepts Arabic-Indic digits and superscripts, so
+# "٠" and "²" got past the old check (int("²") then raised an unhandled ValueError).
+if not (MISTRESS_USER_ID.isascii() and MISTRESS_USER_ID.isdigit() and int(MISTRESS_USER_ID) > 0):
   raise RuntimeError(
-      "ANGEL_OWNER_ID is missing or not a numeric Discord user id — refusing to start with an "
-      "undefined owner (a silent owner lockout is worse than a failed boot)."
+      "ANGEL_OWNER_ID is missing or not a positive numeric Discord user id — refusing to start "
+      "with an undefined owner (a silent owner lockout is worse than a failed boot)."
   )
 MISTRESS_INT_ID = int(MISTRESS_USER_ID)
 # Risky owner-only tools (self role escalation, stealth moderation, bot-voiced messages and
@@ -498,6 +517,26 @@ def has_perm_or_mistress(**perms: bool):
   return app_commands.check(predicate)
 
 
+def can_read_history(channel, member) -> bool:
+  """True when `member` may read this channel's message history.
+
+  The bot's own permission to read history says nothing about the person asking, so both
+  `/summarize_channel` and the natural-language twin must call this (C-004).
+  """
+  if channel is None or member is None:
+    return False
+  if is_mistress(member):
+    return True
+  guild = getattr(channel, "guild", None)
+  if guild is None or not isinstance(member, discord.Member):
+    return False
+  try:
+    perms = channel.permissions_for(member)
+  except Exception:
+    return False
+  return bool(perms.read_messages and perms.read_message_history)
+
+
 async def safe_reply(
     message: discord.Message,
     content: Optional[str] = None,
@@ -506,8 +545,14 @@ async def safe_reply(
     file: Optional[discord.File] = None,
     files: Optional[List[discord.File]] = None,
     view: Optional[discord.ui.View] = None,
+    untrusted: bool = False,
 ) -> Optional[discord.Message]:
-  """Reply safely to a message; if the original message was deleted (Error 50035), fall back to channel.send."""
+  """Reply safely to a message; if the original message was deleted (Error 50035), fall back to channel.send.
+
+  `untrusted=True` is for any text the bot did not author: model output, channel transcripts,
+  media titles, archive quotes. It suppresses every ping so third-party text cannot mention a
+  member through the bot.
+  """
   kwargs: Dict[str, Any] = {}
   if content is not None:
     kwargs["content"] = content
@@ -519,6 +564,8 @@ async def safe_reply(
     kwargs["files"] = files
   if view is not None:
     kwargs["view"] = view
+  if untrusted:
+    kwargs["allowed_mentions"] = discord.AllowedMentions.none()
 
   try:
     return await message.reply(mention_author=False, **kwargs)

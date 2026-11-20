@@ -1,4 +1,12 @@
 $ErrorActionPreference = "Stop"
+# Arabic replies and paths must survive PowerShell 5.1's default OEM code page.
+$utf8 = New-Object System.Text.UTF8Encoding $false
+try {
+    [Console]::OutputEncoding = $utf8
+    [Console]::InputEncoding = $utf8
+    $OutputEncoding = $utf8
+} catch { }
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Set-Location $repoRoot
 Write-Host "=== AngelBot Windows PowerShell Launcher ===" -ForegroundColor Cyan
@@ -24,13 +32,16 @@ if (-not (Test-Path ".venv\Scripts\python.exe")) {
         Write-Error "Failed to create .venv."
         exit $LASTEXITCODE
     }
-    & ".venv\Scripts\python.exe" -m pip install --upgrade pip
-    if ($LASTEXITCODE -ne 0) { Write-Error "pip upgrade failed."; exit $LASTEXITCODE }
-    & ".venv\Scripts\python.exe" -m pip install -r requirements.txt
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "Dependency install failed; remove .venv and try again."
-        exit $LASTEXITCODE
-    }
+}
+
+# Always reconcile dependencies. The old version ran pip only while creating the venv, so a
+# failure halfway through left a venv that looked complete and was never repaired.
+& ".venv\Scripts\python.exe" -m pip install --upgrade pip
+if ($LASTEXITCODE -ne 0) { Write-Error "pip upgrade failed."; exit $LASTEXITCODE }
+& ".venv\Scripts\python.exe" -m pip install -r requirements.txt
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Dependency install failed; remove .venv and try again."
+    exit $LASTEXITCODE
 }
 
 if (-not (Test-Path ".env")) {
@@ -40,6 +51,7 @@ if (-not (Test-Path ".env")) {
     exit 0
 }
 
+# Safe on a fresh install: the checkpoint reports "no database yet" and exits 0.
 & ".venv\Scripts\python.exe" bot.py --checkpoint-db
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Database checkpoint failed; the bot was not started."

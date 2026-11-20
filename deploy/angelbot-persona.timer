@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly AngelBot persona culture refresh
+
+[Timer]
+OnCalendar=Sun *-*-* 04:40:00
+RandomizedDelaySec=1800
+Persistent=true
+Unit=angelbot-persona.service
+
+[Install]
+WantedBy=timers.target
