@@ -46,13 +46,17 @@ commit 1 of the branch (unchanged), so later changes to those files are reviewab
 - Documentation: `AGENTS.md`, `KNOWN_ISSUES.md`, `docs/DATA_MODEL.md`,
   `docs/LIVE_VERIFICATION.md`, `SECURITY.md` data-flow matrix, bilingual changelog, README.
 - New regression suite: 182 tests plus 322 subtests (final run).
+- Final review round (PR #9): the complete CodeRabbit inventory re-verified against the tree;
+  11 majors + 3 outside-diff + 32 minors all fixed or justified with new regression tests
+  (223 tests + 322 subtests final run). See `LEDGER.md` → "Final review round" and
+  `DECISIONS.md` D-015..D-020.
 
 ## Verification ledger (last run)
 
 | Command | Result |
 |---|---|
 | `python -m compileall -q bot.py angel cogs tools tests` | 0 |
-| `python -m pytest -q` | 182 passed, 322 subtests passed (exits cleanly) |
+| `python -m pytest -q` | 223 passed, 322 subtests passed (exits cleanly) |
 | `python tools/selftest.py` | 50/50 |
 | `python tools/security_probe.py` | PASS |
 | `python tools/recall_probe.py` | 10/10 |

@@ -124,5 +124,120 @@ class DeletionCoverageTest(unittest.TestCase):
                          + ", ".join(missing))
 
 
+class PostOptOutWriteTest(unittest.TestCase):
+    """The opt-out guard must live in the SQL of every member-data writer (C-006).
+
+    `/rep`, `/afk` and the background summariser run outside `on_message`; their writes
+    re-created rows for a member who had just erased their data.
+    """
+
+    def test_rep_afk_and_background_summary_writes_are_refused_after_opt_out(self):
+        async def _run(db):
+            await db.delete_all_user_data(42)
+            rep = await db.add_rep(1, 42)
+            afk = await db.set_afk(1, 42, "busy")
+            # The race the review described: the summary started before the deletion
+            # and commits after it.
+            await db.apply_summary_and_prune(42, "member loves coffee", 50)
+            counts = await db.count_user_data(42)
+            return rep, afk, counts
+
+        rep, afk, counts = asyncio.run(_with_db(_run))
+        self.assertEqual(rep, 0, "add_rep re-created an XP row")
+        self.assertFalse(afk, "set_afk re-created an AFK row")
+        for table in ("user_xp", "afk_users", "user_summaries", "messages"):
+            self.assertEqual(counts[table], 0, f"{table} was re-created after opt-out")
+
+    def test_opted_in_members_still_get_rep_afk_and_summaries(self):
+        async def _run(db):
+            rep = await db.add_rep(1, 7)
+            afk = await db.set_afk(1, 7, "busy")
+            await db.apply_summary_and_prune(7, "summary", 0)
+            counts = await db.count_user_data(7)
+            return rep, afk, counts
+
+        rep, afk, counts = asyncio.run(_with_db(_run))
+        self.assertEqual(rep, 1)
+        self.assertTrue(afk)
+        self.assertEqual(counts["user_xp"], 1)
+        self.assertEqual(counts["afk_users"], 1)
+        self.assertEqual(counts["user_summaries"], 1)
+
+
+class CountFailureReportingTest(unittest.TestCase):
+    def test_a_failed_table_count_is_reported_not_omitted(self):
+        original = dict(BotDatabase.USER_DATA_TABLES)
+        BotDatabase.USER_DATA_TABLES = dict(original)
+        BotDatabase.USER_DATA_TABLES["broken_table_xyz"] = "user_id"
+        try:
+            async def _run(db):
+                return await db.count_user_data(42)
+
+            counts = asyncio.run(_with_db(_run))
+        finally:
+            BotDatabase.USER_DATA_TABLES = original
+        self.assertIn(
+            "broken_table_xyz", counts.get("_failed_tables") or [],
+            "a table that cannot be counted vanished from /data view",
+        )
+        self.assertIn("messages", counts, "healthy tables are still reported")
+
+
+class AmbientBufferDeletionTest(unittest.TestCase):
+    """The in-RAM ambient buffer carries author ids; deletion removes the member's lines.
+
+    The old entries were "display_name: content" and the filter matched a trailing
+    mention that never existed, so a deleted member's private lines kept flowing into
+    other members' prompts.
+    """
+
+    def _cog_with_buffer(self, entries):
+        from collections import deque
+        from unittest.mock import AsyncMock, MagicMock
+
+        from cogs.memory_rules import MemoryRules
+
+        cog = MemoryRules.__new__(MemoryRules)
+        bot = MagicMock()
+        bot.recent_speakers = {}
+        bot.last_social_target = {}
+        bot.active_chat_window = {}
+        bot.pending_step = {}
+        bot.pending_confirm = {}
+        bot.afk_cache = {}
+        bot.harem_cache = {}
+        bot.user_locks = MagicMock()
+        buffer = deque(entries)
+        bot.recent_channel_msgs = {77: buffer}
+        bot.db.delete_all_user_data = AsyncMock(
+            return_value={"server_messages": 3, "messages": 2, "user_profile": 0,
+                          "dm_logs": 0, "_failed_tables": []}
+        )
+        cog.bot = bot
+        interaction = MagicMock()
+        interaction.user.id = 42
+        interaction.guild.id = 1
+        interaction.response.send_message = AsyncMock()
+        return cog, interaction, buffer
+
+    def test_deleted_member_entries_are_removed_and_legacy_lines_dropped(self):
+        from cogs.memory_rules import MemoryRules
+
+        cog, interaction, buffer = self._cog_with_buffer([
+            (42, "Alice: private detail"),
+            (7, "Bob: hello"),
+            "Legacy line with no author",  # privacy-safe cleanup drops unattributed text
+            (0, "Angel: hi"),
+        ])
+
+        asyncio.run(MemoryRules.data_cmd.callback(cog, interaction, action="delete", confirm=True))
+
+        kept_ids = [entry[0] for entry in buffer if isinstance(entry, tuple)]
+        self.assertNotIn(42, kept_ids, "the deleted member's line survived the buffer")
+        self.assertIn(7, kept_ids)
+        self.assertTrue(all(isinstance(entry, tuple) for entry in buffer),
+                        "an unattributed legacy entry was kept in the prompt buffer")
+
+
 if __name__ == "__main__":
     unittest.main()

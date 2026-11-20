@@ -388,10 +388,21 @@ class MusicEngine:
     counted = _CountingSource(pcm)
     return discord.PCMVolumeTransformer(counted, volume=max(0.0, min(2.0, volume))), counted
 
-  def _schedule_advance(self, guild: discord.Guild, delay: float = 0.4) -> None:
+  def _schedule_advance(self, guild: discord.Guild, delay: float = 0.4,
+                        only_if_idle: bool = False) -> None:
+    """Schedule the next queue advance on the loop thread.
+
+    `only_if_idle` is for retries of a *blocked* playback attempt: if another `/play`
+    already started a track while we waited, this retry is stale and must not dequeue
+    anything — the old shape popped track after track, each `play()` failing with
+    "Already playing audio" until the queue was consumed.
+    """
     async def runner() -> None:
       await asyncio.sleep(delay)
-      await self.play_next(guild)
+      if only_if_idle:
+        await self._advance_if_idle(guild)
+      else:
+        await self.play_next(guild)
 
     try:
       fut = asyncio.run_coroutine_threadsafe(runner(), self._current_loop())
@@ -407,6 +418,20 @@ class MusicEngine:
       fut.add_done_callback(_done)
     except RuntimeError:  # loop already closed during shutdown -- nothing to advance
       pass
+
+  async def _advance_if_idle(self, guild: discord.Guild) -> None:
+    """Advance only when playback never started: under one lock hold, the blocked
+    attempt still owns the queue (no current track, nothing playing), and the
+    advance itself runs under the same hold so nothing can start between the
+    check and the dequeue."""
+    async with self._guild_lock(guild.id):
+      voice = guild.voice_client
+      state = self.state(guild.id)
+      if (voice is not None and (voice.is_playing() or voice.is_paused())) \
+              or state.current is not None:
+        logger.info("music-advance skipped: playback is already active")
+        return
+      await self._play_next_locked(guild)
 
   async def _recover_dave(self, guild: discord.Guild, voice: discord.VoiceClient) -> discord.VoiceClient:
     """One clean reconnect when an encrypted channel left the MLS session unusable."""
@@ -482,7 +507,9 @@ class MusicEngine:
           "🔇 القناة الصوتية مشفّرة (E2EE) وجلسة التشفير لم تجهز، "
           "لذلك لن أشغّل شيئاً بلا صوت. جرّبي مرة أخرى بعد ثانية، أو أعيدي البوت للقناة.",
       )
-      self._schedule_advance(guild, delay=1.0)
+      # The retry is bound to this blocked attempt: if another /play starts a track
+      # inside the delay, the stale retry must return without dequeuing anything.
+      self._schedule_advance(guild, delay=1.0, only_if_idle=True)
       return None
 
     try:

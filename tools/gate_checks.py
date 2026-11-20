@@ -519,11 +519,16 @@ def no_shell_subprocess():
                                 offenders.append(
                                     f"{os.path.relpath(path, ROOT)}:{node.lineno} shell=**kwargs"
                                 )
-                # `sh -c "<string>"` is a shell even without the keyword.
-                if node.args and isinstance(node.args[0], ast.Constant) \
-                        and isinstance(node.args[0].value, str) \
-                        and os.path.basename(node.args[0].value) in {"sh", "bash", "zsh", "dash"}:
-                    for arg in node.args[1:]:
+                # `sh -c "<string>"` is a shell even without the keyword. The argv may
+                # also be a literal list: `subprocess.run(["sh", "-c", "echo x"])`
+                # must not slip past a Constant-only check.
+                _argv = node.args
+                if _argv and isinstance(_argv[0], ast.List):
+                    _argv = _argv[0].elts
+                if _argv and isinstance(_argv[0], ast.Constant) \
+                        and isinstance(_argv[0].value, str) \
+                        and os.path.basename(_argv[0].value) in {"sh", "bash", "zsh", "dash"}:
+                    for arg in _argv[1:]:
                         if isinstance(arg, ast.Constant) and arg.value == "-c":
                             offenders.append(
                                 f"{os.path.relpath(path, ROOT)}:{node.lineno} sh -c"

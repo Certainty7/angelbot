@@ -130,7 +130,9 @@ class OutputFilterTest(unittest.TestCase):
         self.assertNotIn("@everyone", cleaned)
 
     def test_control_tags_are_removed(self):
-        self.assertNotIn("[EXEC: BAN]", filter_outgoing("ok [EXEC: BAN|user=1]"))
+        # Assert against the complete input tag: the shorter "[EXEC: BAN]" is not a
+        # substring of the input, so its absence proved nothing about the filter.
+        self.assertNotIn("[EXEC: BAN|user=1]", filter_outgoing("ok [EXEC: BAN|user=1]"))
 
 
 class CacheTest(unittest.TestCase):
@@ -156,8 +158,11 @@ class CacheTest(unittest.TestCase):
 class EmbedLimitTest(unittest.TestCase):
     def test_long_prompt_stays_inside_the_embed_limit(self):
         view = ArtStudioView("x" * 20_000, MagicMock(), 1)
-        rendered = f"🎨 **{view.prompt}** (`{'انمي'}`)"
+        rendered = f"🎨 **{view.prompt}** (`{'انمي'}`)"[:4096]
+        # The rendered (sliced) description is the display limit; generation keeps the
+        # full prompt within the old 4096 bound for the regenerate button.
         self.assertLessEqual(len(rendered), 4096)
+        self.assertLessEqual(len(view.prompt), 4096)
 
 
 class MediaBudgetTest(unittest.TestCase):
@@ -180,11 +185,13 @@ class SessionLockTest(unittest.TestCase):
     def test_each_loop_gets_its_own_lock(self):
         async def use():
             async with _session_lock():
-                return id(_session_lock())
+                return _session_lock()
 
+        # Retain both locks and compare identity: `id()` reuse after the first lock was
+        # garbage-collected made a correct implementation fail this test randomly.
         first = asyncio.run(use())
         second = asyncio.run(use())
-        self.assertNotEqual(first, second)
+        self.assertIsNot(first, second)
 
 
 if __name__ == "__main__":

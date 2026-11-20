@@ -47,6 +47,37 @@ class VoiceChannelGuardTest(unittest.TestCase):
         self.assertIs(voice, guild.voice_client)
 
 
+class StaleAdvanceRetryTest(unittest.TestCase):
+    """A DAVE-blocked retry must not dequeue a track another /play already started."""
+
+    def _guild(self, *, playing, current):
+        guild = MagicMock()
+        guild.id = 1
+        voice = MagicMock()
+        voice.is_playing.return_value = playing
+        voice.is_paused.return_value = False
+        voice.is_connected.return_value = True
+        guild.voice_client = voice
+        engine = MusicEngine(MagicMock())
+        state = engine.state(1)
+        state.current = current
+        engine._play_next_locked = AsyncMock()
+        return guild, engine, state
+
+    def test_a_stale_retry_returns_without_dequeuing(self):
+        guild, engine, state = self._guild(playing=True, current=MagicMock())
+        state.tracks.append(MagicMock())
+        asyncio.run(engine._advance_if_idle(guild))
+        engine._play_next_locked.assert_not_awaited()
+        self.assertEqual(len(state.tracks), 1, "the stale retry ate the queue")
+
+    def test_an_idle_engine_still_advances(self):
+        guild, engine, state = self._guild(playing=False, current=None)
+        state.tracks.append(MagicMock())
+        asyncio.run(engine._advance_if_idle(guild))
+        engine._play_next_locked.assert_awaited_once()
+
+
 def _bot_module():
     import bot as bot_module
     return bot_module
@@ -100,6 +131,29 @@ class GuardTest(unittest.TestCase):
         message.author.guild_permissions = discord.Permissions(manage_messages=True)
         asyncio.run(module._run_angel_guard(bot, message))
         message.delete.assert_not_awaited()
+
+    def test_edits_are_inspected_but_never_flood_counted(self):
+        module = _bot_module()
+        bot = self._fake_bot()
+        message = self._message("just chatting")
+        # One message plus five edits used to be six entries and a five-minute timeout.
+        for _ in range(6):
+            asyncio.run(module._run_angel_guard(bot, message, is_edit=True))
+        self.assertEqual(len(bot.spam_tracker[(1, 7)]), 0, "edits fed the flood counter")
+        message.author.timeout.assert_not_awaited()
+        # Link inspection still runs on edits (C-018).
+        message.content = "join discord.gg/example"
+        asyncio.run(module._run_angel_guard(bot, message, is_edit=True))
+        message.author.timeout.assert_awaited()
+
+    def test_six_new_messages_still_trip_the_flood_gate(self):
+        module = _bot_module()
+        bot = self._fake_bot()
+        message = self._message("spam")
+        for _ in range(6):
+            asyncio.run(module._run_angel_guard(bot, message, is_edit=False))
+        self.assertEqual(len(bot.spam_tracker[(1, 7)]), 6)
+        message.author.timeout.assert_awaited()
 
 
 class GhostPingTest(unittest.TestCase):

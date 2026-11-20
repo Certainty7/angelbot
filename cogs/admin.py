@@ -147,12 +147,21 @@ class Admin(commands.Cog):
       await interaction.response.send_message(f"✅ سجل {member.mention} خالٍ من الإنذارات.", ephemeral=True)
       return
     embed = discord.Embed(title=f"📋 إنذارات {member.display_name}"[:256], color=0x2B2D31)
+    # Discord rejects an embed whose *aggregate* size passes 6000 characters even when
+    # every field is within its own limit: keep a running budget and stop adding fields
+    # when it is exhausted instead of losing the whole record list.
+    budget = 6000 - len(embed.title or "")
+    shown = 0
     for rec in records[:10]:
-      embed.add_field(
-          name=f"#{rec['id']} • {rec['created_at']}"[:256],
-          value=f"السبب: {str(rec['reason'])[:900]} | المشرف: <@{rec['moderator_id']}>"[:1024],
-          inline=False,
-      )
+      field_name = f"#{rec['id']} • {rec['created_at']}"[:256]
+      field_value = f"السبب: {str(rec['reason'])[:400]} | المشرف: <@{rec['moderator_id']}>"[:1024]
+      cost = len(field_name) + len(field_value)
+      if shown and budget - cost < 400:
+        embed.set_footer(text=f"⚠️ اكتفيت بأول {shown} إنذار لحد حجم الرسالة.")
+        break
+      embed.add_field(name=field_name, value=field_value, inline=False)
+      budget -= cost
+      shown += 1
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
@@ -264,11 +273,28 @@ class Admin(commands.Cog):
         timestamp=datetime.now(timezone.utc),
     )
     if ping_everyone:
-      # `manage_guild` is not permission to ping the whole server; Discord has its own bit.
-      perms = getattr(interaction.user, "guild_permissions", None)
-      if not (perms and perms.mention_everyone):
+      # `manage_guild` is not permission to ping the whole server; Discord has its own
+      # bit. Guild-level permissions ignore channel overwrites, so the check must use
+      # the effective permissions in the *selected* channel (a channel allow counts too).
+      perms = channel.permissions_for(interaction.user)
+      if not perms.mention_everyone:
         await interaction.response.send_message(
-            "🚫 لا تملك صلاحية منشن الجميع (`Mention Everyone`).", ephemeral=True
+            "🚫 لا تملك صلاحية منشن الجميع (`Mention Everyone`) في هذه القناة.", ephemeral=True
+        )
+        return
+    # The announcement is sent by the bot, not the caller: it must actually be able to
+    # read and write the target channel, or the send fails with a raw HTTP error.
+    me = interaction.guild.me or interaction.client.user
+    bot_perms = channel.permissions_for(me)
+    if not (bot_perms.view_channel and bot_perms.send_messages):
+        await interaction.response.send_message(
+            "🚫 لا أستطيع إرسال الإعلان في تلك القناة (أحتاج صلاحية العرض والإرسال فيها).",
+            ephemeral=True,
+        )
+        return
+    if ping_everyone and not bot_perms.mention_everyone:
+        await interaction.response.send_message(
+            "🚫 أحتاج صلاحية `Mention Everyone` في تلك القناة حتى ينفع منشن الجميع.", ephemeral=True
         )
         return
     mentions_cfg = discord.AllowedMentions(everyone=True) if ping_everyone else discord.AllowedMentions.none()
@@ -314,4 +340,8 @@ def install(bot) -> None:
   dm_capable = {"sync"}
   for command in Admin(bot).get_app_commands():
     command.guild_only = command.name not in dm_capable
+    if command.guild_only:
+      # `guild_only` alone leaves the payload's `contexts` field on the tree default,
+      # which still permits DM invocation; `contexts` replaced `dm_permission`.
+      command.allowed_contexts = app_commands.AppCommandContext(guild=True)
     bot.tree.add_command(command)

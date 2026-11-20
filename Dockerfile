@@ -54,8 +54,11 @@ RUN python -m compileall -q bot.py angel cogs tools \
 USER angel
 
 # The database is created by the bot on first boot, so the checkpoint only runs when it exists.
+# `quick_check` can exit 0 with diagnostic rows instead of "ok" (freelist corruption): the
+# output must be captured and compared, not discarded.
 HEALTHCHECK --interval=60s --timeout=10s --start-period=45s --retries=3 \
-    CMD sqlite3 -readonly "$ANGEL_DB_PATH" 'PRAGMA quick_check;' >/dev/null 2>&1 || \
-        { [ ! -f "$ANGEL_DB_PATH" ] && exit 0; exit 1; }
+    CMD if [ ! -f "$ANGEL_DB_PATH" ]; then exit 0; fi; \
+        out=$(sqlite3 -readonly "$ANGEL_DB_PATH" 'PRAGMA quick_check;') || exit 1; \
+        [ "$out" = "ok" ] || exit 1
 
 CMD ["sh", "-c", "python bot.py --checkpoint-db && exec python bot.py"]

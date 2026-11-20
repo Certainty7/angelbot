@@ -1,6 +1,6 @@
 """Distil this server's culture from its own messages.
 
-Reads the most recent human lines of the busiest public channel, asks one model for a compact
+Reads the most recent human lines of one configured channel, asks one model for a compact
 note (tone / running topics / in-jokes / what to avoid), and stores it per guild. The persona
 prompt injects it on every reply, so Angel fits the room instead of sounding like a generic
 assistant.
@@ -11,9 +11,9 @@ Privacy rules enforced here (the audit's C-005):
   * the API key travels in the `x-goog-api-key` header, not the query string;
   * a parsed payload must be a dict before it is stored.
 
-The archive does not record a channel *type*, so "the busiest channel" could be a staff room.
-Set `ANGEL_PERSONA_CHANNEL_ID` to a channel you know is public; otherwise the tool samples the
-busiest one and prints which channel it used.
+`ANGEL_PERSONA_CHANNEL_ID` is required: the archive does not record a channel *type*, so an
+unconfigured run could sample a staff room. When it is unset the tool refuses instead of
+guessing a channel (exit code 2).
 """
 import json
 import os

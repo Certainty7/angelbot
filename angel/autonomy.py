@@ -202,7 +202,9 @@ class AutonomyEngine:
 
         uid = int(target["user_id"])
         name = str(target.get("name") or "").strip() or "عضو"
-        recent_lines = list(get_bot().recent_channel_msgs.get(channel_id, []))
+        raw_entries = list(get_bot().recent_channel_msgs.get(channel_id, []))
+        # Entries are (author_id, text) tuples; a plain string is a legacy line.
+        recent_lines = [e[1] if isinstance(e, tuple) else str(e) for e in raw_entries]
         try:
           facts = memory.format_facts(await memory.recall(uid, " ".join(recent_lines[-3:])))
           avoid = await get_bot().db.get_recent_ambient(guild.id, channel_id, 8)
@@ -233,7 +235,10 @@ class AutonomyEngine:
         sent += 1
         try:
           get_bot().angel_last_spoke[channel_id] = now
-          get_bot().recent_channel_msgs[channel_id].append(f"Angel: {text[:120]}")
+          _bot_user = getattr(get_bot(), "user", None)
+          get_bot().recent_channel_msgs[channel_id].append(
+              (_bot_user.id if _bot_user else 0, f"Angel: {text[:120]}")
+          )
           await get_bot().db.log_ambient(guild.id, channel_id, uid, text)
           await memory.touch(guild.id, uid, name, text)
         except Exception:

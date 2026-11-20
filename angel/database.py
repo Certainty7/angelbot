@@ -70,6 +70,10 @@ class BotDatabase:
   Avoids spawning a new OS thread per query and keeps WAL + synchronous=NORMAL + temp_store=MEMORY active permanently.
   """
 
+  # One shared cap for every retention path: `_apply_retention` and the 30-minute
+  # `cleanup_and_vacuum` must never disagree on how many chat lines a member keeps.
+  MESSAGES_RETAINED_PER_USER = 60
+
   def __init__(self, db_path: str):
     self.db_path = db_path
     self._conn: Optional[aiosqlite.Connection] = None
@@ -544,10 +548,13 @@ class BotDatabase:
     if version < 2:
       # user_dossier has had no writer since automatic profiling was removed; clear any row
       # inherited from an older build so the README's "no member files" claim is true.
+      # user_index.topics holds the same legacy keyword profiles: `touch()` stopped
+      # writing topics, but rows upgraded from older builds kept them forever.
       try:
         await db.execute("DELETE FROM user_dossier")
+        await db.execute("UPDATE user_index SET topics = ''")
       except Exception as exc:
-        logger.debug("dossier cleanup skipped: %s", exc)
+        logger.debug("legacy profile cleanup skipped: %s", exc)
       await db.execute("PRAGMA user_version = 2")
       version = 2
     if version < 3:
@@ -568,8 +575,8 @@ class BotDatabase:
     """Documented caps, applied at most once per UTC day instead of on every boot.
 
     - dm_logs: 30 days (the DM mirror is the most sensitive store in the database).
-    - messages: the 60 most recent chat lines per member, which is already far beyond the
-      10-line summary window the prompt uses.
+    - messages: the `MESSAGES_RETAINED_PER_USER` most recent chat lines per member, which
+      is already far beyond the 10-line summary window the prompt uses.
     """
     from datetime import datetime, timezone
 
@@ -581,13 +588,13 @@ class BotDatabase:
     try:
       await db.execute("DELETE FROM dm_logs WHERE created_at < datetime('now', '-30 days')")
       await db.execute(
-          """
+          f"""
           DELETE FROM messages
           WHERE id NOT IN (
               SELECT id FROM (
                   SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) AS rn
                   FROM messages
-              ) WHERE rn <= 60
+              ) WHERE rn <= {self.MESSAGES_RETAINED_PER_USER}
           )
           """
       )
@@ -808,6 +815,13 @@ class BotDatabase:
   # --- Reputation Points (Angel Guild) ---
   async def add_rep(self, guild_id: int, user_id: int) -> int:
     async with self._connect() as db:
+      # `/rep` writes member data like any other path: an opted-out member must not
+      # have a `user_xp` row re-created through it (C-006). The guard lives in SQL.
+      async with db.execute(
+          "SELECT 1 FROM user_preferences WHERE user_id = ? AND opt_out = 1", (user_id,)
+      ) as opt_cur:
+        if await opt_cur.fetchone():
+          return 0
       await db.execute(
           """
           INSERT INTO user_xp (guild_id, user_id, xp, level, messages_count, rep_points)
@@ -1009,7 +1023,15 @@ class BotDatabase:
       return summary, messages
 
   async def apply_summary_and_prune(self, user_id: int, new_summary: str, max_id_to_delete: int):
+    """Store a background summary. The opt-out guard covers the race where `/data delete`
+    ran while `_background_summarize_user` was awaiting the model: the summary must not
+    re-create rows for a member who just erased their data."""
     async with self._connect() as db:
+      async with db.execute(
+          "SELECT 1 FROM user_preferences WHERE user_id = ? AND opt_out = 1", (user_id,)
+      ) as opt_cur:
+        if await opt_cur.fetchone():
+          return
       await db.execute(
           """
                 INSERT INTO user_summaries (user_id, summary, updated_at)
@@ -1036,8 +1058,8 @@ class BotDatabase:
       await db.commit()
 
   # Per-member tables and the column that identifies the member. `/data delete` iterates
-  # this map, and tests/test_deletion_coverage.py fails when the live schema grows a
-  # user-bearing table that is neither here nor in USER_DATA_EXEMPT.
+  # this map, and tests/test_privacy_lifecycle.py (DeletionCoverageTest) fails when the
+  # live schema grows a user-bearing table that is neither here nor in USER_DATA_EXEMPT.
   USER_DATA_TABLES = {
       "server_messages": "user_id",
       "messages": "user_id",
@@ -1087,6 +1109,7 @@ class BotDatabase:
     the command told members "this is everything" while rows remained (C-006).
     """
     out: Dict[str, int] = {}
+    failed: List[str] = []
     async with self._connect() as db:
       for table, column in self.USER_DATA_TABLES.items():
         try:
@@ -1095,8 +1118,13 @@ class BotDatabase:
           ) as cur:
             row = await cur.fetchone()
           out[table] = int(row[0] if row else 0)
-        except Exception:
-          continue
+        except Exception as exc:
+          # A locked or damaged table must not silently vanish from the list the
+          # member is told is complete; `delete_all_user_data` reports the same way.
+          logger.warning("count from %s failed: %s: %s", table, type(exc).__name__, exc)
+          failed.append(table)
+    if failed:
+      out["_failed_tables"] = failed  # type: ignore[assignment]
     return out
 
   async def delete_all_user_data(self, user_id: int) -> Dict[str, int]:
@@ -1214,14 +1242,22 @@ class BotDatabase:
         return row[0] if row and row[0] else None
 
   # --- AFK System (guild-scoped) ---
-  async def set_afk(self, guild_id: int, user_id: int, reason: str):
+  async def set_afk(self, guild_id: int, user_id: int, reason: str) -> bool:
+    """Set AFK state. Returns False for an opted-out member: the SQL guard keeps their
+    rows gone after `/data delete`, and the caller must not cache the state either."""
     async with self._connect() as db:
+      async with db.execute(
+          "SELECT 1 FROM user_preferences WHERE user_id = ? AND opt_out = 1", (user_id,)
+      ) as opt_cur:
+        if await opt_cur.fetchone():
+          return False
       await db.execute(
           "INSERT OR REPLACE INTO afk_users (guild_id, user_id, reason, since) "
           "VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
           (guild_id, user_id, reason),
       )
       await db.commit()
+      return True
 
   async def remove_afk(self, guild_id: int, user_id: int) -> Optional[Tuple[str, str]]:
     async with self._connect() as db:
@@ -1992,6 +2028,19 @@ class BotDatabase:
         candidates = [dict(r) async for r in cur]
       return _fuzzy_best(query, candidates, "content", limit)
 
+  async def rules_corpus_exists(self, guild_id: int) -> bool:
+    """Whether any rule is indexed for this guild.
+
+    An empty `search_rules` answer means the question matched nothing; it must not be
+    read as "no corpus" or a populated index gets rebuilt from whatever channel the
+    caller is standing in.
+    """
+    async with self._connect() as db:
+      async with db.execute(
+          "SELECT 1 FROM rules WHERE guild_id = ? LIMIT 1", (guild_id,)
+      ) as cur:
+        return await cur.fetchone() is not None
+
   # ---------- USD budget ----------
   async def add_usage(self, day: str, in_tokens: int, out_tokens: int, cost: float, blocked: bool = False) -> float:
     async with self._connect() as db:
@@ -2041,20 +2090,25 @@ class BotDatabase:
     """
     Prune old transient records, checkpoint WAL to 0 bytes, and optionally VACUUM the SQLite database
     so disk space is reclaimed on the server. Returns (pruned_rows, final_db_bytes).
+
+    The message cap is the shared retention constant: a private 50-row cap here deleted
+    rows 51-60 for every member on each 30-minute pass, fighting `_apply_retention`'s
+    documented 60. Short summaries are not deleted at all: D-010 removed that rule from
+    the startup path, and a legitimate summary like "يحب القهوة" is shorter than 35
+    characters.
     """
     pruned = 0
     async with self._connect() as db:
       for sql in (
-          "DELETE FROM user_summaries WHERE LENGTH(TRIM(summary)) < 35",
           "DELETE FROM giveaways WHERE ended = 1 AND end_at <= datetime('now', '-3 days')",
           "DELETE FROM dm_logs WHERE created_at < datetime('now', '-30 days')",
-          """
+          f"""
           DELETE FROM messages
           WHERE id NOT IN (
               SELECT id FROM (
                   SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) AS rn
                   FROM messages
-              ) WHERE rn <= 50
+              ) WHERE rn <= {self.MESSAGES_RETAINED_PER_USER}
           )
           """,
       ):

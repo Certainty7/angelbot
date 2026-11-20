@@ -14,7 +14,7 @@ but not in this document.
 | `server_messages` | `id` | the durable channel archive (365-day retention) | yes |
 | `messages` | `id` | the rolling prompt window for one member (60 lines) | yes |
 | `user_summaries` | `user_id` | the rolling conversation summary | yes |
-| `user_profile` | `(user_id, fact_key)` | facts a member pinned with `/memory pin` | yes |
+| `user_profile` | `(user_id, fact_key)` | facts inferred by the model from chat, written by `upsert_profile_fact` (`source='chat'`) | yes |
 | `user_dossier` | `user_id` | legacy table, emptied by migration v2, no writer | yes |
 | `dm_logs` | `id` | the DM mirror seen by the owner (30-day retention) | yes |
 | `user_index` | `(guild_id, user_id)` | who speaks, when, message count (no topic profiling) | yes |
@@ -24,7 +24,9 @@ but not in this document.
 | `user_xp` | `(guild_id, user_id)` | XP, level, message count, reputation | yes |
 
 `user_preferences` survives a deletion with `opt_out = 1` and an empty `pinned_facts`, because it
-is the record that stops the bot from learning about that member again.
+is the record that stops the bot from learning about that member again. It also holds the facts a
+member pinned explicitly with `/memory pin` (`pinned_facts`) — those are cleared by the deletion.
+`user_profile` is a different store: inferred facts, erased by the deletion the same way.
 
 ## Server-scoped tables
 
@@ -68,9 +70,14 @@ migrate them directly; recreate the virtual table and rebuild instead.
 
 ## Retention
 
-Applied at most once per UTC day by `_apply_retention()`:
+Once per UTC day, `_apply_retention()` removes:
 
 - `dm_logs` older than 30 days;
-- `messages` beyond the 60 newest per member;
-- `server_messages` older than 365 days (checked every 500 inserts);
-- `ambient_log` beyond 400 rows (on every insert).
+- `messages` beyond the 60 newest per member (the shared `MESSAGES_RETAINED_PER_USER`
+  constant, also used by the periodic `cleanup_and_vacuum` pass so the two paths can
+  never disagree).
+
+The other caps run on their own triggers:
+
+- `server_messages` older than 365 days (checked every 500 inserts in `log_server_message`);
+- `ambient_log` beyond 400 rows (on every insert in `log_ambient`).

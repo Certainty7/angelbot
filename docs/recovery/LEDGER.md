@@ -442,3 +442,63 @@ Executed on the branch tip, Windows 11, Python 3.13.14, with `ANGEL_OWNER_ID=42`
 Not executable in this environment (recorded, not claimed): a real Discord voice/DAVE session,
 YouTube extraction against the live provider, a Docker image build, real systemd, live Cloudflare
 response headers, and any Gemini request. See `docs/LIVE_VERIFICATION.md`.
+
+---
+
+## Final review round — PR #9 remediation (2026-11-20, GLM 5.3)
+
+The branch head `7ef1163` was re-reviewed through the full PR #9 CodeRabbit inventory
+(11 inline majors, 3 outside-diff findings, 24 + 8 minors). Every finding was verified against the
+tree; all confirmed defects were fixed with regression tests.
+
+### Findings and disposition
+
+| # | Finding (file) | Disposition | Test |
+|---|---|---|---|
+| A | Budget reservation covered the whole fallback chain (`brain.py`) | Fixed: per-attempt reserve + atomic settle | `test_cost_breaker.py` |
+| B | Media-only replies silently dropped (`bot.py`, `cogs/ai_chat.py`) | Fixed: `plan_reply_delivery` | `test_admin_and_delivery.py` |
+| C | `/rep`, `/afk`, background summary re-created opted-out rows (`database.py`) | Fixed: SQL guards in each writer | `test_privacy_lifecycle.py` |
+| D | Byte budget applied after `gather` (`media.py`) | Fixed: `SharedByteBudget` per-chunk claims | `test_media_budget.py` |
+| E | Confirmation authorized the stale requester snapshot (`nl_router.py`) | Fixed: current actor re-resolved + re-checked | `test_confirm_gate.py` |
+| F | Summary cooldown consumed quota first (`nl_router.py`, `ai_chat.py`) | Fixed: claim-then-quota with rollback | `test_ai_quota.py`, manual via code order |
+| G | Stale DAVE retry ate the queue (`voice_engine.py`) | Fixed: `_advance_if_idle` ownership check | `test_voice_and_guard.py` |
+| H | `/announce` ignored channel overwrites (`admin.py`) | Fixed: effective perms both sides | `test_admin_and_delivery.py` |
+| I | `ReadWritePaths` does not create the backup dir (`deploy`) | Fixed: documented provisioning + gate | `test_ops_and_gates.py` |
+| J | `user_preferences` missing; inserts swallowed (`tools/fetch_all_history.py`) | Fixed: schema + page failure tracking | `test_operator_tools.py` |
+| R1 | `cleanup_and_vacuum` deleted short summaries / capped at 50 (`database.py`) | Fixed: shared `MESSAGES_RETAINED_PER_USER` | `test_privacy_lifecycle.py` |
+| R2 | `active_chat_window` iterated `.items()` (`memory_rules.py`) | Fixed: iterate keys | `test_privacy_lifecycle.py` |
+| R3 | NL `انسي كلمة` deleted without confirmation (`nl_router.py`) | Fixed: pending-confirm + `FORGET_KEYWORD` | `test_confirm_gate.py` |
+| M1..M24 | 24 review-body minors (Dockerfile healthcheck, dbpath parsing, music/playlist channel assignment, edit flood counting, config test AST, timezone test, conftest dotenv restore, README units install, exec-tag assertion, lock identity, owner fixture, prompt bound, warnings embed size, guild contexts, persona docstring, DATA_MODEL fixes, count failure reporting, migration v2 topics, comment reference, corpus existence, argv shell gate, summarize opt-out re-read) | Fixed | respective files |
+| F1..F8 | 8 follow-up minors (interaction fallback mentions, cooldown-before-quota, atomic settle, notification channel, cookies discovery, SoundCloud duration, timeout assertion, npm audit job) | Fixed | respective files |
+
+Notes: the budget finding required restoring the historical `budget_blocked()` precheck beside the
+new reservation (D-015): with the cap disabled (`stop_at=inf`) the gate's synthetic over-ceiling
+stranger must still be refused before any HTTP call, which the reservation short-circuit alone
+did not do. The `dbpath.py` minor was fixed with the pinned python-dotenv parser, keeping the
+"no `angel.config` import" rule. Nothing from the review was applied blindly; the three
+`upsert_profile_fact`-style comments that were already accurate or unreachable were verified and
+left unchanged.
+
+### Verification (final round)
+
+Windows 11, Python 3.13.14, `ANGEL_OWNER_ID=42`, temp `ANGEL_DB_PATH`,
+`PYTHONIOENCODING=utf-8` (console codepage; CI is UTF-8 Linux).
+
+| Command | Result |
+|---|---|
+| `python -m compileall -q bot.py angel cogs tools tests` | exit 0 |
+| `python -m pytest -q` | 223 passed, 322 subtests passed, exit 0 |
+| `python tools/selftest.py` | 50/50, exit 0 (includes `gate_checks.py`) |
+| `python tools/security_probe.py` | PASS, exit 0 |
+| `python tools/recall_probe.py` | 10/10, exit 0 |
+| `python tools/website-data-generator/generate.py --check` | exit 0 |
+| `python tests/website/test_command_catalog.py` | 14/14, exit 0 |
+| website build (`npm ci` + `npm run build`, no local bash) | 20 pages, exit 0 |
+| publish guards (files ≤ 20000, index/404, no >25 MiB, no leaks) | pass |
+| `npx playwright test` | 67 passed, exit 0 |
+| `python -m pip_audit -r requirements.txt` | no known vulnerabilities, exit 0 |
+| `npm audit --omit=dev --audit-level=high` | 0 vulnerabilities, exit 0 |
+| secret scan (tracked tree + new diff) | clean |
+
+Still not executable here (unchanged): live Discord/DAVE, live YouTube, Docker build, systemd,
+live Cloudflare headers, live Gemini. `docs/LIVE_VERIFICATION.md` remains the checklist.

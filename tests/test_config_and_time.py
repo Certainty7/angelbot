@@ -2,6 +2,7 @@
 
 The module-level checks run at import, so the invalid cases execute in a subprocess.
 """
+import ast
 import os
 import subprocess
 import sys
@@ -96,7 +97,9 @@ class TimezoneTest(unittest.TestCase):
             "from angel.brain import _seconds_until_pacific_midnight\n"
             "print(int(_seconds_until_pacific_midnight()))\n"
         )
-        result = run_python(code)
+        # UTC isolates the fallback: an inherited zone like Asia/Riyadh makes
+        # angel.config import fail on the patched ZoneInfo before the test body runs.
+        result = run_python(code, ANGEL_TIMEZONE="UTC")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertGreater(int(result.stdout.strip()), 0)
 
@@ -106,9 +109,22 @@ class NoNetworkInstallTest(unittest.TestCase):
 
     def test_bootstrap_never_installs(self):
         source = (REPO / "angel" / "config.py").read_text(encoding="utf-8")
-        start = source.index("def _ensure_dependencies")
-        end = source.index("_ensure_dependencies()", start)
-        body = source[start:end]
+        # The old `source.index("_ensure_dependencies()")` matched the function's own
+        # definition header, so the "body" was just `def ` and every assertion passed
+        # vacuously. The AST body is the real code that could run pip.
+        tree = ast.parse(source)
+        fn = next(
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_ensure_dependencies"
+        )
+        stmts = fn.body
+        if stmts and isinstance(stmts[0], ast.Expr) \
+                and isinstance(stmts[0].value, ast.Constant) \
+                and isinstance(stmts[0].value.value, str):
+            # The docstring legitimately says "pip-install" when it explains what the
+            # bootstrap must never do; only the executable statements matter here.
+            stmts = stmts[1:]
+        body = "\n".join(ast.get_source_segment(source, s) or "" for s in stmts)
         self.assertNotIn("pip", body.lower().replace("pip install -r", ""),
                          "the bootstrap must print the command, not run it")
         self.assertNotIn("check_call", body)

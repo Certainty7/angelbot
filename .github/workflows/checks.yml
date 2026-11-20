@@ -81,6 +81,18 @@ jobs:
         run: |
           pip install pip-audit
           pip-audit -r requirements.txt
+
+  website-dependency-audit:
+    # The npm audit must run in its own scheduled job: sharing the Python job meant a
+    # pip-audit failure skipped the Node setup and the weekly run reported no website
+    # result at all.
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with:
           node-version: "22"

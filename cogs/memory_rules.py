@@ -147,6 +147,15 @@ class MemoryRules(commands.Cog):
       embed.add_field(name="نقاط الخبرة", value=f"`{counts.get('user_xp', 0)}`", inline=True)
       embed.add_field(name="ملاحظات محيطة", value=f"`{counts.get('ambient_log', 0)}`", inline=True)
       embed.add_field(name="الحفظ التلقائي", value="موقوف" if prefs.get("opt_out") else "مفعّل", inline=True)
+      failed_tables = counts.get("_failed_tables") or []
+      if failed_tables:
+        # A locked or damaged table must not vanish from the list the member is told is
+        # complete: the counts above are partial until these tables are readable.
+        embed.add_field(
+            name="⚠️ جداول لم يمكن عدّها",
+            value="`" + "`, `".join(failed_tables) + "` — القائمة أعلاه غير مكتملة لهذه الجداول.",
+            inline=False,
+        )
       embed.add_field(
           name="ملاحظاتك المثبتة بنفسك",
           value=(prefs.get("pinned_facts") or "*لا شيء*")[:1000],
@@ -175,7 +184,7 @@ class MemoryRules(commands.Cog):
     for channel_id, target in list(getattr(self.bot, "last_social_target", {}).items()):
       if target == uid:
         self.bot.last_social_target.pop(channel_id, None)
-    for key in list(getattr(self.bot, "active_chat_window", {}).items()):
+    for key in list(getattr(self.bot, "active_chat_window", {})):
       if isinstance(key, tuple) and key[-1] == uid:
         self.bot.active_chat_window.pop(key, None)
     for cache in (getattr(self.bot, "pending_step", {}), getattr(self.bot, "pending_confirm", {})):
@@ -192,7 +201,13 @@ class MemoryRules(commands.Cog):
     for channel_id in list(ambient):
       buffer = ambient[channel_id]
       try:
-        kept_lines = [line for line in list(buffer) if not str(line).endswith(f"<@{uid}>")]
+        # Entries are (author_id, text) tuples. A plain string is a legacy entry whose
+        # author cannot be identified: privacy-safe cleanup drops it rather than keep a
+        # deleted member's line flowing into other members' prompts.
+        kept_lines = [
+            entry for entry in list(buffer)
+            if isinstance(entry, tuple) and entry[0] != uid
+        ]
         buffer.clear()
         buffer.extend(kept_lines)
       except Exception:
@@ -239,14 +254,16 @@ class MemoryRules(commands.Cog):
     rules_channel = getattr(interaction.guild, "rules_channel", None)
     try:
       index = await self.bot.db.search_rules(interaction.guild.id, question, 1)
-      # Never rebuild the corpus from whatever channel the caller is standing in: that let
-      # any member replace staff rules with chat text and then quote it back as authoritative.
-      if refresh or not index:
+      # Separate "the corpus is empty" from "the question matched nothing": a populated
+      # corpus with no match must answer normally, not trigger a rebuild that replaced
+      # staff rules with whatever channel the caller is standing in.
+      has_corpus = await self.bot.db.rules_corpus_exists(interaction.guild.id)
+      if refresh or not has_corpus:
         if refresh and not is_staff:
           await interaction.followup.send("🚫 إعادة الفهرسة للإدارة فقط.", ephemeral=True)
           return
         if rules_channel is None:
-          if not index:
+          if not has_corpus:
             await interaction.followup.send(
                 "📭 ما فيه فهرس قوانين بعد. اضبطي قناة القوانين في السيرفر ثم أعيدي المحاولة، "
                 "أو شغّلي `/rules refresh: نعم` من قناة القوانين (للإدارة فقط).",
@@ -257,7 +274,7 @@ class MemoryRules(commands.Cog):
           await rules_mod.index_channel(
               self.bot, self.bot.db, interaction.guild.id, rules_channel.id
           )
-        elif not index:
+        elif not has_corpus:
           await interaction.followup.send(
               "📭 فهرس القوانين غير جاهز بعد. اطلبي من الإدارة تشغيل `/rules refresh: نعم`.",
               ephemeral=True,

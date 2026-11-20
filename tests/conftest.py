@@ -11,11 +11,16 @@ import tempfile
 # the suite at live data.
 _TMP_ROOT = tempfile.mkdtemp(prefix="angel-tests-")
 os.environ["ANGEL_DB_PATH"] = os.path.join(_TMP_ROOT, "test.db")
-os.environ.setdefault("ANGEL_OWNER_ID", "42")
-os.environ.setdefault("ANGEL_AUTO_INSTALL", "0")
-# Credentials are scrubbed so a mocked failure cannot fall through to a real provider.
+# The synthetic owner is forced too: `setdefault` preserved a shell value like 123 and
+# the hierarchy tests, which assert on member 42, failed for a reason no test could see.
+os.environ["ANGEL_OWNER_ID"] = "42"
+os.environ["ANGEL_AUTO_INSTALL"] = "0"
+# Credentials are scrubbed by setting explicit empty values, not by popping the keys:
+# `angel.config` calls `load_dotenv()` at import, and dotenv happily re-fills *absent*
+# keys from a populated checkout `.env` — in this process and in every child `run_python`
+# process, which inherits these empties and is therefore immune to the same restore.
 for _secret in ("DISCORD_TOKEN", "GEMINI_API_KEY", "GEMINI_API_KEY_2", "CLOUDFLARE_API_TOKEN"):
-    os.environ.pop(_secret, None)
+    os.environ[_secret] = ""
 
 
 class NetworkBlocked(RuntimeError):
