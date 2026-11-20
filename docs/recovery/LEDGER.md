@@ -366,3 +366,29 @@ Recorded as `N-00x` with the same fields. Filled in as they were found and fixed
 - **Fix:** an empty visible answer cools that model and fails over; if every model is empty the
   reply is empty (and logged), never invented.
 - **Test:** `tests/test_persona_notes.py::ProviderResponseTest`.
+
+---
+
+## Verification
+
+Executed on the branch tip, Windows 11, Python 3.13.14, with `ANGEL_OWNER_ID=42`,
+`ANGEL_AUTO_INSTALL=0` and a temporary `ANGEL_DB_PATH`.
+
+| Command | Result |
+|---|---|
+| `python -m compileall -q bot.py angel cogs tools tests` | exit 0 |
+| `python -m pytest -q` | 180 passed, 322 subtests passed |
+| `python tools/selftest.py` | 50/50, exit 0 |
+| `python tools/security_probe.py` | PASS, exit 0 |
+| `python tools/recall_probe.py` | 10/10, exit 0 |
+| `python bot.py --checkpoint-db` with no database | exit 0, no database created |
+| `python tools/website-data-generator/generate.py --check` | exit 0 |
+| `python tests/website/test_command_catalog.py` | 14/14 |
+| secret scan over 46 commits and 276 tracked files | no real credential; one documented `AKIA`+16`A` placeholder |
+
+`tools/gate_checks.py` is a library, not a standalone script: its checks run inside
+`tools/selftest.py` and are included in the 50/50 result.
+
+Not executable in this environment (recorded, not claimed): a real Discord voice/DAVE session,
+YouTube extraction against the live provider, a Docker image build, real systemd, live Cloudflare
+response headers, and any Gemini request. See `docs/LIVE_VERIFICATION.md`.
