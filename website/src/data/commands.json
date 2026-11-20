@@ -1514,6 +1514,13 @@
             "مختصر ومباشر (Concise)",
             "بارد وحاد (Cold)"
           ]
+        },
+        {
+          "name": "confirm",
+          "type": "bool",
+          "description": null,
+          "required": false,
+          "choices": []
         }
       ],
       "description_en": "Memory vault: view, pin a lasting note, or forget one",
@@ -1559,6 +1566,13 @@
           "type": "str",
           "description": "سؤالك عن القوانين",
           "required": true,
+          "choices": []
+        },
+        {
+          "name": "refresh",
+          "type": "bool",
+          "description": "إعادة فهرسة قناة القوانين (للإدارة فقط)",
+          "required": false,
           "choices": []
         }
       ],

@@ -100,6 +100,32 @@ class MigrationTest(unittest.TestCase):
 
         self.assertGreaterEqual(asyncio.run(_run()), 3)
 
+    def test_an_interrupted_index_rebuild_resumes(self):
+        """A crash between dropping and rebuilding the FTS index must not leave it empty."""
+
+        async def _run():
+            path = _fresh_db()
+            db = BotDatabase(path)
+            try:
+                await db.initialize()
+                await db.log_server_message(1, 2, 42, "member", "كلمة فريدة للاختبار")
+                async with db._connect() as conn:
+                    # Simulate the crash: version already 3, marker still set, index empty.
+                    await conn.execute("DROP TABLE server_messages_fts")
+                    await conn.execute(
+                        "INSERT OR REPLACE INTO state (key, value) VALUES ('fts_rebuild_pending', '1')"
+                    )
+                    await conn.commit()
+                await db.close()
+                db = BotDatabase(path)
+                await db.initialize()
+                return await db.search_archive(["فريدة"], limit=5, allowed_channels={2})
+            finally:
+                await db.close()
+                os.unlink(path)
+
+        self.assertTrue(asyncio.run(_run()), "the pending rebuild was not resumed")
+
     def test_legacy_dossier_rows_are_cleared_once(self):
         async def _run():
             path = _fresh_db()

@@ -70,6 +70,10 @@
             {
               "en": "AI quota gaps closed: `/translate`, `/rules`, `/summarize_channel` and the NL summary all consume the user and guild quotas; image generation skips cooling/dead models.",
               "ar": "أُغلقت ثغرات حصص الذكاء الاصطناعي: `/translate` و`/rules` و`/summarize_channel` والملخص اللغوي تستهلك حصة العضو والسيرفر، وتوليد الصور يتخطى النماذج المبرّدة والميتة."
+            },
+            {
+              "en": "`/rules` can only rebuild its index from the configured rules channel, and only staff can ask for it: a cache miss no longer rewrites the server's rules from whatever channel the caller is standing in.",
+              "ar": "`/rules` لا يعيد بناء فهرسه إلا من قناة القوانين المهيأة، وللإدارة فقط: لم يعد أي طلب بلا نتيجة يستبدل قوانين السيرفر بمحادثة القناة التي يقف فيها الطالب."
             }
           ]
         },
@@ -94,6 +98,10 @@
             {
               "en": "`forget_user_keyword` treats `%` and `_` literally. `initialize()` no longer rewrites user data on every boot: legacy clean-up runs once behind `PRAGMA user_version`.",
               "ar": "`forget_user_keyword` يعامل `%` و`_` كحروف عادية. و`initialize()` لم يعد يعيد كتابة بيانات الأعضاء في كل إقلاع: التنظيف القديم يعمل مرة واحدة خلف `PRAGMA user_version`."
+            },
+            {
+              "en": "`/data view` reports every stored category again, the deletion receipt names any table that failed instead of printing a clean success, and `/memory forget` asks for confirmation and also scrubs the archive it would otherwise quote back.",
+              "ar": "`/data view` يعرض كل فئة مخزّنة مرة أخرى، وإشعار الحذف يسمّي أي جدول فشل بدل إعلان نجاح نظيف، و`/memory forget` يطلب تأكيداً ويمسح الأرشيف الذي كان يمكن أن يُقتبس لاحقاً."
             }
           ]
         },

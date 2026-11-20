@@ -45,7 +45,7 @@ commit 1 of the branch (unchanged), so later changes to those files are reviewab
   privacy/deletion, audio/media/resources, website/CI.
 - Documentation: `AGENTS.md`, `KNOWN_ISSUES.md`, `docs/DATA_MODEL.md`,
   `docs/LIVE_VERIFICATION.md`, `SECURITY.md` data-flow matrix, bilingual changelog, README.
-- New regression suite: 180 tests plus 321 subtests at last full run before the final polish.
+- New regression suite: 182 tests plus 322 subtests (final run).
 
 ## Verification ledger (last run)
 

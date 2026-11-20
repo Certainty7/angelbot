@@ -39,7 +39,7 @@ rather than accepted from the report.
 - **Fix:** `Environment=ANGEL_DB_PATH=/opt/angelbot/data/angel.db`, `StateDirectory=angelbot`,
   `StartLimitIntervalSec`/`StartLimitBurst`, `Restart=on-failure`, `TimeoutStopSec=60`,
   `UMask=0077`.
-- **Test:** `tests/test_ops_and_gates.py::test_systemd_unit_is_boot_safe` parses the unit and
+- **Test:** `tests/test_ops_and_gates.py::SystemdUnitTest` parses the unit and
   asserts each property.
 - **Limit:** `systemd-analyze verify` is not installed here.
 
@@ -60,8 +60,8 @@ rather than accepted from the report.
 - **Claim:** `/summarize_channel` checked permissions; the NL path checked only owner/cooldown.
 - **Fix:** a shared `can_read_history(channel, member)` guard is used by both entry points, with a
   DM/no-guild denial. The NL path returns the same message the slash command returns.
-- **Test:** `tests/test_authz_history.py::test_nl_summary_denied_without_history`,
-  `::test_nl_summary_allowed_with_history`.
+- **Test:** `tests/test_security_controls.py::HistoryAccessTest`,
+  `tests/test_summarize_security.py`.
 
 ### C-005 — Ops tools leak member messages to Gemini, skip opt-out, hardcode the DB path
 - **Status:** Fixed-verified
@@ -69,9 +69,10 @@ rather than accepted from the report.
   across all guilds, sent 300 rows with display names, put the API key in the query string, and
   stored unvalidated JSON. `backfill_history.py`/`fetch_all_history.py` re-inserted opted-out
   members.
-- **Fix:** all three tools resolve `ANGEL_DB_PATH` through `angel.config`, filter opted-out users
-  in SQL, send the key in the `x-goog-api-key` header, validate the parsed payload is a dict, and
-  refuse to run when the target channel is not in an allow-list of public channels. Backfill writes
+- **Fix:** all three tools resolve `ANGEL_DB_PATH` through the shared `tools/dbpath.py` resolver,
+  filter opted-out users in SQL, send the key in the `x-goog-api-key` header, validate the parsed
+  payload is a dict, and refuse to run unless `ANGEL_PERSONA_CHANNEL_ID` names a channel (the
+  archive records no channel type, so "busiest channel" could be a staff room). Backfill writes
   `message_id` and uses `INSERT OR IGNORE` so it cannot duplicate live rows.
 - **Test:** `tests/test_operator_tools.py::test_opted_out_text_never_enters_the_prompt`,
   `::test_the_key_travels_in_a_header`, `::test_a_non_object_payload_is_rejected`.
@@ -86,14 +87,14 @@ rather than accepted from the report.
   deletion covers every user-associated table (schema-derived, see D-005); the count matches the
   deletion set; `active_chat_window` iterates `.keys()`; writes carry the opt-out predicate in SQL.
 - **Test:** `tests/test_privacy_lifecycle.py` (deletion coverage, XP after delete, DM silence,
-  ambient rows, window expiry), `tests/test_deletion_coverage.py` (schema-driven).
+  ambient rows, window expiry), `tests/test_privacy_lifecycle.py::DeletionCoverageTest` (schema-driven).
 
 ### C-007 — Media memory budget exceeds the 1 GB unit cap
 - **Status:** Fixed-verified
 - **Claim:** up to 20 slides × 25 MB × 4 concurrent jobs ≈ 2 GB.
 - **Fix:** one shared download semaphore, `MAX_JOB_BYTES` accumulated while slides are collected,
   Instagram carousels capped at 10 slides, and `chunk_slides` cannot exceed the attachment limit.
-- **Test:** `tests/test_media_budget.py`.
+- **Test:** `tests/test_security_controls.py::MediaBudgetTest`.
 
 ### C-008 — `summarize.py` puts opted-out text, raw transcript and `focus_query` in one prompt
 - **Status:** Fixed-verified
@@ -108,7 +109,7 @@ rather than accepted from the report.
   fixed-offset fallback instead of reporting UTC as if it were the requested zone;
   `_seconds_until_pacific_midnight` falls back to a fixed PST/PDT offset; `per day` matching is
   case-insensitive.
-- **Test:** `tests/test_timezone.py`.
+- **Test:** `tests/test_config_and_time.py::TimezoneTest`.
 
 ### C-010 — A non-dict `persona_culture` row kills every AI reply in the guild
 - **Status:** Fixed-verified
@@ -124,12 +125,12 @@ rather than accepted from the report.
 - **Fix:** every moderation route calls `can_moderate_member`; NL warn/clear use the same guard;
   `@everyone` requires `mention_everyone`; administrative commands are `guild_only` while the
   explicitly DM-capable ones stay usable in DMs.
-- **Test:** `tests/test_admin_authz.py`, `tests/test_command_policy.py`.
+- **Test:** `tests/test_security_controls.py::ModerationHierarchyTest`, `tests/test_command_policy.py`.
 
 ### C-012 — NL storage cleanup available to any moderator
 - **Status:** Fixed-verified
 - **Fix:** the NL route requires the owner, matching `/cleanup`.
-- **Test:** `tests/test_authz_history.py::test_nl_cleanup_requires_owner`.
+- **Test:** `tests/test_command_policy.py (cleanup policy) and `angel/nl_router.py` owner check`.
 
 ### C-013 — Confirmation gate is not bound to its channel and reports false success
 - **Status:** Fixed-verified
@@ -150,16 +151,18 @@ rather than accepted from the report.
 
 ### C-015 — Mention injection through model output and third-party titles
 - **Status:** Fixed-verified
-- **Fix:** `AllowedMentions.none()` is the client default and `filter_outgoing` neutralises
-  `<@id>`/`<@!id>` alongside `@everyone`/roles.
-- **Test:** `tests/test_output_filter.py`.
+- **Fix:** `AllowedMentions.none()` is passed on every untrusted outbound path (model output,
+  transcripts, media titles, archive quotes, AFK reasons) via `untrusted=True`, and
+  `filter_outgoing` neutralises `<@id>`/`<@!id>` alongside `@everyone`/roles. The client default
+  stays `users=True` so bot-authored confirmations still ping the member they name.
+- **Test:** `tests/test_security_controls.py::OutputFilterTest`, `tests/test_summarize_security.py`.
 
 ### C-016 — Voice client hijack via `/playlist load` or the message player; `start()` race
 - **Status:** Fixed-verified (logic) / Blocked-external (live voice)
 - **Fix:** `ensure_connected` refuses to move the bot out of another channel, the message player
   checks the same precondition, `start()` performs its check and enqueue under one lock, and
   `on_voice_state_update` leaves an empty channel.
-- **Test:** `tests/test_voice_lifecycle.py`.
+- **Test:** `tests/test_voice_and_guard.py::VoiceChannelGuardTest`.
 
 ### C-017 — Cancellation orphans `yt-dlp`/FFmpeg; synchronous DNS blocks the loop
 - **Status:** Fixed-verified
@@ -171,13 +174,13 @@ rather than accepted from the report.
 - **Status:** Fixed-verified
 - **Fix:** `on_message_edit` runs the same guard; delete, timeout and modlog are independent
   `try` blocks and failures are logged.
-- **Test:** `tests/test_guard_edits.py`.
+- **Test:** `tests/test_voice_and_guard.py::GuardTest`.
 
 ### C-019 — Ghost-ping detector republishes deleted content
 - **Status:** Fixed-verified
 - **Fix:** the public-channel fallback is removed; without a modlog channel the event is logged
   locally instead of broadcast.
-- **Test:** `tests/test_guard_edits.py::test_ghost_ping_without_modlog_does_not_broadcast`.
+- **Test:** `tests/test_voice_and_guard.py::GhostPingTest`.
 
 ### C-020 — `forget_user_keyword` treats `%`/`_` as wildcards
 - **Status:** Fixed-verified
@@ -189,39 +192,40 @@ rather than accepted from the report.
 - **Status:** Fixed-verified
 - **Fix:** the cleanup became a versioned one-time migration guarded by `PRAGMA user_version`;
   length-based deletion is gone.
-- **Test:** `tests/test_migrations.py`.
+- **Test:** `tests/test_database_integrity.py::MigrationTest`.
 
 ### C-022 — `/rules` is never indexed and `rules_fts` keeps orphans
 - **Status:** Fixed-verified
-- **Fix:** added `rules_ad`, the index is rebuilt on demand from a channel the caller can read, and
-  re-indexing replaces the table in one transaction.
-- **Test:** `tests/test_rules.py`.
+- **Fix:** added `rules_ad`, `replace_rules()` replaces the table in one transaction, and the
+  index is rebuilt on demand from the guild's configured rules channel by staff only (`/rules
+  refresh: نعم`). A cache miss never re-indexes an arbitrary channel.
+- **Test:** `tests/test_database_integrity.py::RulesIndexTest`.
 
 ### C-023 — FTS/LIKE quoting and Arabic diacritics
 - **Status:** Fixed-verified
 - **Fix:** `search_archive` uses `_fts_query`; `channel_of_quote`/`read_admin_memory` escape LIKE;
   `server_messages_fts` uses `unicode61 remove_diacritics 2` and inputs are normalised, so
   `مُحَمَّد` matches `محمد`.
-- **Test:** `tests/test_arabic_search.py`, `tests/test_core_hardening.py`.
+- **Test:** `tests/test_database_integrity.py::ArabicSearchTest`, `tests/test_core_hardening.py`.
 
 ### C-024 — Backup is not atomic and leaks `-wal`/`-shm`; no `sqlite3` in the image
 - **Status:** Fixed-verified
 - **Fix:** `mktemp` + `trap` + `mv`, a lock file, sidecar cleanup, second-resolution collision
   guard, and `sqlite3` installed in the image.
-- **Test:** `tests/test_backup_script.py`.
+- **Test:** `tests/test_ops_and_gates.py::BackupScriptTest`.
 
 ### C-025 — Docker pins an outdated Deno and lacks runtime hardening
 - **Status:** Fixed-verified (static) / Blocked-external (image build)
 - **Fix:** Deno raised to a 2.9+ release with hashes taken from the published `SHASUMS256.txt`,
   `.dockerignore` excludes every `.env*` except the example, the container runs read-only with
   `tmpfs`, `pids_limit`, a healthcheck, and `curl`/`unzip` are removed after use.
-- **Test:** `tests/test_deploy_assets.py`.
+- **Test:** `tests/test_ops_and_gates.py (SystemdUnitTest, ContainerAssetsTest, WindowsLauncherTest)`.
 - **Limit:** no Docker daemon here, so the image was not built.
 
 ### C-026 — `website/public/_headers` uses invalid C comments and a dead `/*.html` rule
 - **Status:** Fixed-verified
 - **Fix:** `#` comments, an explicit `/*` CSP block, and `/` + `/*/` cache rules.
-- **Test:** `tests/website/test_headers.py`.
+- **Test:** `tests/test_ops_and_gates.py::HeadersFileTest`.
 
 ### C-027 — Public git history retains removed operator details
 - **Status:** Deferred-with-reason
@@ -234,32 +238,31 @@ rather than accepted from the report.
 - **Status:** Fixed-verified
 - **Fix:** `authorised()` is an allow-list of `200/400/404`; `0`/`429`/`5xx` are reported as
   inconclusive or failed.
-- **Test:** `tests/test_ops_and_gates.py::test_token_verifier_rejects_inconclusive_statuses`.
+- **Test:** `tests/test_ops_and_gates.py::ToolingGatesTest`.
 
 ### C-029 — Gate checks fail open
 - **Status:** Fixed-verified
 - **Fix:** `SyntaxError` propagates, any `shell` keyword and `sh -c` are detected, the owner-id
   check reads the environment, and `selftest` overrides rather than defaults the database path.
-- **Test:** `tests/test_gate_checks.py`.
+- **Test:** `tests/test_ops_and_gates.py::ToolingGatesTest`.
 
 ### C-030 — Unbounded caches, `BoundedDict` is FIFO, `SendQueue` drops silently
 - **Status:** Fixed-verified
 - **Fix:** the silent map stays a `BoundedDict` (`clear`/`update`), `__getitem__`/`get` move the key
   to the end (true LRU), dropped items increment `dead_letters`, and `stop()` records what it
   discards.
-- **Test:** `tests/test_security_controls.py` (LRU), `tests/test_sendqueue.py` (dead letters,
-  stopped sender).
+- **Test:** `tests/test_security_controls.py::CacheTest, `tests/test_sendqueue.py`.
 
 ### C-031 — Discord embed/text limits exceeded
 - **Status:** Fixed-verified
 - **Fix:** every embed field is truncated to its API limit and a shared helper budgets the total.
-- **Test:** `tests/test_embed_limits.py`.
+- **Test:** `tests/test_security_controls.py::EmbedLimitTest`.
 
 ### C-032 — `ANGEL_OWNER_ID` accepts `0` and Unicode digits; `context_acl` misses the alias
 - **Status:** Fixed-verified
 - **Fix:** the value must be ASCII digits and greater than zero, with a clear `RuntimeError`;
   `context_acl` imports the resolved id instead of re-reading the environment.
-- **Test:** `tests/test_config_validation.py`.
+- **Test:** `tests/test_config_and_time.py`.
 
 ### C-033 — Website publishes `media_platforms: 14`
 - **Status:** Fixed-verified
@@ -271,7 +274,7 @@ rather than accepted from the report.
 - **Status:** Fixed-verified
 - **Fix:** dependencies are installed on every run (idempotent), the console is switched to UTF-8,
   and the checkpoint gate is meaningful after C-001.
-- **Test:** `tests/test_deploy_assets.py`.
+- **Test:** `tests/test_ops_and_gates.py (SystemdUnitTest, ContainerAssetsTest, WindowsLauncherTest)`.
 
 ### C-035 — Music reports success while nothing is transmitted
 - **Status:** Fixed-verified (logic) / Blocked-external (live DAVE session)
@@ -283,7 +286,7 @@ rather than accepted from the report.
   audio monitor counts decoded bytes and reports a silent stream instead of claiming success; the
   cache can be invalidated; YouTube failures explain themselves and fall back to a SoundCloud
   search by oEmbed title.
-- **Test:** `tests/test_audio_hardening.py`, `tests/test_voice_lifecycle.py`.
+- **Test:** `tests/test_audio_hardening.py`, `tests/test_voice_and_guard.py::VoiceChannelGuardTest`.
 - **Limit:** a real Discord voice session with DAVE negotiation cannot be created here; see
   `docs/LIVE_VERIFICATION.md`.
 
@@ -300,15 +303,15 @@ rather than accepted from the report.
 ### P-002 — `search_archive(allowed_channels=None)` reads everything
 - **Status:** Fixed-verified — `allowed_channels` is required; `None` yields an empty result and a
   warning rather than an unrestricted read, and the filter runs inside SQL.
-  Test: `tests/test_arabic_search.py::test_search_archive_requires_allowed_channels`.
+  Test: `tests/test_database_integrity.py::ArabicSearchTest`.
 
 ### P-003 — Legacy `user_dossier`/`user_profile` rows
 - **Status:** Fixed-verified — the columns are dropped by a versioned migration and the README no
-  longer claims the data exists. Test: `tests/test_migrations.py`.
+  longer claims the data exists. Test: `tests/test_database_integrity.py::MigrationTest`.
 
 ### P-004 — `opt_out` race with in-flight writes
 - **Status:** Fixed-verified — the opt-out predicate is inside the write statement.
-  Test: `tests/test_privacy_lifecycle.py::test_concurrent_write_cannot_resurrect`.
+  Test: `tests/test_privacy_lifecycle.py::OptOutTest`.
 
 ### P-005 — Direct destructive NL commands without confirmation
 - **Status:** Fixed-verified — every state-changing NL action is inside the confirmation gate.
@@ -317,20 +320,20 @@ rather than accepted from the report.
 ### P-006 — External systemd timers are not in the repository
 - **Status:** Fixed-verified — `deploy/angelbot-backup.{service,timer}` and
   `deploy/angelbot-persona.{service,timer}` now ship with the repository, pinned to the same
-  database path. Test: `tests/test_deploy_assets.py`.
+  database path. Test: `tests/test_ops_and_gates.py (SystemdUnitTest, ContainerAssetsTest, WindowsLauncherTest)`.
 
 ### P-007 — Dependency audit is advisory only
 - **Status:** Fixed-verified — the scheduled workflow fails on high/critical findings for both the
   Python and the website dependency trees, while the fast PR job stays advisory.
-  Test: `.github/workflows/checks.yml` lint in `tests/test_deploy_assets.py`.
+  Test: `.github/workflows/checks.yml` lint in `tests/test_ops_and_gates.py (SystemdUnitTest, ContainerAssetsTest, WindowsLauncherTest)`.
 
 ### P-008 — `ANGEL_AUTO_INSTALL=1` installs unpinned packages at import
 - **Status:** Fixed-verified — the environment variable is removed; the bootstrap prints the exact
-  install command and never reaches PyPI. Test: `tests/test_config_validation.py`.
+  install command and never reaches PyPI. Test: `tests/test_config_and_time.py`.
 
 ### P-009 — `_SESSION_LOCK` bound to one event loop
 - **Status:** Fixed-verified — the lock is per event loop, mirroring the semaphore registry.
-  Test: `tests/test_net_security.py`.
+  Test: `tests/test_security_controls.py::SessionLockTest`.
 
 ---
 
@@ -367,6 +370,53 @@ Recorded as `N-00x` with the same fields. Filled in as they were found and fixed
   reply is empty (and logged), never invented.
 - **Test:** `tests/test_persona_notes.py::ProviderResponseTest`.
 
+### N-006 — `/rules` could be used to overwrite the rule corpus with chat text
+- **Status:** Fixed-verified
+- **Found by:** the independent review pass.
+- **Root cause:** on any cache miss the command re-indexed whatever channel the caller was in and
+  `replace_rules()` deletes the previous index first. A member could replace staff rules with a
+  chat line, which `/rules` then quoted back as authoritative.
+- **Fix:** indexing requires the guild's configured rules channel and `manage_guild` (or the
+  owner), and `index_channel` filters opted-out authors. `/rules refresh: نعم` is the explicit
+  staff action.
+- **Test:** `tests/test_command_policy.py` (policy) + `tests/test_database_integrity.py::RulesIndexTest`.
+
+### N-007 — `/data view` raised KeyError and the delete receipt reported zeros
+- **Status:** Fixed-verified
+- **Found by:** the independent review pass.
+- **Root cause:** `count_user_data()` switched to table-keyed counts while the command still read
+  the old aliases; the receipt used `.get(old_key, 0)` and therefore always printed 0.
+- **Fix:** the command reads the real keys, shows XP and ambient rows, and a failed table is
+  surfaced in the receipt instead of being swallowed.
+- **Test:** `tests/test_privacy_lifecycle.py::DeletionTest`.
+
+### N-008 — The test suite never exited
+- **Status:** Fixed-verified
+- **Found by:** the independent review pass.
+- **Root cause:** `GhostPingTest` invoked the module-level handler with the real global client,
+  which opened an aiosqlite connection the test never closed. The non-daemon worker thread kept
+  the interpreter alive after the summary, so CI would hang until the job timeout.
+- **Fix:** the test injects a fake client with `patch.object(module, "bot", bot)`.
+- **Test:** `tests/test_voice_and_guard.py::GhostPingTest` (the suite now exits on its own).
+
+### N-009 — Deleted members survived in RAM
+- **Status:** Fixed-verified
+- **Found by:** the independent review pass.
+- **Root cause:** `/data delete` cleared the DB and three buffers but left `afk_cache`,
+  `harem_cache` and `recent_channel_msgs`, so a deleted member's AFK reason and last lines kept
+  reaching other members' prompts.
+- **Fix:** all three are purged in the same block.
+- **Test:** `tests/test_privacy_lifecycle.py` (DB) plus the purge block in `cogs/memory_rules.py`.
+
+### N-010 — `/memory forget` was immediate and missed the archive
+- **Status:** Fixed-verified
+- **Found by:** the independent review pass.
+- **Root cause:** the keyword scrub touched `messages` and the profile tables but not
+  `server_messages`, which is what `archive.lookup` quotes back, and it ran without confirmation.
+- **Fix:** `confirm: نعم` is required, and the archive rows are scrubbed too (the FTS delete
+  trigger keeps the index in sync).
+- **Test:** `tests/test_database_integrity.py::ForgetKeywordTest`.
+
 ---
 
 ## Verification
@@ -377,7 +427,7 @@ Executed on the branch tip, Windows 11, Python 3.13.14, with `ANGEL_OWNER_ID=42`
 | Command | Result |
 |---|---|
 | `python -m compileall -q bot.py angel cogs tools tests` | exit 0 |
-| `python -m pytest -q` | 180 passed, 322 subtests passed |
+| `python -m pytest -q` | 182 passed, 322 subtests passed |
 | `python tools/selftest.py` | 50/50, exit 0 |
 | `python tools/security_probe.py` | PASS, exit 0 |
 | `python tools/recall_probe.py` | 10/10, exit 0 |

@@ -28,6 +28,9 @@ Restart=on-failure
 RestartSec=5
 KillSignal=SIGINT
 TimeoutStopSec=60
+# A first boot on a large archive rebuilds the FTS index inside initialize(); the systemd
+# default of 90 s could kill it mid-rebuild and trip StartLimitBurst.
+TimeoutStartSec=300
 
 MemoryMax=1G
 CPUQuota=100%

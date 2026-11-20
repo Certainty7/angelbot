@@ -474,6 +474,9 @@ class MusicEngine:
           dave.get("ver"), self._listener_count(voice),
       )
       state.current = None
+      # Put the track back instead of consuming it: a queue must not be eaten one track at a
+      # time by a condition that will still be true for the next one.
+      state.tracks.appendleft(track)
       await self._notify(
           guild,
           "🔇 القناة الصوتية مشفّرة (E2EE) وجلسة التشفير لم تجهز، "

@@ -27,27 +27,33 @@ import urllib.request
 MODEL = "gemini-4-hydrogen"
 FALLBACK = "gemini-3.5-flash-lite"
 SAMPLE = 300
-ALLOWED_CHANNEL_TYPES = frozenset({"text", "news", "public_thread"})
 
 
 def env(key: str, default: str = "") -> str:
     value = (os.environ.get(key) or "").strip()
     if value:
         return value
-    env_file = pathlib.Path(__file__).resolve().parent.parent / ".env"
+    root = pathlib.Path(__file__).resolve().parent.parent
     try:
-        for line in env_file.read_text(encoding="utf-8").splitlines():
+        for raw in (root / ".env").read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if line.startswith("export "):
+                line = line[len("export "):].strip()
             if line.startswith(f"{key}="):
-                return line.split("=", 1)[1].strip()
+                value = line.split("=", 1)[1].strip()
+                if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+                    value = value[1:-1]
+                return value
     except OSError:
         pass
     return default
 
 
 def database_path() -> str:
-    """ANGEL_DB_PATH, resolved exactly like the bot does."""
-    root = pathlib.Path(__file__).resolve().parent.parent
-    return (env("ANGEL_DB_PATH") or str(root / "chat_history.db")).strip()
+    """ANGEL_DB_PATH, resolved with the same rules as angel.config."""
+    import dbpath  # tools/ is on sys.path when a tool runs from the repository root
+
+    return dbpath.resolve()
 
 
 def ask(model: str, api_key: str, prompt: str) -> str:
@@ -83,23 +89,19 @@ PROMPT = """اقرأ رسائل أعضاء هذا السيرفر واستخرج 
 
 
 def _pick_channel(db) -> sqlite3.Row | None:
-    """The configured channel, or the busiest one, with opted-out members excluded."""
+    """The channel named by ANGEL_PERSONA_CHANNEL_ID.
+
+    There is no safe automatic choice: the archive records no channel type, so "the busiest
+    channel" can be a staff room or a ticket. Refusing is the only defensible default.
+    """
     pinned = env("ANGEL_PERSONA_CHANNEL_ID")
-    if pinned.isdigit():
-        row = db.execute(
-            "SELECT guild_id, channel_id, COUNT(*) n FROM server_messages "
-            "WHERE channel_id = ? GROUP BY guild_id, channel_id",
-            (int(pinned),),
-        ).fetchone()
-        if row:
-            return row
-    rows = db.execute(
+    if not pinned.isdigit():
+        return None
+    return db.execute(
         "SELECT guild_id, channel_id, COUNT(*) n FROM server_messages "
-        "WHERE created_at > datetime('now','-30 days') "
-        "AND user_id NOT IN (SELECT user_id FROM user_preferences WHERE opt_out = 1) "
-        "GROUP BY guild_id, channel_id ORDER BY n DESC LIMIT 25"
-    ).fetchall()
-    return rows[0] if rows else None
+        "WHERE channel_id = ? GROUP BY guild_id, channel_id",
+        (int(pinned),),
+    ).fetchone()
 
 
 def main() -> int:
@@ -116,8 +118,11 @@ def main() -> int:
 
     top = _pick_channel(db)
     if not top:
-        print("no history yet")
-        return 1
+        print(
+            "refusing to learn: set ANGEL_PERSONA_CHANNEL_ID to a public channel id. "
+            "The archive has no channel type, so the tool will not guess."
+        )
+        return 2
 
     rows = db.execute(
         "SELECT display_name, content FROM server_messages "

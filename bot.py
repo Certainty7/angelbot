@@ -145,12 +145,13 @@ async def on_message_delete(message: discord.Message):
 async def on_message_edit(before: discord.Message, after: discord.Message):
   if not before.guild or before.author.bot or before.content == after.content:
     return
+  # The guard runs before the opt-out return: opting out stops storage, not moderation. An
+  # opted-out member could otherwise edit a clean line into an invite link unpunished.
+  await _run_angel_guard(bot, after)
   if await _is_opted_out_fail_closed(bot, before.author.id):
     return
   if is_mistress(before.author):
     return
-  # An edit is a new message as far as the guard is concerned.
-  await _run_angel_guard(bot, after)
   bot.editsnipe_cache[before.channel.id] = {
       "author_name": before.author.display_name,
       "author_avatar": before.author.display_avatar.url,
@@ -407,6 +408,7 @@ async def on_message(message: discord.Message):
         await safe_reply(
             message,
             f"💤 **{mentioned.display_name}** غائب حالياً — **السبب:** {reason}",
+            untrusted=True,
         )
 
   # 3. Sticky Message Handler

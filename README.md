@@ -126,7 +126,7 @@ python tools/selftest.py
 The gate should end with `50/50 checks passed`. It imports every module, builds a temporary
 database, checks the schema and the FTS triggers, exercises the memory and archive paths, counts
 the registered commands and runs the output-filter cases. It does not contact Discord or a model
-provider. The full test story is: `pytest -q` (158 tests plus 322 subtests), `tools/selftest.py`
+provider. The full test story is: `pytest -q` (182 tests plus 322 subtests), `tools/selftest.py`
 (50/50), the security and recall probes, and the website suite (67 Playwright tests).
 
 ### Run
@@ -295,7 +295,7 @@ journalctl -u angelbot -n 30 --no-pager
 | Tool | Purpose |
 |---|---|
 | `tools/selftest.py` | 50 offline checks: imports, schema, FTS triggers, memory, archive scope, command census, output filter and deploy readiness. |
-| `pytest -q` | 158 unit/regression tests plus 322 subtests (security, cache, media, AI, database, deployment and documentation paths). |
+| `pytest -q` | 182 unit/regression tests plus 322 subtests (security, cache, media, AI, database, deployment and documentation paths). |
 | `tools/security_probe.py` | Confirms that injection attempts are stopped by authorization. |
 | `tools/recall_probe.py` | Runs 10 representative recall questions against a temporary database. |
 | `tools/gate_checks.py` | Static checks used by the gate, including the no-shell subprocess rule. |

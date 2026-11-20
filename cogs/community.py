@@ -62,9 +62,13 @@ class Community(commands.Cog):
   @app_commands.guild_only()
   @app_commands.describe(reason="سبب الغياب")
   async def afk_cmd(self, interaction: discord.Interaction, reason: str = "مشغول حالياً"):
+    # The reason is member-authored and echoed later by the bot: cap it and never let it ping.
+    reason = (reason or "مشغول حالياً").strip()[:120]
     self.bot.afk_cache[(interaction.guild.id, interaction.user.id)] = (
         reason, datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
-    await _safe_interaction_reply(interaction, f"💤 تم تفعيل وضع الغياب: **{reason}**", ephemeral=False)
+    await _safe_interaction_reply(
+        interaction, f"💤 تم تفعيل وضع الغياب: **{reason}**", ephemeral=False, untrusted=True
+    )
     await self.bot.db.set_afk(interaction.guild.id, interaction.user.id, reason)
 
 
