@@ -12,3 +12,6 @@ aiosqlite==0.22.1
 Pillow==13.0.0
 python-dotenv==1.2.4
 imageio-ffmpeg==0.8.1
+# IANA time zone data: without it ZoneInfo cannot resolve ANGEL_TIMEZONE on Windows or in a
+# slim container, and every time-based feature silently runs on the wrong clock.
+tzdata==2025.2

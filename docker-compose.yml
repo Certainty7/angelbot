@@ -12,10 +12,16 @@ services:
       - PYTHONUNBUFFERED=1
     volumes:
       - angel_data:/app/data
+    # The image ships code and dependencies; the runtime filesystem stays read-only and
+    # only the named volume plus a small /tmp are writable.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    pids_limit: 256
     mem_limit: 1g
     cpus: 1.0
     logging:
