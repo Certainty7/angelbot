@@ -1,0 +1,21 @@
+[Unit]
+Description=AngelBot persona culture refresh (weekly, read-only over the archive)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=angel
+Group=angel
+WorkingDirectory=/opt/angelbot
+EnvironmentFile=/opt/angelbot/.env
+Environment=ANGEL_DB_PATH=/opt/angelbot/data/angel.db
+UMask=0077
+# Writes persona_culture, so it needs the same data directory as the bot.
+ReadWritePaths=/opt/angelbot/data
+ExecStart=/opt/angelbot/venv/bin/python /opt/angelbot/tools/evolve_persona.py
+Nice=15
+IOSchedulingClass=idle
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true

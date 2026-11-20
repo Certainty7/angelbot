@@ -2,6 +2,9 @@
 Description=Angel Discord Bot (Hardened Production 24/7 Service)
 After=network-online.target
 Wants=network-online.target
+# Five failed starts in two minutes stops the loop instead of hammering SQLite and journald.
+StartLimitIntervalSec=120
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -10,15 +13,21 @@ Group=angel
 WorkingDirectory=/opt/angelbot
 EnvironmentFile=/opt/angelbot/.env
 Environment=PYTHONUNBUFFERED=1
+# ProtectSystem=strict makes everything except ReadWritePaths read-only, so the default
+# database location (<repo>/chat_history.db) is not writable. A .env that sets
+# ANGEL_DB_PATH still wins, because EnvironmentFile is applied after Environment=.
+Environment=ANGEL_DB_PATH=/opt/angelbot/data/angel.db
+UMask=0077
 
 ExecStartPre=/opt/angelbot/venv/bin/python /opt/angelbot/bot.py --checkpoint-db
 ExecStartPre=/opt/angelbot/venv/bin/python /opt/angelbot/tools/selftest.py
 
 ExecStart=/opt/angelbot/venv/bin/python /opt/angelbot/bot.py
-Restart=always
+# on-failure, not always: a clean SIGTERM during a deploy must not look like a crash.
+Restart=on-failure
 RestartSec=5
 KillSignal=SIGINT
-TimeoutStopSec=20
+TimeoutStopSec=60
 
 MemoryMax=1G
 CPUQuota=100%
@@ -30,6 +39,8 @@ ProtectHome=true
 ReadWritePaths=/opt/angelbot/data
 RestrictSUIDSGID=true
 LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
 
 [Install]
 WantedBy=multi-user.target
