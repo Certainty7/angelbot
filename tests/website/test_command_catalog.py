@@ -163,8 +163,26 @@ class CatalogueTest(unittest.TestCase):
         self.assertEqual(facts["license"], "MIT")
         self.assertTrue(facts["license_url"].endswith("/LICENSE"))
         self.assertEqual(facts["repository"], "https://github.com/Certainty7/angelbot")
-        platforms = len(list((REPO / "tests" / "fixtures" / "gallery").glob("*.case.json")))
+        platforms = len(
+            {
+                "instagram"
+                for p in (REPO / "tests" / "fixtures" / "gallery").glob("ig_*.case.json")
+            }
+            | {
+                "tiktok"
+                for p in (REPO / "tests" / "fixtures" / "gallery").glob("tiktok_*.case.json")
+            }
+            | {
+                "x"
+                for p in (REPO / "tests" / "fixtures" / "gallery").glob("x_*.case.json")
+            }
+            | {
+                "reddit"
+                for p in (REPO / "tests" / "fixtures" / "gallery").glob("reddit_*.case.json")
+            }
+        )
         self.assertEqual(facts["media_platforms"], platforms)
+        self.assertEqual(facts["media_platforms"], 4)
         self.assertIn("version", facts["latest_release"])
 
     def test_changelog_is_bilingual_and_release_based(self):

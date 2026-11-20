@@ -26,6 +26,9 @@ _MASS = re.compile(r"@(everyone|here)\b", re.IGNORECASE)
 # A model can emit a role mention directly; neutralise it even if the API layer also
 # disables role pings.
 _ROLE_MENTION = re.compile(r"<@&\d+>")
+# User mentions are the same class of hazard: `<@123>` in model output or a video title
+# pings a real member under the bot's identity (C-015).
+_USER_MENTION = re.compile(r"<@!?\d+>")
 
 _SECRETS = (
     # Discord bot token: id.timestamp.hmac
@@ -85,6 +88,11 @@ def filter_outgoing(text: str, action_status: str = "none") -> str:
   if replaced != out:
     out = replaced
     reasons.append("role-mention")
+
+  replaced = _USER_MENTION.sub("@user", out)
+  if replaced != out:
+    out = replaced
+    reasons.append("user-mention")
 
   for pattern in _SECRETS:
     replaced = pattern.sub("[محجوب]", out)

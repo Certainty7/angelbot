@@ -26,7 +26,7 @@ from typing import Deque, Dict, List, Optional
 
 import discord
 
-from .audio_source import resolve_best
+from .audio_source import invalidate_cache, resolve_best
 from .config import FFMPEG_EXE, logger
 from .net import validate_extracted_stream_url
 
@@ -37,8 +37,40 @@ FFMPEG_BEFORE = (
     "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 "
     "-protocol_whitelist https,http,tcp,tls,crypto"
 )
-FFMPEG_OPTIONS = {"before_options": FFMPEG_BEFORE, "options": "-vn"}
 QUEUE_MAX = 200
+
+
+def _ffmpeg_quote(value: str) -> str:
+  """Quote one FFmpeg argv token (FFmpeg has its own parser, not the shell)."""
+  return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _before_options(track: "Track") -> str:
+  """Reconnect + the extractor's UA/Referer, never cookies.
+
+  SoundCloud's CDN answers 403 to FFmpeg's default UA while accepting yt-dlp's;
+  passing the safe header subset is the difference between "playing" and silence.
+  """
+  parts = [FFMPEG_BEFORE, "-nostdin", "-rw_timeout 15000000"]
+  raw = dict(getattr(track, "http_headers", None) or {})
+  ua = ""
+  for key in list(raw):
+    if key.lower() == "user-agent":
+      ua = raw.pop(key)
+      break
+  # Never forward cookies/authorization even if a future caller sets them.
+  headers = {
+      k: v for k, v in raw.items()
+      if k.lower() in {"referer", "origin", "accept-language"} and v
+  }
+  if ua:
+    parts.append(f"-user_agent {_ffmpeg_quote(str(ua))}")
+  if headers:
+    lines = [f"{k}: {v}" for k, v in headers.items()]
+    if lines:
+      crlf = chr(13) + chr(10)
+      parts.append(f"-headers {_ffmpeg_quote(crlf.join(lines) + crlf)}")
+  return " ".join(parts)
 
 # How long to wait for the DAVE (E2EE) session to become ready before starting anyway.
 DAVE_WAIT_S = 8.0
@@ -46,6 +78,14 @@ DAVE_WAIT_S = 8.0
 AUDIO_WATCH_S = 6.0
 # 48 kHz, stereo, s16 -- what FFmpegPCMAudio produces, so a stalled decoder is obvious.
 PCM_BYTES_PER_SECOND = 48000 * 2 * 2
+
+
+class VoiceBusyError(RuntimeError):
+  """The bot already streams in another voice channel of this guild."""
+
+  def __init__(self, channel):
+    self.channel = channel
+    super().__init__(f"already connected to {getattr(channel, 'name', channel)}")
 
 
 class _CountingSource(discord.AudioSource):
@@ -93,6 +133,10 @@ class Track:
   duration: float = 0.0
   webpage_url: str = ""
   source: str = ""
+  # Original /play text, so a stalled signed URL can be invalidated and re-resolved.
+  query: str = ""
+  # yt-dlp's browser-like UA/Referer, safe subset only (no cookies/authorization).
+  http_headers: Dict[str, str] = field(default_factory=dict)
 
   @property
   def duration_text(self) -> str:
@@ -181,13 +225,18 @@ class MusicEngine:
 
   # ---- connection --------------------------------------------------------
   async def ensure_connected(self, channel: discord.VoiceChannel) -> discord.VoiceClient:
-    """Join (or move to) the member's voice channel using public API only."""
+    """Join the member's voice channel, never silently moving out of another one.
+
+    `/play` refuses when the bot is busy elsewhere, but `/playlist load` and the
+    message-based player reached this method directly and dragged the bot away from
+    listeners in another room (C-016).
+    """
     self._loop = asyncio.get_running_loop()
     async with self._guild_lock(channel.guild.id):
       voice = channel.guild.voice_client
       if voice is not None and voice.is_connected():
         if voice.channel and voice.channel.id != channel.id:
-          await voice.move_to(channel, timeout=20.0)
+          raise VoiceBusyError(voice.channel)
         return voice
       if voice is not None:
         try:
@@ -208,6 +257,8 @@ class MusicEngine:
         duration=info["duration"],
         webpage_url=info["webpage_url"],
         source=info.get("source", ""),
+        query=query,
+        http_headers=info.get("http_headers") or {},
     )
     self.state(channel.guild.id).add(track)
     return track
@@ -219,6 +270,22 @@ class MusicEngine:
     channel = getattr(voice, "channel", None)
     members = getattr(channel, "members", None) or []
     return max(0, len(members) - 1) if members else 0
+
+  async def _notify(self, guild: discord.Guild, text: str) -> None:
+    """Best-effort user-facing status; never let a missing channel break playback."""
+    channel_id = self.state(guild.id).text_channel_id
+    if not channel_id:
+      return
+    channel = self.bot.get_channel(channel_id)
+    if channel is None:
+      try:
+        channel = await self.bot.fetch_channel(channel_id)
+      except Exception:
+        return
+    try:
+      await channel.send(text)
+    except Exception:
+      return
 
   async def _wait_for_dave(self, voice: discord.VoiceClient, timeout: float = DAVE_WAIT_S) -> Dict[str, object]:
     """Wait for the MLS session to be ready; never wait longer than `timeout`."""
@@ -268,6 +335,39 @@ class MusicEngine:
               f"music-audio WARNING decoder delivered {decoded // 1024}KB in {AUDIO_WATCH_S:.0f}s "
               f"(expected ~{expected // 1024}KB) -- the stream is stalled, not silent-but-playing"
           )
+        # Two failure modes look identical to the user ("playing" but silent):
+        # FFmpeg produced no bytes at all, or DAVE drops the plaintext frames.
+        # Stop the lie, tell the channel, and let `after` advance.
+        if decoded < expected // 10 and self.state(guild.id).current is track:
+          logger.warning("music-audio stalled: decoded=%s bytes; stopping the silent track", decoded)
+          # A cached signed URL may have expired; force a fresh extraction next time.
+          if track.query:
+            invalidate_cache(track.query)
+          await self._notify(
+              guild,
+              "⚠️ تعذّر فك الصوت من المصدر (FFmpeg لم يُخرج صوتاً). "
+              "أعدت تعيين رابط الصوت — أعيدي `/play` وسأستخرج رابطاً جديداً.",
+          )
+          try:
+            if voice.is_playing():
+              voice.stop()
+          except Exception:
+            pass
+        elif state["ver"] and not state["can_encrypt"] and self._listener_count(voice) > 0 \
+                and self.state(guild.id).current is track:
+          logger.warning(
+              "music-audio dave silent: ver=%s can_encrypt=False listeners=%s; stopping",
+              state["ver"], self._listener_count(voice),
+          )
+          await self._notify(
+              guild,
+              "🔇 القناة مشفّرة (E2EE) والإطارات تُسقط قبل السماع. أوقفت التشغيل الصامت.",
+          )
+          try:
+            if voice.is_playing():
+              voice.stop()
+          except Exception:
+            pass
       except Exception as exc:  # noqa: BLE001 - a diagnostic must never break playback
         logger.debug(f"music-audio watch failed: {type(exc).__name__}: {exc}")
 
@@ -279,14 +379,30 @@ class MusicEngine:
 
   # ---- playback ----------------------------------------------------------
   def _make_source(self, track: Track, volume: float):
-    pcm = discord.FFmpegPCMAudio(track.stream_url, executable=FFMPEG_EXE, **FFMPEG_OPTIONS)
+    pcm = discord.FFmpegPCMAudio(
+        track.stream_url,
+        executable=FFMPEG_EXE,
+        before_options=_before_options(track),
+        options="-vn",
+    )
     counted = _CountingSource(pcm)
     return discord.PCMVolumeTransformer(counted, volume=max(0.0, min(2.0, volume))), counted
 
-  def _schedule_advance(self, guild: discord.Guild, delay: float = 0.4) -> None:
+  def _schedule_advance(self, guild: discord.Guild, delay: float = 0.4,
+                        only_if_idle: bool = False) -> None:
+    """Schedule the next queue advance on the loop thread.
+
+    `only_if_idle` is for retries of a *blocked* playback attempt: if another `/play`
+    already started a track while we waited, this retry is stale and must not dequeue
+    anything — the old shape popped track after track, each `play()` failing with
+    "Already playing audio" until the queue was consumed.
+    """
     async def runner() -> None:
       await asyncio.sleep(delay)
-      await self.play_next(guild)
+      if only_if_idle:
+        await self._advance_if_idle(guild)
+      else:
+        await self.play_next(guild)
 
     try:
       fut = asyncio.run_coroutine_threadsafe(runner(), self._current_loop())
@@ -302,6 +418,20 @@ class MusicEngine:
       fut.add_done_callback(_done)
     except RuntimeError:  # loop already closed during shutdown -- nothing to advance
       pass
+
+  async def _advance_if_idle(self, guild: discord.Guild) -> None:
+    """Advance only when playback never started: under one lock hold, the blocked
+    attempt still owns the queue (no current track, nothing playing), and the
+    advance itself runs under the same hold so nothing can start between the
+    check and the dequeue."""
+    async with self._guild_lock(guild.id):
+      voice = guild.voice_client
+      state = self.state(guild.id)
+      if (voice is not None and (voice.is_playing() or voice.is_paused())) \
+              or state.current is not None:
+        logger.info("music-advance skipped: playback is already active")
+        return
+      await self._play_next_locked(guild)
 
   async def _recover_dave(self, guild: discord.Guild, voice: discord.VoiceClient) -> discord.VoiceClient:
     """One clean reconnect when an encrypted channel left the MLS session unusable."""
@@ -349,12 +479,38 @@ class MusicEngine:
       self._schedule_advance(guild)
 
     try:
-      dave = self.last_dave[guild.id] = await self._wait_for_dave(voice)
+      dave = await self._wait_for_dave(voice)
       if dave.get("ver") and not dave.get("can_encrypt"):
         voice = await self._recover_dave(guild, voice)
+        # Re-read the new client: the reconnect may have fixed the MLS state or not.
+        dave = dave_state(voice)
+      self.last_dave[guild.id] = dave
     except Exception as exc:  # noqa: BLE001 - a diagnostic must never block playback
       logger.debug(f"music-dave probe failed: {type(exc).__name__}: {exc}")
       self.last_dave[guild.id] = {}
+      dave = {}
+
+    # A DAVE channel drops plaintext frames: is_playing() stays True and the
+    # result is total silence. Never announce a track we know cannot be heard.
+    if dave.get("ver") and not dave.get("can_encrypt") and self._listener_count(voice) > 0:
+      logger.warning(
+          "music-dave blocked playback: ver=%s can_encrypt=False listeners=%s; "
+          "not sending silent frames",
+          dave.get("ver"), self._listener_count(voice),
+      )
+      state.current = None
+      # Put the track back instead of consuming it: a queue must not be eaten one track at a
+      # time by a condition that will still be true for the next one.
+      state.tracks.appendleft(track)
+      await self._notify(
+          guild,
+          "🔇 القناة الصوتية مشفّرة (E2EE) وجلسة التشفير لم تجهز، "
+          "لذلك لن أشغّل شيئاً بلا صوت. جرّبي مرة أخرى بعد ثانية، أو أعيدي البوت للقناة.",
+      )
+      # The retry is bound to this blocked attempt: if another /play starts a track
+      # inside the delay, the stale retry must return without dequeuing anything.
+      self._schedule_advance(guild, delay=1.0, only_if_idle=True)
+      return None
 
     try:
       await validate_extracted_stream_url(track.stream_url)
@@ -387,11 +543,15 @@ class MusicEngine:
     return track
 
   async def start(self, guild: discord.Guild) -> Optional[Track]:
+    # Check and start under the same lock: releasing it between is_playing()
+    # and play_next() let two concurrent /play calls consume two tracks and
+    # raise "Already playing audio".
+    self._loop = asyncio.get_running_loop()
     async with self._guild_lock(guild.id):
       voice = guild.voice_client
       if voice is not None and voice.is_playing():
         return self.state(guild.id).current
-    return await self.play_next(guild)
+      return await self._play_next_locked(guild)
 
   async def skip(self, guild: discord.Guild) -> Optional[Track]:
     async with self._guild_lock(guild.id):

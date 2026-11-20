@@ -1,5 +1,120 @@
 # Changelog
 
+## 1.0.5 — 2026-11-20
+
+Recovery and security-hardening pass against an independent 35-finding audit, plus everything
+found while fixing it. Every claim below is backed by a test in the test suite.
+
+### Boot and deployment
+
+- `--checkpoint-db` no longer fails on a fresh install: a missing database is a "nothing to
+  checkpoint" success, while `--verify-db` still fails. systemd, Docker and the Windows launcher
+  can boot an empty host again.
+- The systemd unit sets `ANGEL_DB_PATH`, bounds restarts (`StartLimitBurst`), stops on failure and
+  waits 60 s for a clean shutdown. Backup and persona timers now ship in `deploy/`.
+- Docker: Deno 2.9.8 with published hashes, `sqlite3` for the backup script, read-only root
+  filesystem with `tmpfs`, `pids_limit` and a healthcheck; `.env.*` is excluded from the build.
+- The Windows launcher reconciles dependencies on every run, refreshes `.venv` after a partial
+  failure and switches the console to UTF-8. CLI output no longer crashes on a legacy code page.
+- `tzdata` is pinned. A non-UTC `ANGEL_TIMEZONE` without it now fails loudly instead of silently
+  running on UTC.
+
+### Security and authorization
+
+- Every registered command declares a policy in the authorization inventory (scope, `guild_only`,
+  permission, intent); a test fails when the tree and the inventory disagree.
+- Natural-language actions share the slash-command guards: channel summaries require
+  `Read Message History`, storage cleanup is owner-only, and nickname changes respect the role
+  hierarchy.
+- The confirmation gate is bound to the originating channel, reports the real execution result,
+  covers every state-changing action, and no longer treats `نفذ`/`لا` as triggers.
+- `/announce` needs `mention_everyone` to ping everyone; administrative commands are guild-only.
+- `AllowedMentions` and the output filter neutralise `<@id>` mentions from model output, media
+  titles and archive quotes.
+- AI quota gaps closed: `/translate`, `/rules`, `/summarize_channel` and the NL summary all
+  consume the user and guild quotas; image generation skips cooling/dead models.
+- `/rules` can only rebuild its index from the configured rules channel, and only staff can ask
+  for it: a cache miss no longer rewrites the server's rules from whatever channel the caller is
+  standing in.
+
+### Privacy and data
+
+- `/data delete` erases every per-member table, including ambient lines, AFK state, harem
+  membership, XP and the derived persona culture; the count it reports matches the deletion set,
+  and a schema-driven test fails when a new member table is added without a policy.
+- Opt-out is enforced inside SQL, so a reply in flight cannot re-create a deleted member. DMs are
+  covered too.
+- The summariser filters opted-out members before the prompt and wraps the transcript in an
+  untrusted block. The persona-refresh tool resolves the configured database, filters opt-out,
+  sends the key in a header and validates the payload.
+- `forget_user_keyword` treats `%` and `_` literally. `initialize()` no longer rewrites user data
+  on every boot: legacy clean-up runs once behind `PRAGMA user_version`.
+- `/data view` reports every stored category again, the deletion receipt names any table that
+  failed instead of printing a clean success, and `/memory forget` asks for confirmation and also
+  scrubs the archive it would otherwise quote back.
+
+### Reliability
+
+- The daily budget breaker fails closed when its database handle is missing, clamps
+  `STOP_RATIO` to `(0, 1]`, and reserves estimated cost under a lock so concurrent calls cannot
+  pass the same check.
+- Cancelled extractions kill and reap yt-dlp and FFmpeg; DNS validation runs off the event loop.
+- Media jobs share one download semaphore and a 50 MB per-job byte budget.
+- The anti-spam guard runs on message edits; a failed delete no longer cancels the timeout or the
+  modlog entry; the ghost-ping detector no longer republishes deleted text.
+- The voice engine refuses to move out of another channel, leaves an empty channel, and still
+  refuses to announce playback it cannot encrypt.
+- The archive search requires an explicit channel allow-list and folds Arabic diacritics; the rules
+  index gains a delete trigger and an atomic replace.
+
+### Tooling and documentation
+
+- The Cloudflare token verifier no longer reports transport errors, 429 or 5xx as PASS.
+- Gate checks fail closed: a `SyntaxError` propagates, any `shell` keyword and `sh -c` are
+  detected, and the owner-id check reads the environment.
+- The website headers file is valid Cloudflare syntax and the site reports four media platforms,
+  not fourteen.
+- New: `AGENTS.md`, `KNOWN_ISSUES.md`, `docs/DATA_MODEL.md`, `docs/LIVE_VERIFICATION.md` and the
+  `docs/recovery/` ledger, state and decision record.
+
+### Final review round (PR #9 remediation)
+
+- The daily budget is now reserved per provider attempt, not per fallback chain, and each
+  attempt's recorded usage releases its reservation inside one lock: a thought-only response
+  that still spent tokens can no longer admit unlimited paid retries past the ceiling.
+- An image-only or GIF-only model reply is delivered instead of silently dropped; a reply with
+  neither text nor media stays silent instead of inventing a fallback line.
+- `/rep`, `/afk` and the background summariser enforce opt-out in SQL, so they cannot re-create
+  rows for a member who erased their data — including the summary that started before the
+  deletion and committed after it.
+- The in-RAM ambient buffer stores `(author id, text)` and deletion filters on the id; legacy
+  unattributed lines are dropped rather than kept in other members' prompts.
+- Media downloads claim against one shared per-job byte budget *before* buffering each chunk,
+  across Instagram, TikTok and X including repair and retry passes: peak retained RAM is
+  bounded during the parallel download, not filtered after it.
+- A pending `[EXEC]` confirmation re-resolves the confirmer's current membership (one REST
+  fetch, message payload as fallback) and re-checks permission and role hierarchy before the
+  mutation: a staff member who lost the role inside the 60-second window can no longer
+  execute the queued action.
+- Channel-summary cooldown is checked and claimed before user and guild quota; a refused
+  request consumes nothing, and the claim is rolled back when a quota gate rejects.
+- A DAVE-blocked playback retry is cancelled if another `/play` started a track while it
+  waited; the old retry dequeued track after track until the queue was consumed.
+- `/announce` checks effective permissions in the selected channel (overwrites honoured) and
+  verifies the bot can actually send there.
+- `انسي كلمة …` in chat now queues for an explicit `تأكيد` in the same channel, exactly like
+  `/memory forget`, instead of deleting archive rows immediately.
+- The message-cap constant is shared by every retention path: the 30-minute cleanup no longer
+  deletes rows 51–60 per member nor removes short summaries the policy keeps.
+- `/data view` names any table that could not be counted instead of showing a shorter list.
+- History tools create `user_preferences` before their guarded inserts, never hide a failed
+  insert, and leave a failed page unmarked so a rerun retries it without duplicating rows.
+- `/warnings` respects Discord's aggregate embed size; administrative commands carry
+  guild-only `contexts`, not just `guild_only`; the Docker healthcheck requires `quick_check`
+  to answer `ok`, not merely exit 0; the weekly npm audit runs in its own workflow job; the
+  documented timer install provisions the backup directory (service owner, mode 0700) before
+  enabling the unit, because `ReadWritePaths` does not create the directory itself.
+
 ## 1.0.4 — 2026-11-19
 
 Privacy and public-repository hygiene pass.

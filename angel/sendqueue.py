@@ -101,13 +101,18 @@ class Sender:
         try:
             worker.queue.put_nowait(job)
         except asyncio.QueueFull:
-            # Bounded: drop the oldest queued message for this channel, keep the newest.
+            # Bounded: drop the oldest queued message for this channel, keep the newest,
+            # but keep the dropped job for the operator instead of losing it silently.
             try:
-                worker.queue.get_nowait()
+                dropped = worker.queue.get_nowait()
                 worker.queue.task_done()
+                self.dead_letters.append(dropped)
             except Exception:
                 pass
-            worker.queue.put_nowait(job)
+            try:
+                worker.queue.put_nowait(job)
+            except asyncio.QueueFull:
+                self.dead_letters.append(job)
 
     def _evict_oldest_if_full(self):
         if len(self._workers) < self.max_channels:

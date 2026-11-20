@@ -44,7 +44,7 @@ class Productivity(commands.Cog):
     if not message:
       await interaction.response.send_message("⚠️ اكتبي نص الرسالة في خانة `message`.", ephemeral=True)
       return
-    embed = discord.Embed(description=f"📌 **{message}**", color=0x2B2D31)
+    embed = discord.Embed(description=f"📌 **{message}**"[:4096], color=0x2B2D31)
     sent = await interaction.channel.send(embed=embed)
     await self.bot.db.set_sticky(cid, interaction.guild.id, message, sent.id)
     self.bot.stickies_cache[cid] = {"channel_id": cid, "guild_id": interaction.guild.id, "content": message, "last_message_id": sent.id}

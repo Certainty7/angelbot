@@ -1,0 +1,22 @@
+[Unit]
+Description=AngelBot verified SQLite backup
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=angel
+Group=angel
+WorkingDirectory=/opt/angelbot
+EnvironmentFile=/opt/angelbot/.env
+Environment=ANGEL_DB_PATH=/opt/angelbot/data/angel.db
+Environment=ANGEL_BACKUP_DIR=/opt/angelbot/backups
+UMask=0077
+# The backup directory is writable by this unit, and by nothing else on the host.
+ReadWritePaths=/opt/angelbot/data /opt/angelbot/backups
+ExecStart=/opt/angelbot/scripts/backup_db.sh
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true

@@ -1,8 +1,9 @@
 """Text helpers shared by bot.py and the cogs.
 
-`split_message` and `clean_social_url` are pure and never touch the client.
+`split_message`, `plan_reply_delivery` and `clean_social_url` are pure and never touch
+the client.
 """
-from typing import List
+from typing import List, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 TIKTOK_TRACKING_PARAMS = {"is_from_webapp", "sender_device", "web_id", "lang", "u_code", "preview_pb"}
@@ -29,6 +30,25 @@ def split_message(text: str, max_len: int = 1950) -> List[str]:
     chunks.append(text[:idx])
     text = text[idx:].lstrip("\n")
   return [chunk for chunk in chunks if chunk.strip()]
+
+
+def plan_reply_delivery(
+    reply: str, gif_bytes: Optional[bytes], gif_url: Optional[str], img_bytes: Optional[bytes]
+):
+  """How a model reply reaches Discord, or None when nothing should be sent.
+
+  An image-only or GIF-only reply (`[GENERATE_IMAGE: ...]` with no prose) is a valid
+  outcome: the media is delivered without text. A reply with neither visible text nor
+  deliverable media stays silent instead of inventing a fallback line.
+  Returns (first_chunk, rest_chunks, has_files, use_gif_url).
+  """
+  text = (reply or "").strip()
+  has_files = bool(img_bytes or gif_bytes)
+  use_gif_url = bool(gif_url and not gif_bytes)
+  if not (text or has_files or use_gif_url):
+    return None
+  chunks = split_message(text) if text else []
+  return (chunks[0] if chunks else None, chunks[1:], has_files, use_gif_url)
 
 
 def clean_social_url(url: str) -> str:

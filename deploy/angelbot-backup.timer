@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly AngelBot SQLite backup
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+RandomizedDelaySec=600
+Persistent=true
+Unit=angelbot-backup.service
+
+[Install]
+WantedBy=timers.target

@@ -119,12 +119,12 @@ async def read_bounded_subprocess_stdout(
     )
     try:
       stdout_data, _stderr = await asyncio.gather(stdout_task, stderr_task)
-    except Exception:
+    except BaseException:
+      # CancelledError inherits BaseException: the old `except Exception` left yt-dlp
+      # running after the caller was cancelled (C-017).
       for task in (stdout_task, stderr_task):
         if not task.done():
           task.cancel()
-      proc.kill()
-      await proc.wait()
       raise
     await proc.wait()
     return stdout_data
@@ -132,9 +132,19 @@ async def read_bounded_subprocess_stdout(
   try:
     return await asyncio.wait_for(_drain(), timeout=timeout)
   except asyncio.TimeoutError:
-    proc.kill()
-    await proc.wait()
     raise
+  finally:
+    # One reap path for timeout, cancellation and overflow.
+    if proc.returncode is None:
+      try:
+        proc.kill()
+      except ProcessLookupError:
+        pass
+      # Do not await inside a cancelled task: hand the reap to the loop.
+      try:
+        asyncio.get_running_loop().create_task(proc.wait())
+      except RuntimeError:
+        pass
 
 
 async def run_ytdlp_json(
@@ -158,6 +168,16 @@ async def run_ytdlp_json(
       out = await read_bounded_subprocess_stdout(proc, timeout=timeout)
     except (asyncio.TimeoutError, ValueError):
       return None
+    finally:
+      if proc.returncode is None:
+        try:
+          proc.kill()
+        except ProcessLookupError:
+          pass
+        try:
+          asyncio.get_running_loop().create_task(proc.wait())
+        except RuntimeError:
+          pass
   if proc.returncode != 0:
     return None
   try:

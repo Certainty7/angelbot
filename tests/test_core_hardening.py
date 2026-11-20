@@ -70,13 +70,15 @@ class TestGuildQuota(unittest.TestCase):
                 await db.initialize()
                 unique = "zzdeletetoken"
                 await db.log_server_message(7, 8, 42, "member", f"hello {unique}")
-                hits = await db.search_archive([unique], limit=5)
+                hits = await db.search_archive([unique], limit=5, allowed_channels={8})
                 self.assertTrue(hits, "message should be archived before deletion")
+                # An archive search without a channel allow-list is refused, never global (P-002).
+                self.assertEqual(await db.search_archive([unique], limit=5), [])
                 await db.delete_all_user_data(42)
-                hits_after = await db.search_archive([unique], limit=5)
+                hits_after = await db.search_archive([unique], limit=5, allowed_channels={8})
                 self.assertFalse(hits_after, "FTS must not recall a deleted member")
                 counts = await db.count_user_data(42)
-                self.assertEqual(counts["archived_messages"], 0)
+                self.assertEqual(counts["server_messages"], 0)
                 self.assertTrue((await db.get_user_prefs(42)).get("opt_out"))
             finally:
                 await db.close()

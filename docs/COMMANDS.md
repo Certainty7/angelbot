@@ -52,9 +52,9 @@ Eleven commands also refuse everyone but the owner at runtime: `/sync`, `/diagno
 | `/budget` |  | none |
 | `/clear_history` |  | none |
 | `/data` | [action], [confirm] | none (self-service) |
-| `/memory` | [action], [text], [style] | none |
+| `/memory` | [action], [text], [style], [confirm] | none |
 | `/mood` | <value> | none |
-| `/rules` | <question> | none |
+| `/rules` | <question>, [refresh] | none (`refresh` is `manage_guild`) |
 
 ## Chat (4)
 

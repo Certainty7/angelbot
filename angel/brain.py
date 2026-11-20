@@ -49,10 +49,16 @@ def _looks_like_raster_image(data: bytes) -> bool:
 
 def _seconds_until_pacific_midnight() -> float:
   """Free-tier RPD resets at midnight Pacific; cooling past that is cheaper than hourly retries."""
-  from datetime import datetime, timedelta
-  from zoneinfo import ZoneInfo
+  from datetime import datetime, timedelta, timezone
 
-  now = datetime.now(ZoneInfo("America/Los_Angeles"))
+  try:
+    from zoneinfo import ZoneInfo
+
+    now = datetime.now(ZoneInfo("America/Los_Angeles"))
+  except Exception:
+    # No tzdata on the host: a fixed PST offset is off by one hour across DST, which only
+    # means one extra hourly probe. Raising here dropped the reply on the first daily 429.
+    now = datetime.now(timezone(timedelta(hours=-8)))
   tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
   return max(60.0, (tomorrow - now).total_seconds())
 
@@ -73,6 +79,9 @@ class AngelBrainService:
     self.db = None  # injected by bot.py for USD accounting/breaker
     self._dead_models: Set[str] = set()
     self._rotation_lock = asyncio.Lock()
+    # Estimated cost of calls that are in flight but not yet recorded (C-003).
+    self._inflight_usd = 0.0
+    self._budget_lock = asyncio.Lock()
 
   def _get_endpoint(self, model_name: str) -> str:
     clean_model = model_name.replace("models/", "").strip()
@@ -95,8 +104,53 @@ class AngelBrainService:
         self._key_index = (self._key_index + 1) % len(self._keys)
         logger.warning("gemini key rotated -> slot %d of %d", self._key_index + 1, len(self._keys))
 
+  async def _reserve_budget(self, user: Any = None) -> bool:
+    """Claim `ESTIMATED_CALL_USD` before spending. False means the ceiling is reached.
+
+    The pre-check-only design let N concurrent calls all read the same `day_cost` and all
+    proceed. Reserving under a lock makes the sum of in-flight calls part of the check.
+    """
+    if cost.DAILY_LIMIT_USD <= 0:
+      return True
+    async with self._budget_lock:
+      spent = await self.db.day_cost(cost.local_day()) if self.db is not None else 0.0
+      if spent + self._inflight_usd + cost.ESTIMATED_CALL_USD <= cost.stop_at():
+        self._inflight_usd += cost.ESTIMATED_CALL_USD
+        return True
+    if is_mistress(user):
+      logger.warning(
+          "cost-guard owner_override=1 spent=%.4f reserved=%.4f stop_at=%.4f",
+          spent, self._inflight_usd, cost.stop_at(),
+      )
+      async with self._budget_lock:
+        self._inflight_usd += cost.ESTIMATED_CALL_USD
+      return True
+    return False
+
+  async def _release_budget(self) -> None:
+    async with self._budget_lock:
+      self._inflight_usd = max(0.0, self._inflight_usd - cost.ESTIMATED_CALL_USD)
+
+  async def _settle_usage(self, in_tok: int, out_tok: int, usd: float) -> None:
+    """Record one attempt's spend and release its reservation in one critical section.
+
+    Settling in two steps let a concurrent admission read `day_cost` after the usage row
+    existed but before the reservation was released, counting the same call twice and
+    refusing calls that still fit the ceiling.
+    """
+    async with self._budget_lock:
+      if self.db is not None:
+        await self.db.add_usage(cost.local_day(), in_tok, out_tok, usd)
+      self._inflight_usd = max(0.0, self._inflight_usd - cost.ESTIMATED_CALL_USD)
+
   async def _post_with_retry(self, payload: dict, high_priority: bool = False,
                              cmd: str = "chat", user: Any = None) -> str:
+    # The reservation is claimed per provider attempt inside _post_models: one chain must
+    # not buy an unlimited number of paid calls with a single estimate slot (C-003).
+    return await self._post_models(payload, high_priority=high_priority, cmd=cmd, user=user)
+
+  async def _post_models(self, payload: dict, high_priority: bool = False,
+                         cmd: str = "chat", user: Any = None) -> str:
     timeout = aiohttp.ClientTimeout(total=18)
     # A user-facing reply must never wait through five slow fallbacks: bound the whole
     # attempt chain, not just each request.
@@ -126,16 +180,22 @@ class AngelBrainService:
             "generationConfig": {**_gen, "thinkingConfig": {"thinkingBudget": 0}},
         }
       for attempt in range(1, self.max_retries_per_model + 1):
-        if await self.budget_blocked(user):
+        # `budget_blocked` keeps the historical semantics for a disabled cap
+        # (stop_at=inf, owner override); `_reserve_budget` then does the concurrent
+        # admission against spent + in-flight under the lock (C-003).
+        if await self.budget_blocked(user) or not await self._reserve_budget(user):
           logger.info("ai-guard reason=budget")
           if self.db is not None:
             await self.db.add_usage(cost.local_day(), 0, 0, 0.0, blocked=True)
           raise cost.BudgetExhausted("وصل البوت للحد اليومي للميزانية — وضع الاستماع.")
-        stamp = await self.quota_guard.pace_global_rpm(high_priority)
-        t0 = time.monotonic()
-        # Rebuild headers every attempt so a rotated GEMINI_API_KEY_2 actually takes effect.
-        headers = {"x-goog-api-key": self._active_key(), "Content-Type": "application/json"}
+        settled = False
+        # The reservation is held from here: the whole attempt body, including the
+        # pacing await, must sit inside the try so cancellation releases the estimate.
         try:
+          stamp = await self.quota_guard.pace_global_rpm(high_priority)
+          t0 = time.monotonic()
+          # Rebuild headers every attempt so a rotated GEMINI_API_KEY_2 actually takes effect.
+          headers = {"x-goog-api-key": self._active_key(), "Content-Type": "application/json"}
           session = await get_shared_http_session()
           async with session.post(endpoint, headers=headers, json=payload_for_model, timeout=timeout) as response:
               if response.status == 200:
@@ -157,10 +217,18 @@ class AngelBrainService:
                 in_tok = int(usage.get("promptTokenCount") or 0)
                 out_tok = int(usage.get("candidatesTokenCount") or 0)
                 usd = cost.cost_of(in_tok, out_tok)
-                if self.db is not None:
-                  await self.db.add_usage(cost.local_day(), in_tok, out_tok, usd)
+                # The settle releases this attempt's reservation too, so a fallback
+                # attempt re-reserves against the ceiling including what was just spent.
+                await self._settle_usage(in_tok, out_tok, usd)
+                settled = True
                 logger.info("ai-reply ms=%s model=%s usd=%.6f cmd=%s user=%s in=%s out=%s",
                             elapsed_ms, model_name, usd, cmd, _user_tag(user), in_tok, out_tok)
+                if not visible_text:
+                  # A thought-only or empty answer is not an answer: fail over to the next
+                  # model instead of returning "" (which the caller turned into "تم.").
+                  logger.info("ai-empty model=%s no visible text; trying the next model", model_name)
+                  self._cool(model_name, 30.0)
+                  break
                 return visible_text
 
               body_text = await response.text()
@@ -224,6 +292,12 @@ class AngelBrainService:
             await asyncio.sleep(self.base_delay * attempt)
           else:
             break
+        finally:
+          # Exactly-once release: `_settle_usage` clears the reservation for a settled
+          # attempt; every other outcome (error status, exception, cancellation)
+          # returns the estimate here so the ceiling is never double-held.
+          if not settled:
+            await self._release_budget()
 
     raise AIServiceError("أنا منشغلة حالياً، خاطبني بعد لحظات.")
 
@@ -233,9 +307,12 @@ class AngelBrainService:
     The owner is never locked out of her own bot. A call made by the owner
     keeps working past the ceiling; every other caller is refused as before. The
     override is logged so the overspend is visible instead of silent.
+
+    A missing database handle fails closed: an unreadable breaker must not become an
+    unlimited budget (C-003). The only exception is an operator who disabled the cap.
     """
     if self.db is None:
-      return False
+      return cost.DAILY_LIMIT_USD > 0
     if (await self.db.day_cost(cost.local_day())) < cost.stop_at():
       return False
     if is_mistress(user):
@@ -391,6 +468,18 @@ class AngelBrainService:
 
   async def generate_image_bytes(self, prompt: str, style_Preset: str = "anime",
                                  user: Any = None) -> Tuple[bytes, str]:
+    """One image call, reserved against the daily ceiling like a text call (C-003).
+
+    The reservation is per image-model attempt inside `_generate_image_bytes_locked`,
+    mirroring the text chain: a failing image model must not keep the estimate slot
+    of a successful one.
+    """
+    if await self.budget_blocked(user):
+      raise cost.BudgetExhausted("وصل البوت للحد اليومي للميزانية — وضع الاستماع.")
+    return await self._generate_image_bytes_locked(prompt, style_Preset, user)
+
+  async def _generate_image_bytes_locked(self, prompt: str, style_Preset: str = "anime",
+                                         user: Any = None) -> Tuple[bytes, str]:
     if await self.budget_blocked(user):
       raise cost.BudgetExhausted("وصل البوت للحد اليومي للميزانية — وضع الاستماع.")
     english_prompt = prompt
@@ -428,6 +517,9 @@ class AngelBrainService:
     for img_model in IMAGE_GEN_MODELS:
       if await self.budget_blocked(user):
         raise cost.BudgetExhausted("وصل البوت للحد اليومي للميزانية — وضع الاستماع.")
+      if not await self._reserve_budget(user):
+        raise cost.BudgetExhausted("وصل البوت للحد اليومي للميزانية — وضع الاستماع.")
+      settled = False
       endpoint = self._get_endpoint(img_model)
       headers = {"x-goog-api-key": self._active_key(), "Content-Type": "application/json"}
       payload = {
@@ -446,10 +538,10 @@ class AngelBrainService:
                   usage = data.get("usageMetadata") or {}
                   in_tok = int(usage.get("promptTokenCount") or 0)
                   out_tok = int(usage.get("candidatesTokenCount") or 0)
-                  if self.db is not None:
-                    await self.db.add_usage(
-                        cost.local_day(), in_tok, out_tok, cost.cost_of(in_tok, out_tok)
-                    )
+                  await self._settle_usage(
+                      in_tok, out_tok, cost.cost_of(in_tok, out_tok)
+                  )
+                  settled = True
                   self.quota_guard.model_usage_stats[img_model] += 1
                   return base64.b64decode(inline["data"]), english_prompt
           if resp.status == 404:
@@ -461,6 +553,9 @@ class AngelBrainService:
             continue
       except Exception:
         continue
+      finally:
+        if not settled:
+          await self._release_budget()
 
     seed = random.randint(1000, 9999999)
     encoded = urllib.parse.quote(full_prompt[:700], safe="")

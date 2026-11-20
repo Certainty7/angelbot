@@ -8,14 +8,15 @@ Builds the client, registers the cogs and starts the gateway. The reusable parts
 import angel.config  # noqa: F401
 from angel.config import DB_PATH, DISCORD_TOKEN, GEMINI_API_KEY, MISTRESS_INT_ID, SOVEREIGN_TOOLS_ENABLED, TEXT_VISION_MODELS, is_mistress, is_server_staff, logger, safe_reply
 from angel.interactions import _safe_interaction_reply
-from angel.text import clean_social_url, split_message
+from angel.text import clean_social_url, plan_reply_delivery
 from angel.client import AngelDiscordBot
-from angel.net import close_shared_http_session
+from angel.net import close_shared_http_session, get_media_download_semaphore
 from angel.persona import normalize_arabic_text
 from angel.quota import QuotaGuard
 from angel.database import BotDatabase
 from angel.media import SOCIAL_URL_REGEX, chunk_slides, perform_storage_cleanup, process_social_media_url_multi
 from angel.audio_source import ResolveError, parse_play_request
+from angel.voice_engine import VoiceBusyError
 from angel.images import extract_message_media
 from angel.brain import AI_ERRORS, AngelBrainService
 from angel import guard, memory
@@ -132,22 +133,22 @@ async def on_message_delete(message: discord.Message):
     if modlog_ch_id:
       await bot.send_modlog(message.guild, "👻 كاشف المنشن الخفي", ghost_desc[:4096])
     else:
-      embed = discord.Embed(
-          title="👻 كاشف المنشن الخفي",
-          description=ghost_desc,
-          color=0x2B2D31,
-          timestamp=datetime.now(timezone.utc),
+      # Without a private log channel the deleted text stays deleted: re-posting it in the
+      # public channel defeated the deletion (C-019).
+      logger.info(
+          "ghost-ping detected in guild=%s channel=%s author=%s (no modlog configured)",
+          message.guild.id, message.channel.id, message.author.id,
       )
-      try:
-        await message.channel.send(embed=embed)
-      except Exception:
-        pass
 
 
 @bot.event
 async def on_message_edit(before: discord.Message, after: discord.Message):
   if not before.guild or before.author.bot or before.content == after.content:
     return
+  # The guard runs before the opt-out return: opting out stops storage, not moderation. An
+  # opted-out member could otherwise edit a clean line into an invite link unpunished. The
+  # edit call keeps link inspection but does not feed the flood counter.
+  await _run_angel_guard(bot, after, is_edit=True)
   if await _is_opted_out_fail_closed(bot, before.author.id):
     return
   if is_mistress(before.author):
@@ -198,9 +199,9 @@ async def on_app_command_error(
 FOLLOWUP_WINDOW_S = float(os.getenv("FOLLOWUP_WINDOW_S", "90"))
 SOCIAL_DEDUPE_WINDOW_S = float(os.getenv("SOCIAL_DEDUPE_WINDOW_S", "600"))
 
-# Two link jobs at a time: each one can hold up to 10 slides of 10 MB in RAM, and the unit
-# bounded by the process memory cap. The dedupe window only stops the same URL twice.
-_SOCIAL_SEMAPHORE = asyncio.Semaphore(2)
+# Two link jobs at a time, shared with `/fix` via angel.net.get_media_download_semaphore(): a
+# private semaphore here plus the one in cogs/media_tools.py allowed four concurrent jobs, each
+# holding a full carousel in RAM. The byte budget lives in angel.media.MAX_JOB_BYTES.
 
 
 def tidy_caption(text: str, limit: int = 280) -> str:
@@ -226,6 +227,57 @@ WAKE_WORD_REGEX = re.compile(r"(?:^|\s)(?:يا\s*)?(?:انجل|أنجل|إنجل
 SUSPICIOUS_LINK_REGEX = re.compile(r"(?:discord\.gg/|discordapp\.com/invite/|free-nitro|steamcommunnity)", re.IGNORECASE)
 
 
+async def _run_angel_guard(bot, message: discord.Message, is_edit: bool = False) -> None:
+    """Anti-spam / anti-scam check shared by new messages and edits (C-018).
+
+    Editing a clean line into an invite link was a complete bypass of the guard. Delete,
+    timeout and modlog are also independent: a failed delete (no Manage Messages) must not
+    cancel the timeout or the log entry.
+
+    Edits still get link/scam inspection, but only new messages feed the flood counter:
+    one message plus five edits was six entries and a five-minute timeout.
+    """
+    if not message.guild or not isinstance(message.author, discord.Member):
+        return
+    if is_server_staff(message.author, message.guild):
+        return
+    gmode = bot.guard_modes_cache.get(message.guild.id, "off")
+    if gmode not in ("active", "dry_run"):
+        return
+    now_t = time.monotonic()
+    is_flood = False
+    if not is_edit:
+        user_times = bot.spam_tracker[(message.guild.id, message.author.id)]
+        user_times.append(now_t)
+        is_flood = len(user_times) >= 6 and (now_t - user_times[0]) < 5.0
+    content = message.content or ""
+    is_sus_link = bool(SUSPICIOUS_LINK_REGEX.search(content)) or guard.is_suspicious_arabic_scam(content)
+    if not (is_flood or is_sus_link):
+        return
+    reason_ar = "إغراق رسائل سريع (Spam Flood)" if is_flood else "رابط دعوة/رابط مشبوه"
+    if gmode == "dry_run":
+        await bot.send_modlog(
+            message.guild,
+            "🧪 تنبيه الحماية (وضع تجريبي Dry-Run)",
+            f"**العضو:** {message.author.mention}\n**السبب المرصود:** {reason_ar}\n**القناة:** {message.channel.mention}",
+        )
+        return
+    if is_sus_link:
+        try:
+            await message.delete()
+        except Exception as exc:  # noqa: BLE001 - missing Manage Messages must not stop the timeout
+            logger.warning("guard delete failed: %s: %s", type(exc).__name__, exc)
+    try:
+        await message.author.timeout(timedelta(minutes=5), reason=f"Angel Guard: {reason_ar}")
+    except Exception as exc:  # noqa: BLE001 - missing Moderate Members is reported, not hidden
+        logger.warning("guard timeout failed: %s: %s", type(exc).__name__, exc)
+    await bot.send_modlog(
+        message.guild,
+        "🛡️ تدخل الحماية التلقائي (Angel Guard)",
+        f"**العضو:** {message.author.mention}\n**الإجراء:** كتم 5 دقائق\n**السبب:** {reason_ar}",
+    )
+
+
 async def _play_from_message(message: discord.Message, query: str) -> None:
   """Music shortcut: play `query` in the author's voice room, or explain why not."""
   cog = bot.get_cog("Music")
@@ -237,10 +289,18 @@ async def _play_from_message(message: discord.Message, query: str) -> None:
   if not isinstance(channel, discord.VoiceChannel):
     await safe_reply(message, "🎧 ادخل روم صوتي أولاً وأنا أشغّلها لك.")
     return
+  voice = message.guild.voice_client if message.guild else None
+  if voice is not None and voice.is_connected() and voice.channel and voice.channel.id != channel.id:
+    await safe_reply(message, f"🎧 أنجل مشغّلة في {voice.channel.mention} الآن. انضم لنفس الروم أولاً.")
+    return
+  state = cog.engine.state(message.guild.id)
   try:
     async with message.channel.typing():
       await cog.engine.ensure_connected(channel)
       track = await cog.engine.enqueue(channel, query, message.author)
+  except VoiceBusyError as exc:
+    await safe_reply(message, f"🎧 أنجل مشغّلة في {exc.channel.mention} الآن. انضم لنفس الروم أولاً.")
+    return
   except ResolveError as exc:
     await safe_reply(message, f"⚠️ ما لقيت الصوت: `{str(exc)[:160]}`")
     return
@@ -248,13 +308,22 @@ async def _play_from_message(message: discord.Message, query: str) -> None:
     logger.warning(f"music-trigger join failed: {type(exc).__name__}: {exc}")
     await safe_reply(message, "⚠️ تعذر الدخول للروم الصوتي الآن.")
     return
+  # Set only after admission: a rejected request must not retarget the session's
+  # notification channel (the busy-channel rejection used to claim it first).
+  state.text_channel_id = message.channel.id
   playing = await cog.engine.start(message.guild)
   if playing is track:
     await safe_reply(
-        message, f"🎶 أشغّل الآن: **{track.title}** (`{track.duration_text}`) من `{track.source}`"
+        message,
+        f"🎶 أشغّل الآن: **{track.title[:180]}** (`{track.duration_text}`) من `{track.source}`",
+        untrusted=True,
     )
   else:
-    await safe_reply(message, f"➕ أضفتها للقائمة: **{track.title}** (`{track.duration_text}`)")
+    await safe_reply(
+        message,
+        f"➕ أضفتها للقائمة: **{track.title[:180]}** (`{track.duration_text}`)",
+        untrusted=True,
+    )
 
 
 @bot.event
@@ -268,9 +337,9 @@ async def on_message(message: discord.Message):
 
   # A member who ran `/data delete` keeps `opt_out = 1`; nothing below may store them again.
   # Any database error is treated as opt-out: leaking a private message is worse than silence.
-  _opted_out = False
-  if message.guild:
-    _opted_out = await _is_opted_out_fail_closed(bot, message.author.id)
+  # DMs are included: opt-out used to be evaluated only when `message.guild` existed, so a
+  # member who erased their data had their DMs mirrored again on the next message (C-006).
+  _opted_out = await _is_opted_out_fail_closed(bot, message.author.id)
 
   # 0.05 Durable server log: every human line is kept for learning (bounded to one year).
   # Runs before the music shortcut so a play request is not the one message class missing
@@ -320,34 +389,7 @@ async def on_message(message: discord.Message):
   # 0. Track Channel Activity for /pulse & Run Angel Guard
   if message.guild:
     bot.channel_activity_counter[message.guild.id][message.channel.id] += 1
-    if not is_server_staff(message.author, message.guild):
-      gmode = bot.guard_modes_cache.get(message.guild.id, "off")
-      if gmode in ("active", "dry_run"):
-        now_t = time.monotonic()
-        user_times = bot.spam_tracker[(message.guild.id, message.author.id)]
-        user_times.append(now_t)
-        is_flood = len(user_times) >= 6 and (now_t - user_times[0]) < 5.0
-        is_sus_link = bool(SUSPICIOUS_LINK_REGEX.search(message.content)) or guard.is_suspicious_arabic_scam(message.content)
-        if is_flood or is_sus_link:
-          reason_ar = "إغراق رسائل سريع (Spam Flood)" if is_flood else "رابط دعوة/رابط مشبوه"
-          if gmode == "dry_run":
-            await bot.send_modlog(
-                message.guild,
-                "🧪 تنبيه الحماية (وضع تجريبي Dry-Run)",
-                f"**العضو:** {message.author.mention}\n**السبب المرصود:** {reason_ar}\n**القناة:** {message.channel.mention}",
-            )
-          elif gmode == "active" and isinstance(message.author, discord.Member):
-            try:
-              if is_sus_link:
-                await message.delete()
-              await message.author.timeout(timedelta(minutes=5), reason=f"Angel Guard: {reason_ar}")
-              await bot.send_modlog(
-                  message.guild,
-                  "🛡️ تدخل الحماية التلقائي (Angel Guard)",
-                  f"**العضو:** {message.author.mention}\n**الإجراء:** كتم 5 دقائق\n**السبب:** {reason_ar}",
-              )
-            except Exception:
-              pass
+    await _run_angel_guard(bot, message)
 
   # 1. AFK auto-remove: an O(1) RAM check first, so non-AFK users cost no SQLite queries
   if message.guild:
@@ -374,6 +416,7 @@ async def on_message(message: discord.Message):
         await safe_reply(
             message,
             f"💤 **{mentioned.display_name}** غائب حالياً — **السبب:** {reason}",
+            untrusted=True,
         )
 
   # 3. Sticky Message Handler
@@ -391,7 +434,7 @@ async def on_message(message: discord.Message):
         except Exception:
           pass
       try:
-        emb = discord.Embed(description=f"📌 **{sticky_data['content']}**", color=0x2B2D31)
+        emb = discord.Embed(description=f"📌 **{sticky_data['content']}**"[:4096], color=0x2B2D31)
         new_sticky = await message.channel.send(embed=emb)
         sticky_data["last_message_id"] = new_sticky.id
         await bot.db.set_sticky(message.channel.id, message.guild.id, sticky_data["content"], new_sticky.id)
@@ -482,11 +525,11 @@ async def on_message(message: discord.Message):
               for index, batch in enumerate(chunk_slides(media_files)):
                 files = [discord.File(io.BytesIO(b), filename=fn) for b, fn in batch]
                 if index == 0:
-                  await safe_reply(msg_obj, content=caption or default_icon, files=files)
+                  await safe_reply(msg_obj, content=caption or default_icon, files=files, untrusted=True)
                 else:
                   await msg_obj.channel.send(files=files)
             elif fixed_url:
-              await safe_reply(msg_obj, content=fixed_url)
+              await safe_reply(msg_obj, content=fixed_url, untrusted=True)
         except Exception as s_err:
           logger.warning(
               "social outcome=error url=%s n=0 ms=%d class=%s notice=%s",
@@ -502,7 +545,7 @@ async def on_message(message: discord.Message):
             pass
 
     async def _run_social_bounded(msg_obj: discord.Message, urls_to_fix: List[str]):
-      async with _SOCIAL_SEMAPHORE:
+      async with get_media_download_semaphore():
         await _handle_social_links_bg(msg_obj, urls_to_fix)
 
     bg_social_t = asyncio.create_task(_run_social_bounded(message, social_urls))
@@ -517,10 +560,11 @@ async def on_message(message: discord.Message):
 
   # 6. Guild XP & Custom Text Auto-Triggers
   if message.guild:
+    # No XP for a member who erased their data: the row would be re-created immediately.
     now_mono = time.monotonic()
     xp_key = (message.guild.id, message.author.id)
     last_xp = bot.xp_cooldowns.get(xp_key)
-    if last_xp is None or now_mono - last_xp >= 45.0:
+    if not _opted_out and (last_xp is None or now_mono - last_xp >= 45.0):
       bot.xp_cooldowns[xp_key] = now_mono
       _, new_lvl, leveled_up = await bot.db.add_xp(
           message.guild.id, message.author.id, random.randint(15, 25)
@@ -578,11 +622,13 @@ async def on_message(message: discord.Message):
       ):
         in_followup_window = True
 
-  # Record message in O(1) RAM buffer for ambient context (eliminating slow channel.history REST calls)
+  # Record message in O(1) RAM buffer for ambient context (eliminating slow channel.history REST calls).
   if message.guild and message.content.strip() and not _opted_out:
     prev_ambient_list = list(bot.recent_channel_msgs[message.channel.id])
+    # Entries carry the author id: deletion filters on it. The old "name: text" format
+    # had no reliable author marker, so a deleted member's lines survived in prompts.
     bot.recent_channel_msgs[message.channel.id].append(
-        f"{message.author.display_name}: {message.content.strip()[:120]}"
+        (message.author.id, f"{message.author.display_name}: {message.content.strip()[:120]}")
     )
     if not message.author.bot and message.author.id != MISTRESS_INT_ID:
       bot.last_social_target[message.channel.id] = message.author.id
@@ -613,7 +659,10 @@ async def on_message(message: discord.Message):
     if not prompt and not media_items:
       return
 
-    ambient_context = "\n".join(prev_ambient_list[-8:]) if prev_ambient_list else None
+    ambient_context = "\n".join(
+        (entry[1] if isinstance(entry, tuple) else str(entry))
+        for entry in prev_ambient_list[-8:]
+    ) if prev_ambient_list else None
 
     async with message.channel.typing():
       try:
@@ -627,29 +676,33 @@ async def on_message(message: discord.Message):
 
         if message.guild:
           bot.active_chat_window[(message.channel.id, message.author.id)] = time.monotonic()
-          bot.recent_channel_msgs[message.channel.id].append(f"Angel: {reply[:120]}")
+          _angel_uid = bot.user.id if bot.user else 0
+          bot.recent_channel_msgs[message.channel.id].append((_angel_uid, f"Angel: {reply[:120]}"))
 
-        if is_dm and SOVEREIGN_TOOLS_ENABLED:
+        if is_dm and SOVEREIGN_TOOLS_ENABLED and not _opted_out:
           await bot.forward_dm_to_mistress(message, reply)
 
-        chunks = split_message(reply or "")
-        if not chunks or not (reply or "").strip():
+        # Media-only replies (an image or GIF with no prose) are delivered; a reply
+        # with neither text nor media stays silent instead of a fake fallback line.
+        delivery = plan_reply_delivery(reply, gif_bytes, gif_url, img_bytes)
+        if delivery is None:
           return
+        first_chunk, rest_chunks, has_files, use_gif_url = delivery
         files_to_send = []
-        if img_bytes:
-          files_to_send.append(discord.File(io.BytesIO(img_bytes), filename="angel_art.png"))
-        if gif_bytes:
-          files_to_send.append(discord.File(io.BytesIO(gif_bytes), filename="angel_reaction.gif"))
+        if has_files:
+          if img_bytes:
+            files_to_send.append(discord.File(io.BytesIO(img_bytes), filename="angel_art.png"))
+          if gif_bytes:
+            files_to_send.append(discord.File(io.BytesIO(gif_bytes), filename="angel_reaction.gif"))
 
-        first_chunk = chunks[0]
         gif_embed = None
-        if gif_url and not gif_bytes:
+        if use_gif_url:
           gif_embed = discord.Embed(color=0xD4AF37 if (is_mistress(message.author) or harem_t) else 0x2B2D31)
           gif_embed.set_image(url=gif_url)
 
-        await safe_reply(message, content=first_chunk, embed=gif_embed, files=files_to_send)
-        for chunk in chunks[1:]:
-          await message.channel.send(content=chunk)
+        await safe_reply(message, content=first_chunk, embed=gif_embed, files=files_to_send, untrusted=True)
+        for chunk in rest_chunks:
+          await message.channel.send(content=chunk, allowed_mentions=discord.AllowedMentions.none())
 
       except AI_ERRORS as err:
         await safe_reply(message, f"⚠️ {err}")
@@ -666,10 +719,29 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError):
   logger.warning(f"Prefix command notice: {error}")
 
 
+def _force_utf8_console() -> None:
+  """CLI output must never crash on a legacy Windows code page.
+
+  PowerShell 5.1 hands the child a cp1252 stdout; the checkpoint message contains an emoji
+  and raised UnicodeEncodeError, turning a successful gate into exit 1.
+  """
+  for stream in (sys.stdout, sys.stderr):
+    try:
+      stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+      pass
+
+
 def _run_sqlite_cli_utility(mode: str) -> int:
   import sqlite3
+  _force_utf8_console()
   print(f"=== AngelBot SQLite Database Utility ({mode}) ===")
   if not os.path.exists(DB_PATH):
+    if mode == "checkpoint":
+      # A pre-start gate must not demand the artifact the bot creates on its first
+      # setup_hook(). Failing here blocked systemd, Docker and the Windows launcher.
+      print(f"ℹ️ No database yet at '{DB_PATH}' — the first start creates it. Nothing to checkpoint.")
+      return 0
     print(f"⚠️ Database file '{DB_PATH}' not found in {os.getcwd()}.")
     return 1
   conn = sqlite3.connect(DB_PATH, timeout=15.0)
@@ -708,6 +780,7 @@ if __name__ == "__main__":
       finally:
         await bot.db.close()
         await close_shared_http_session()
+    _force_utf8_console()
     res = asyncio.run(_cli_cleanup())
     print(f"=== AngelBot Storage Cleanup Complete ===\n{res}", flush=True)
     sys.exit(0)

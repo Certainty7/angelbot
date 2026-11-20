@@ -140,10 +140,10 @@ TOUCH_COOLDOWN_SECONDS = 30.0
 
 
 async def touch(guild_id: int, user_id: int, display_name: str, text: str = "") -> None:
-  """Update the member index (who talks here, when, and about what).
+  """Update the member index (who talks here and when).
 
-  Throttled per user: on a busy server this keeps SQLite writes to a sane rate
-  instead of one upsert per message.
+  Topic text is no longer derived from messages: the README promises no behavioural
+  profile, and a keyword index of what someone talks about is exactly that (P-003).
   """
   if get_bot() is None:
     return
@@ -153,8 +153,7 @@ async def touch(guild_id: int, user_id: int, display_name: str, text: str = "") 
     return
   _last_touch[(guild_id, user_id)] = now
   try:
-    topic = ", ".join(keywords(text, 3))
-    await get_bot().db.touch_user_index(guild_id, user_id, display_name, topic)
+    await get_bot().db.touch_user_index(guild_id, user_id, display_name, "")
   except Exception:
     pass
 

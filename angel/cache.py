@@ -22,6 +22,16 @@ class BoundedDict(OrderedDict):
     while len(self) > self._maxsize:
       self.popitem(last=False)
 
+  def __getitem__(self, key):
+    value = super().__getitem__(key)
+    self.move_to_end(key)  # a read is a use: without this it is FIFO, not LRU
+    return value
+
+  def get(self, key, default=None):
+    if key not in self:
+      return default
+    return self[key]
+
   def __setitem__(self, key, value):
     super().__setitem__(key, value)
     self.move_to_end(key)
