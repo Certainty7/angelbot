@@ -116,5 +116,51 @@ class SummarizeOptOutTest(unittest.TestCase):
         self.assertIsNone(ai.prompt, "nothing may be sent to the provider when opt-out is unknown")
 
 
+class MidFetchOptOutTest(unittest.TestCase):
+    """A member who opts out while the pages are being fetched is still excluded."""
+
+    class _FlipDB:
+        def __init__(self):
+            self.calls = 0
+
+        async def get_opted_out_ids(self):
+            self.calls += 1
+            return set() if self.calls == 1 else {2}
+
+    def test_a_mid_fetch_opt_out_is_excluded_before_the_prompt(self):
+        ai = _AI()
+        db = self._FlipDB()
+        channel = _Channel([
+            _Msg(2, "late_optout", "خط سرّي متأخر"),
+            _Msg(7, "asker", "عادي"),
+        ])
+        report = asyncio.run(
+            analyze_channel_history_deep(_bot(db, ai), channel, _requester(), limit=10)
+        )
+        self.assertEqual(report, "summary")
+        self.assertEqual(db.calls, 2, "the opt-out set must be re-read after collection")
+        self.assertNotIn("خط سرّي متأخر", ai.prompt)
+        self.assertIn("عادي", ai.prompt)
+
+    def test_a_failed_re_read_sends_nothing(self):
+        class _BrokenSecondRead:
+            def __init__(self):
+                self.calls = 0
+
+            async def get_opted_out_ids(self):
+                self.calls += 1
+                if self.calls == 1:
+                    return set()
+                raise RuntimeError("db down mid-run")
+
+        ai = _AI()
+        channel = _Channel([_Msg(7, "asker", "text")])
+        report = asyncio.run(
+            analyze_channel_history_deep(_bot(_BrokenSecondRead(), ai), channel, _requester(), limit=10)
+        )
+        self.assertIn("الخصوصية", report)
+        self.assertIsNone(ai.prompt)
+
+
 if __name__ == "__main__":
     unittest.main()

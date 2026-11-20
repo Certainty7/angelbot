@@ -78,7 +78,6 @@ class Music(commands.Cog):
       )
       return
     state = self.engine.state(guild.id)
-    state.text_channel_id = interaction.channel_id
     if len(state.tracks) >= MAX_QUEUE:
       await interaction.followup.send(
           f"📚 القائمة ممتلئة (`{MAX_QUEUE}`). استخدمي `/skip` أو انتظري.", ephemeral=True
@@ -102,6 +101,10 @@ class Music(commands.Cog):
           f"⚠️ تعذر الدخول للروم الصوتي: `{type(exc).__name__}`", ephemeral=True
       )
       return
+    # Set only after admission: a rejected request must not retarget the active
+    # session's notification channel (the queue-full and busy rejections ran later
+    # in the old order and claimed the channel first).
+    state.text_channel_id = interaction.channel_id
 
     if len(state.tracks) > MAX_QUEUE:
       state.remove_at(len(state.tracks) - 1)
@@ -251,7 +254,6 @@ class Music(commands.Cog):
       await interaction.followup.send(self._check_failure_reply(), ephemeral=True)
       return
     state = self.engine.state(guild_id)
-    state.text_channel_id = interaction.channel_id
     room = MAX_QUEUE - len(state.tracks)
     if room <= 0:
       await interaction.followup.send(
@@ -278,6 +280,9 @@ class Music(commands.Cog):
       logger.warning(f"music-playlist join failed: {type(exc).__name__}: {exc}")
       await interaction.followup.send("⚠️ تعذر الدخول للروم الصوتي.", ephemeral=True)
       return
+    # Set only after admission so a rejected playlist load cannot retarget the active
+    # session's notification channel.
+    state.text_channel_id = interaction.channel_id
     added, failed = 0, 0
     for item in tracks:
       try:

@@ -74,6 +74,24 @@ class SystemdUnitTest(unittest.TestCase):
                      "angelbot-persona.service", "angelbot-persona.timer"):
             self.assertTrue((REPO / "deploy" / name).is_file(), name)
 
+    def test_backup_directory_is_provisioned_before_the_timer_is_enabled(self):
+        # ReadWritePaths does not create /opt/angelbot/backups: without a provisioning
+        # step the backup unit fails its namespace setup before the script ever runs.
+        backup_unit = _read("deploy/angelbot-backup.service")
+        self.assertIn("/opt/angelbot/backups", backup_unit)
+        self.assertNotIn("/opt/angelbot/backups", self.unit,
+                        "the bot unit must not be able to write the backups directory")
+        for doc in ("README.md", "docs/LIVE_VERIFICATION.md"):
+            text = _read(doc)
+            self.assertRegex(
+                text, r"install -d -o angel -g angel -m 700 /opt/angelbot/backups",
+                f"{doc} does not provision the backup directory",
+            )
+            provisioned_at = text.index("install -d -o angel -g angel -m 700 /opt/angelbot/backups")
+            enabled_at = text.index("angelbot-backup.timer angelbot-persona.timer")
+            self.assertLess(provisioned_at, enabled_at,
+                            f"{doc} enables the timer before provisioning the directory")
+
 
 class ContainerAssetsTest(unittest.TestCase):
     """C-025: current Deno, no secret-bearing env files, hardened runtime."""

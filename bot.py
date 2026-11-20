@@ -8,7 +8,7 @@ Builds the client, registers the cogs and starts the gateway. The reusable parts
 import angel.config  # noqa: F401
 from angel.config import DB_PATH, DISCORD_TOKEN, GEMINI_API_KEY, MISTRESS_INT_ID, SOVEREIGN_TOOLS_ENABLED, TEXT_VISION_MODELS, is_mistress, is_server_staff, logger, safe_reply
 from angel.interactions import _safe_interaction_reply
-from angel.text import clean_social_url, split_message
+from angel.text import clean_social_url, plan_reply_delivery
 from angel.client import AngelDiscordBot
 from angel.net import close_shared_http_session, get_media_download_semaphore
 from angel.persona import normalize_arabic_text
@@ -146,8 +146,9 @@ async def on_message_edit(before: discord.Message, after: discord.Message):
   if not before.guild or before.author.bot or before.content == after.content:
     return
   # The guard runs before the opt-out return: opting out stops storage, not moderation. An
-  # opted-out member could otherwise edit a clean line into an invite link unpunished.
-  await _run_angel_guard(bot, after)
+  # opted-out member could otherwise edit a clean line into an invite link unpunished. The
+  # edit call keeps link inspection but does not feed the flood counter.
+  await _run_angel_guard(bot, after, is_edit=True)
   if await _is_opted_out_fail_closed(bot, before.author.id):
     return
   if is_mistress(before.author):
@@ -226,12 +227,15 @@ WAKE_WORD_REGEX = re.compile(r"(?:^|\s)(?:يا\s*)?(?:انجل|أنجل|إنجل
 SUSPICIOUS_LINK_REGEX = re.compile(r"(?:discord\.gg/|discordapp\.com/invite/|free-nitro|steamcommunnity)", re.IGNORECASE)
 
 
-async def _run_angel_guard(bot, message: discord.Message) -> None:
+async def _run_angel_guard(bot, message: discord.Message, is_edit: bool = False) -> None:
     """Anti-spam / anti-scam check shared by new messages and edits (C-018).
 
     Editing a clean line into an invite link was a complete bypass of the guard. Delete,
     timeout and modlog are also independent: a failed delete (no Manage Messages) must not
     cancel the timeout or the log entry.
+
+    Edits still get link/scam inspection, but only new messages feed the flood counter:
+    one message plus five edits was six entries and a five-minute timeout.
     """
     if not message.guild or not isinstance(message.author, discord.Member):
         return
@@ -241,9 +245,11 @@ async def _run_angel_guard(bot, message: discord.Message) -> None:
     if gmode not in ("active", "dry_run"):
         return
     now_t = time.monotonic()
-    user_times = bot.spam_tracker[(message.guild.id, message.author.id)]
-    user_times.append(now_t)
-    is_flood = len(user_times) >= 6 and (now_t - user_times[0]) < 5.0
+    is_flood = False
+    if not is_edit:
+        user_times = bot.spam_tracker[(message.guild.id, message.author.id)]
+        user_times.append(now_t)
+        is_flood = len(user_times) >= 6 and (now_t - user_times[0]) < 5.0
     content = message.content or ""
     is_sus_link = bool(SUSPICIOUS_LINK_REGEX.search(content)) or guard.is_suspicious_arabic_scam(content)
     if not (is_flood or is_sus_link):
@@ -288,7 +294,6 @@ async def _play_from_message(message: discord.Message, query: str) -> None:
     await safe_reply(message, f"🎧 أنجل مشغّلة في {voice.channel.mention} الآن. انضم لنفس الروم أولاً.")
     return
   state = cog.engine.state(message.guild.id)
-  state.text_channel_id = message.channel.id
   try:
     async with message.channel.typing():
       await cog.engine.ensure_connected(channel)
@@ -303,6 +308,9 @@ async def _play_from_message(message: discord.Message, query: str) -> None:
     logger.warning(f"music-trigger join failed: {type(exc).__name__}: {exc}")
     await safe_reply(message, "⚠️ تعذر الدخول للروم الصوتي الآن.")
     return
+  # Set only after admission: a rejected request must not retarget the session's
+  # notification channel (the busy-channel rejection used to claim it first).
+  state.text_channel_id = message.channel.id
   playing = await cog.engine.start(message.guild)
   if playing is track:
     await safe_reply(
@@ -614,11 +622,13 @@ async def on_message(message: discord.Message):
       ):
         in_followup_window = True
 
-  # Record message in O(1) RAM buffer for ambient context (eliminating slow channel.history REST calls)
+  # Record message in O(1) RAM buffer for ambient context (eliminating slow channel.history REST calls).
   if message.guild and message.content.strip() and not _opted_out:
     prev_ambient_list = list(bot.recent_channel_msgs[message.channel.id])
+    # Entries carry the author id: deletion filters on it. The old "name: text" format
+    # had no reliable author marker, so a deleted member's lines survived in prompts.
     bot.recent_channel_msgs[message.channel.id].append(
-        f"{message.author.display_name}: {message.content.strip()[:120]}"
+        (message.author.id, f"{message.author.display_name}: {message.content.strip()[:120]}")
     )
     if not message.author.bot and message.author.id != MISTRESS_INT_ID:
       bot.last_social_target[message.channel.id] = message.author.id
@@ -649,7 +659,10 @@ async def on_message(message: discord.Message):
     if not prompt and not media_items:
       return
 
-    ambient_context = "\n".join(prev_ambient_list[-8:]) if prev_ambient_list else None
+    ambient_context = "\n".join(
+        (entry[1] if isinstance(entry, tuple) else str(entry))
+        for entry in prev_ambient_list[-8:]
+    ) if prev_ambient_list else None
 
     async with message.channel.typing():
       try:
@@ -663,28 +676,32 @@ async def on_message(message: discord.Message):
 
         if message.guild:
           bot.active_chat_window[(message.channel.id, message.author.id)] = time.monotonic()
-          bot.recent_channel_msgs[message.channel.id].append(f"Angel: {reply[:120]}")
+          _angel_uid = bot.user.id if bot.user else 0
+          bot.recent_channel_msgs[message.channel.id].append((_angel_uid, f"Angel: {reply[:120]}"))
 
         if is_dm and SOVEREIGN_TOOLS_ENABLED and not _opted_out:
           await bot.forward_dm_to_mistress(message, reply)
 
-        chunks = split_message(reply or "")
-        if not chunks or not (reply or "").strip():
+        # Media-only replies (an image or GIF with no prose) are delivered; a reply
+        # with neither text nor media stays silent instead of a fake fallback line.
+        delivery = plan_reply_delivery(reply, gif_bytes, gif_url, img_bytes)
+        if delivery is None:
           return
+        first_chunk, rest_chunks, has_files, use_gif_url = delivery
         files_to_send = []
-        if img_bytes:
-          files_to_send.append(discord.File(io.BytesIO(img_bytes), filename="angel_art.png"))
-        if gif_bytes:
-          files_to_send.append(discord.File(io.BytesIO(gif_bytes), filename="angel_reaction.gif"))
+        if has_files:
+          if img_bytes:
+            files_to_send.append(discord.File(io.BytesIO(img_bytes), filename="angel_art.png"))
+          if gif_bytes:
+            files_to_send.append(discord.File(io.BytesIO(gif_bytes), filename="angel_reaction.gif"))
 
-        first_chunk = chunks[0]
         gif_embed = None
-        if gif_url and not gif_bytes:
+        if use_gif_url:
           gif_embed = discord.Embed(color=0xD4AF37 if (is_mistress(message.author) or harem_t) else 0x2B2D31)
           gif_embed.set_image(url=gif_url)
 
         await safe_reply(message, content=first_chunk, embed=gif_embed, files=files_to_send, untrusted=True)
-        for chunk in chunks[1:]:
+        for chunk in rest_chunks:
           await message.channel.send(content=chunk, allowed_mentions=discord.AllowedMentions.none())
 
       except AI_ERRORS as err:

@@ -54,6 +54,10 @@ Install the optional timers too:
 ```bash
 sudo cp deploy/angelbot-backup.{service,timer} /etc/systemd/system/
 sudo cp deploy/angelbot-persona.{service,timer} /etc/systemd/system/
+# Provision the backup directory before enabling: ReadWritePaths does not create it,
+# and the backup unit fails its namespace setup when it is missing. Owner `angel`,
+# mode 0700, and outside the bot unit's writable paths.
+sudo install -d -o angel -g angel -m 700 /opt/angelbot/backups
 sudo systemctl daemon-reload
 sudo systemctl enable --now angelbot-backup.timer angelbot-persona.timer
 systemctl list-timers 'angelbot*'

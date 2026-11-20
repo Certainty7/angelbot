@@ -68,9 +68,7 @@ def database_path() -> str:
     return dbpath.resolve()
 
 
-def main() -> None:
-    tok = token()
-    db = sqlite3.connect(database_path())
+def ensure_schema(db: sqlite3.Connection) -> None:
     db.execute(
         "CREATE TABLE IF NOT EXISTS server_messages ("
         " id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id INTEGER NOT NULL,"
@@ -83,6 +81,22 @@ def main() -> None:
         pass  # already present
     db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_srv_msg_mid ON server_messages (message_id)")
     db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_srv_msg_unique ON server_messages (channel_id, user_id, created_at, content)")
+    # The opt-out predicate below reads user_preferences; without this DDL a fresh
+    # database made every insert fail with "no such table" and each message was
+    # silently counted as skipped (C-005).
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS user_preferences ("
+        " user_id INTEGER PRIMARY KEY, pinned_facts TEXT DEFAULT '',"
+        " style_mode TEXT DEFAULT 'realistic', opt_out INTEGER DEFAULT 0,"
+        " updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"
+    )
+    db.commit()
+
+
+def main() -> None:
+    tok = token()
+    db = sqlite3.connect(database_path())
+    ensure_schema(db)
 
     guilds = call("/users/@me/guilds", tok)
     print("guilds:", [(g["name"], g["id"]) for g in guilds])

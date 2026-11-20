@@ -30,19 +30,22 @@ async def analyze_channel_history_deep(
   except Exception:
     return "⚠️ تعذر التحقق من تفضيلات الخصوصية الآن، فما أرسلت شيئاً للمزود."
 
+  # Keep the author id with each line: a member who opts out while later pages are being
+  # fetched must still be excluded before anything reaches the model.
   collected = []
   try:
     async for msg in channel.history(limit=min(max(limit, 10), 500)):
       if msg.author.bot and not msg.embeds:
         continue
-      if getattr(msg.author, "id", None) in opted_out:
+      author_id = getattr(msg.author, "id", None)
+      if author_id in opted_out:
         continue
       time_str = msg.created_at.strftime("%H:%M")
       content = msg.content.strip()
       if msg.attachments:
         content += f" [مرفق: {', '.join(a.filename for a in msg.attachments)}]"
       if content:
-        collected.append(f"[{time_str}] {msg.author.display_name}: {content}")
+        collected.append((author_id, f"[{time_str}] {msg.author.display_name}: {content}"))
   except discord.Forbidden:
     return "⚠️ لا أملك صلاحية قراءة سجل الرسائل (`Read Message History`) في هذه القناة."
   except Exception as exc:
@@ -51,10 +54,20 @@ async def analyze_channel_history_deep(
   if not collected:
     return "لا توجد رسائل كافية في هذه القناة لتحليلها."
 
-  collected.reverse()
+  # Re-read after collection: the snapshot above can be older than a `/data delete` that
+  # happened mid-fetch. Failing to re-read sends nothing, like the first check.
+  try:
+    opted_out = await bot.db.get_opted_out_ids()
+  except Exception:
+    return "⚠️ تعذر التحقق من تفضيلات الخصوصية الآن، فما أرسلت شيئاً للمزود."
+  collected = [line for uid, line in collected if uid not in opted_out]
+  if not collected:
+    return "لا توجد رسائل كافية في هذه القناة لتحليلها."
+
+  lines = collected[::-1]
   # Everything below is third-party text: neutralise control tags and angle brackets so a
   # member cannot close the block and inject an instruction into the summary (C-008).
-  lines = [sanitize_untrusted_context(line) or "" for line in collected]
+  lines = [sanitize_untrusted_context(line) or "" for line in lines]
   transcript = "\n".join(line for line in lines if line)
   if len(transcript) > 28000:
     transcript = transcript[-28000:]

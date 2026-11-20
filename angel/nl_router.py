@@ -213,9 +213,18 @@ def resolve_natural_text_channel(
   return None
 
 
-async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str, confirmed: bool = False):
+async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str, confirmed: bool = False,
+                                     actor: Optional[discord.Member] = None):
+  """Run one model-proposed action.
+
+  `actor` is the member whose CURRENT authority authorizes the mutation. The default
+  (the original message author) is only a snapshot: when a confirmation arrives later,
+  the caller must pass the confirmer's freshly resolved membership, otherwise a staff
+  member who lost the role inside the 60-second window still executes (CWE-863).
+  """
   guild = message.guild
   author = message.author
+  actor = actor or author
   if not guild:
     return "none"
 
@@ -242,7 +251,15 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
       await bot.db.pin_user_fact(author.id, fact_val)
     return "executed"
 
-  if not check_staff_action_permission(author, guild, action_name):
+  if action_name == "FORGET_KEYWORD":
+    # Self-service erasure, not a staff action: the requester's own rows only. It runs
+    # only through the pending-confirmation flow, so the actor is the requester.
+    kw_forget = params.get("kw") or ""
+    if kw_forget:
+      await bot.db.forget_user_keyword(author.id, kw_forget)
+    return "executed"
+
+  if not check_staff_action_permission(actor, guild, action_name):
     return "blocked"
   required_kws = _EXEC_INTENT_GUARDS.get(action_name)
   if not confirmed and required_kws and not any(kw in norm_msg for kw in required_kws):
@@ -284,34 +301,34 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
       bot.guard_modes_cache[guild.id] = gmode
     elif action_name == "KICK":
       strict_mem = await resolve_natural_target_member(bot, message, message.content or "", strict_target=True)
-      if not (strict_mem and can_moderate_member(author, strict_mem, guild)[0]):
+      if not (strict_mem and can_moderate_member(actor, strict_mem, guild)[0]):
         raise _ActionBlocked
       await strict_mem.kick(reason=f"AI Order by {author}")
       await bot.send_modlog(guild, "👢 طرد عضو", f"**العضو:** {strict_mem.mention}\n**بواسطة:** {author.mention}")
     elif action_name == "BAN":
       strict_mem = await resolve_natural_target_member(bot, message, message.content or "", strict_target=True)
-      if not (strict_mem and can_moderate_member(author, strict_mem, guild)[0]):
+      if not (strict_mem and can_moderate_member(actor, strict_mem, guild)[0]):
         raise _ActionBlocked
       await strict_mem.ban(reason=f"AI Order by {author}")
       await bot.send_modlog(guild, "🔨 حظر عضو", f"**العضو:** {strict_mem.mention}\n**بواسطة:** {author.mention}", color=discord.Color.red().value)
     elif action_name == "TIMEOUT":
       strict_mem = await resolve_natural_target_member(bot, message, message.content or "", strict_target=True)
-      if not (strict_mem and can_moderate_member(author, strict_mem, guild)[0]):
+      if not (strict_mem and can_moderate_member(actor, strict_mem, guild)[0]):
         raise _ActionBlocked
       mins = max(1, min(40320, int(params.get("minutes", "15"))))
       await strict_mem.timeout(timedelta(minutes=mins), reason=f"AI Order by {author}")
       await bot.send_modlog(guild, "⏳ كتم عضو", f"**العضو:** {strict_mem.mention} (`{mins}m`)\n**بواسطة:** {author.mention}")
     elif action_name == "UNTIMEOUT":
-      if not (target_member and can_moderate_member(author, target_member, guild)[0]):
+      if not (target_member and can_moderate_member(actor, target_member, guild)[0]):
         raise _ActionBlocked
       await target_member.timeout(None, reason=f"AI Order by {author}")
     elif action_name == "WARN":
-      if not (target_member and can_moderate_member(author, target_member, guild)[0]):
+      if not (target_member and can_moderate_member(actor, target_member, guild)[0]):
         raise _ActionBlocked
       rsn = params.get("reason", "توجيه إداري")
       await bot.db.add_warning(guild.id, target_member.id, author.id, rsn)
     elif action_name == "CLEAR_WARNINGS":
-      if not (target_member and can_moderate_member(author, target_member, guild)[0]):
+      if not (target_member and can_moderate_member(actor, target_member, guild)[0]):
         raise _ActionBlocked
       await bot.db.clear_warnings(guild.id, target_member.id)
     elif action_name == "UNBAN":
@@ -324,7 +341,7 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
         await guild.unban(discord.Object(id=int(uid_str)), reason=f"AI Order by {author}")
     elif action_name == "AUTOROLE":
       r_obj = resolve_natural_role(guild, message, params.get("role", ""))
-      if not (r_obj and can_assign_role(author, r_obj, guild)[0]):
+      if not (r_obj and can_assign_role(actor, r_obj, guild)[0]):
         raise _ActionBlocked
       await bot.db.set_autorole(guild.id, r_obj.id)
       bot.autorole_cache[guild.id] = r_obj.id
@@ -360,14 +377,14 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
         bot.last_target_channel[guild.id] = ch.id
     elif action_name == "ADD_ROLE":
       r_obj = resolve_natural_role(guild, message, params.get("role", ""))
-      if not (r_obj and target_member and can_assign_role(author, r_obj, guild)[0]
-              and can_moderate_member(author, target_member, guild)[0]):
+      if not (r_obj and target_member and can_assign_role(actor, r_obj, guild)[0]
+              and can_moderate_member(actor, target_member, guild)[0]):
         raise _ActionBlocked
       await target_member.add_roles(r_obj)
     elif action_name == "REMOVE_ROLE":
       r_obj = resolve_natural_role(guild, message, params.get("role", ""))
-      if not (r_obj and target_member and can_assign_role(author, r_obj, guild)[0]
-              and can_moderate_member(author, target_member, guild)[0]):
+      if not (r_obj and target_member and can_assign_role(actor, r_obj, guild)[0]
+              and can_moderate_member(actor, target_member, guild)[0]):
         raise _ActionBlocked
       await target_member.remove_roles(r_obj)
     elif action_name == "CREATE_ROLE":
@@ -377,7 +394,7 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
     elif action_name == "NICKNAME":
       new_nick = params.get("name", "")[:32]
       t_mem = target_member or (author if isinstance(author, discord.Member) else None)
-      if not (t_mem and new_nick and can_moderate_member(author, t_mem, guild)[0]):
+      if not (t_mem and new_nick and can_moderate_member(actor, t_mem, guild)[0]):
         raise _ActionBlocked
       await t_mem.edit(nick=new_nick)
     elif action_name == "LOCK":
@@ -660,8 +677,20 @@ async def try_execute_natural_command(
       return True
     elif cmd_lower in _CONFIRM_WORDS:
       bot.pending_confirm.pop(confirm_key, None)
+      # Re-resolve the confirmer's CURRENT membership: the retained requester snapshot
+      # keeps its old role list, so a moderator who lost the role inside the window
+      # would otherwise still execute (CWE-863). The fresh confirmation message carries
+      # the gateway's current member payload; one REST fetch makes it authoritative.
+      confirm_actor = message.author
+      if isinstance(message.author, discord.Member):
+        try:
+          fetched_actor = await guild.fetch_member(author.id)
+          if isinstance(fetched_actor, discord.Member):
+            confirm_actor = fetched_actor
+        except discord.HTTPException:
+          pass  # fall back to the confirmation message's member payload
       outcome = await execute_ai_inferred_action(
-          bot, pending["message"], pending["cmd"], confirmed=True
+          bot, pending["message"], pending["cmd"], confirmed=True, actor=confirm_actor
       )
       if outcome == "executed":
         await safe_reply(message, "✅ تم تنفيذ الإجراء المؤكد.")
@@ -725,6 +754,21 @@ async def try_execute_natural_command(
     if kw_forget in ("كل شي", "كل شيء", "المحادثة", "السجل", "ذاكرتي"):
       await bot.db.clear_user_memory(author.id)
       await safe_reply(message, "🧹 مسحت سجل محادثتنا المؤقت ونبدأ صفحة جديدة.")
+    elif guild:
+      # The deletion is irreversible and substring-matched, so it needs the same explicit
+      # confirmation as `/memory forget` (typed anywhere, it used to run immediately).
+      # Keyed by guild+author and bound to this channel exactly like a pending EXEC.
+      bot.pending_confirm[(guild.id, author.id)] = {
+          "cmd": f"FORGET_KEYWORD|kw={kw_forget[:200]}",
+          "message": message,
+          "channel_id": message.channel.id,
+          "ts": time.monotonic(),
+      }
+      await safe_reply(
+          message,
+          f"⚠️ سيُحذف كل ذكر لـ **({kw_forget[:60]})** من محادثاتك وأرشيف السيرفر وملاحظاتك، "
+          "ولا يمكن التراجع. اكتبي **تأكيد** خلال 60 ثانية لتنفيذه، أو أي كلمة أخرى للإلغاء.",
+      )
     else:
       await bot.db.forget_user_keyword(author.id, kw_forget)
       await safe_reply(message, f"🗑️ مسحت أي ذكر لـ **({kw_forget})** من ذاكرتي.")
@@ -761,10 +805,14 @@ async def try_execute_natural_command(
   )
   if afk_m:
     rsn = (afk_m.group(1) or "مشغولة حالياً").strip()
-    await bot.db.set_afk(guild.id if guild else 0, author.id, rsn)
-    bot.afk_cache[(guild.id if guild else 0, author.id)] = (
-        rsn, datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
-    await safe_reply(message, f"💤 تم تفعيل وضع الغياب (AFK): **{rsn}** — خذي راحتك!")
+    stored = await bot.db.set_afk(guild.id if guild else 0, author.id, rsn)
+    if stored:
+      bot.afk_cache[(guild.id if guild else 0, author.id)] = (
+          rsn, datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
+      await safe_reply(message, f"💤 تم تفعيل وضع الغياب (AFK): **{rsn}** — خذي راحتك!")
+    else:
+      # An opted-out member keeps no AFK state; the DB guard and the cache agree.
+      await safe_reply(message, "💤 وضع الغياب محفوظ لك مؤقتاً فقط، لأنك أوقفت حفظ بياناتك.")
     return True
 
   # 2. Direct Image Generation in Chat (with Art Studio buttons)
@@ -999,27 +1047,36 @@ async def try_execute_natural_command(
           message, "⚠️ تحتاج صلاحية `Read Message History` في هذه القناة لتلخيصها."
       )
       return True
+    # Cooldown first, claimed before the quota awaits: a request inside the window
+    # consumes no user or guild quota, and two simultaneous requests cannot both pass.
+    now_m = time.monotonic()
+    if not mistress:
+      last_sum = bot.summarize_cooldowns.get(author.id)
+      if last_sum is not None and now_m - last_sum < 120.0:
+        await safe_reply(message, f"⏳ انتظر **{int(120.0 - (now_m - last_sum)) + 1} ثانية** قبل تلخيص آخر.")
+        return True
+      bot.summarize_cooldowns[author.id] = now_m
+
     allowed_q, deny_q = bot.quota.check_user_allowed(
         author, is_harem=bool(bot.get_harem_title(author.id))
     )
     if not allowed_q:
+      # A refused request must not burn the cooldown window either.
+      if not mistress and bot.summarize_cooldowns.get(author.id) == now_m:
+        bot.summarize_cooldowns.pop(author.id, None)
       await safe_reply(message, f"⚠️ {deny_q}")
       return True
     if guild and hasattr(bot.db, "consume_guild_ai_quota"):
       allowed_g, used_g = await bot.db.consume_guild_ai_quota(guild.id)
       if not allowed_g and not mistress:
+        if not mistress and bot.summarize_cooldowns.get(author.id) == now_m:
+          bot.summarize_cooldowns.pop(author.id, None)
         await safe_reply(message, f"⚠️ وصل السيرفر لحد استهلاك الذكاء الاصطناعي اليومي (`{used_g}`).")
         return True
     nums = [int(n) for n in re.findall(r"\b(\d+)\b", cmd_lower)]
     limit_msgs = nums[0] if nums else 100
     if not mistress:
       limit_msgs = min(limit_msgs, 200)
-      now_m = time.monotonic()
-      last_sum = bot.summarize_cooldowns.get(author.id)
-      if last_sum is not None and now_m - last_sum < 120.0:
-        await safe_reply(message, f"⏳ انتظر **{int(120.0 - (now_m - last_sum)) + 1} ثانية** قبل تلخيص آخر.")
-        return True
-      bot.summarize_cooldowns[author.id] = now_m
     async with message.channel.typing():
       report = await analyze_channel_history_deep(bot, message.channel, author, limit=limit_msgs, focus_query=cmd_body)
       for chunk in split_message(report):

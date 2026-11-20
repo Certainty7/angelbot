@@ -160,6 +160,70 @@
               "ar": "جديد: `AGENTS.md` و`KNOWN_ISSUES.md` و`docs/DATA_MODEL.md` و`docs/LIVE_VERIFICATION.md` وسجل `docs/recovery/`."
             }
           ]
+        },
+        {
+          "title": {
+            "en": "Final review round (PR #9 remediation)",
+            "ar": "جولة المراجعة الأخيرة (معالجة PR #9)"
+          },
+          "items": [
+            {
+              "en": "The daily budget is now reserved per provider attempt, not per fallback chain, and each attempt's recorded usage releases its reservation inside one lock: a thought-only response that still spent tokens can no longer admit unlimited paid retries past the ceiling.",
+              "ar": "حجز الميزانية اليومية صار لكل محاولة مزوّد على حدة لا لسلسلة البدائل كلها، وإثبات الاستهلاك يحرر حجز المحاولة داخل قفل واحد: رد «التفكير فقط» الذي كلف توكنات لم يعد يسمح بعدد غير محدود من المحاولات المدفوعة فوق السقف."
+            },
+            {
+              "en": "An image-only or GIF-only model reply is delivered instead of silently dropped; a reply with neither text nor media stays silent instead of inventing a fallback line.",
+              "ar": "الرد الذي يحمل صورة أو GIF بلا نص يُسلَّم بدل إسقاطه الصامت؛ والرد الفارغ تماماً يبقى صامتاً بدل جملة بديلة مضللة."
+            },
+            {
+              "en": "`/rep`, `/afk` and the background summariser enforce opt-out in SQL, so they cannot re-create rows for a member who erased their data — including the summary that started before the deletion and committed after it.",
+              "ar": "`/rep` و`/afk` والملخّص الخلفي تفرض الانسحاب داخل SQL، فلا يعاد إنشاء صفوف عضو محا بياناته — بما فيه ملخص بدأ قبل الحذف وحُفظ بعده."
+            },
+            {
+              "en": "The in-RAM ambient buffer stores `(author id, text)` and deletion filters on the id; legacy unattributed lines are dropped rather than kept in other members' prompts.",
+              "ar": "مخزن السياق المحيط يحفظ (معرّف الكاتب، النص) والحذف يفلتر على المعرف؛ والسطور القديمة بلا معرّف تُحذف بدل بقائها في موجّهات الأعضاء الآخرين."
+            },
+            {
+              "en": "Media downloads claim against one shared per-job byte budget *before* buffering each chunk, across Instagram, TikTok and X including repair and retry passes: peak retained RAM is bounded during the parallel download, not filtered after it.",
+              "ar": "تنزيلات الوسائط تحجز من ميزانية بايت مشتركة لكل مهمة *قبل* تخزين كل قطعة، عبر إنستغرام وTikTok وX مع مسارات الإصلاح والإعادة: ذروة الذاكرة محدودة أثناء التنزيل المتوازي لا بعد تصفيته."
+            },
+            {
+              "en": "A pending `[EXEC]` confirmation re-resolves the confirmer's current membership (one REST fetch, message payload as fallback) and re-checks permission and role hierarchy before the mutation: a staff member who lost the role inside the 60-second window can no longer execute the queued action.",
+              "ar": "تأكيد إجراء `[EXEC]` معلّق يعيد حل عضوية المؤكِّد الحالية (جلب REST واحد مع احتياط حمولة الرسالة) ويعيد فحص الصلاحية وتسلسل الرتب قبل التنفيذ: من فقد رتبته داخل نافذة الستين ثانية لم يعد ينفذ الإجراء المؤجل."
+            },
+            {
+              "en": "Channel-summary cooldown is checked and claimed before user and guild quota; a refused request consumes nothing, and the claim is rolled back when a quota gate rejects.",
+              "ar": "تبريد ملخص القناة يُفحص ويُحجز قبل حصص العضو والسيرفر؛ فالطلب المرفوض لا يستهلك شيئاً، والحجز يعود إذا رفضت إحدى الحصتين."
+            },
+            {
+              "en": "A DAVE-blocked playback retry is cancelled if another `/play` started a track while it waited; the old retry dequeued track after track until the queue was consumed.",
+              "ar": "إعادة محاولة التشغيل المحجوبة بسبب DAVE تُلغى إن بدأ `/play` آخر مقطعاً أثناء الانتظار؛ فالإعادة القديمة كانت تأكل القائمة مقطعاً مقطعاً."
+            },
+            {
+              "en": "`/announce` checks effective permissions in the selected channel (overwrites honoured) and verifies the bot can actually send there.",
+              "ar": "`/announce` يفحص الصلاحيات الفعلية في القناة المختارة (مع استبعادات القناة) ويتأكد أن البوت يستطيع الإرسال هناك فعلاً."
+            },
+            {
+              "en": "`انسي كلمة …` in chat now queues for an explicit `تأكيد` in the same channel, exactly like `/memory forget`, instead of deleting archive rows immediately.",
+              "ar": "«انسي كلمة …» في المحادثة تُدخل في بوابة `تأكيد` صريحة بنفس القناة، مثل `/memory forget`، بدل حذف صفوف الأرشيف فوراً."
+            },
+            {
+              "en": "The message-cap constant is shared by every retention path: the 30-minute cleanup no longer deletes rows 51–60 per member nor removes short summaries the policy keeps.",
+              "ar": "ثابت الاحتفاظ بالرسائل صار مشتركاً بين كل المسارات: التنظيف كل 30 دقيقة لم يعد يحذف الصفوف 51–60 لكل عضو ولا يحذف الملخصات القصيرة التي تحفظها السياسة."
+            },
+            {
+              "en": "`/data view` names any table that could not be counted instead of showing a shorter list.",
+              "ar": "`/data view` يسمّي أي جدول تعذّر عدّه بدل عرض قائمة أقصر توحي بالاكتمال."
+            },
+            {
+              "en": "History tools create `user_preferences` before their guarded inserts, never hide a failed insert, and leave a failed page unmarked so a rerun retries it without duplicating rows.",
+              "ar": "أدوات السجل تنشئ `user_preferences` قبل إدراجاتها المحروسة، ولا تخفي أي إدراج فاشل، وتترك الصفحة الفاشلة غير معلّمة فتعيد المحاولة دون تكرار الصفوف."
+            },
+            {
+              "en": "`/warnings` respects Discord's aggregate embed size; administrative commands carry guild-only `contexts`, not just `guild_only`; the Docker healthcheck requires `quick_check` to answer `ok`, not merely exit 0; the weekly npm audit runs in its own workflow job; the documented timer install provisions the backup directory (service owner, mode 0700) before enabling the unit, because `ReadWritePaths` does not create the directory itself.",
+              "ar": "`/warnings` يحترم الحجم الإجمالي للرسائل؛ والأوامر الإدارية تحمل `contexts` للسيرفر فقط؛ وفحص صحة Docker يطلب `ok` فعلياً من `quick_check`؛ وتدقيق npm الأسبوعي صار وظيفة مستقلة؛ وتوثيق تفعيل المؤقتات ينشئ مجلد النسخ الاحتياطي (بمالك حساب الخدمة وصلاحية 0700) قبل تشغيل الوحدة، لأن `ReadWritePaths` لا ينشئ المجلد بنفسه."
+            }
+          ]
         }
       ]
     },

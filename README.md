@@ -260,8 +260,20 @@ checkpoints the database and starts the bot. FFmpeg is needed for music and vide
 
 Only `angelbot.service` starts the bot; the maintenance jobs ship with it in [`deploy/`](deploy):
 `angelbot-backup.timer` (nightly verified SQLite backup) and `angelbot-persona.timer` (weekly
-persona-culture refresh). Enable them with `systemctl enable --now angelbot-backup.timer
-angelbot-persona.timer`. No member-file collection exists — that path was removed from the code.
+persona-culture refresh). Install the units, provision the backup directory, reload systemd,
+then enable the timers:
+
+```bash
+sudo cp deploy/angelbot-backup.{service,timer} deploy/angelbot-persona.{service,timer} /etc/systemd/system/
+# ReadWritePaths does not create the directory: without this one-time step the backup
+# unit fails its namespace setup before the script ever runs.
+sudo install -d -o angel -g angel -m 700 /opt/angelbot/backups
+sudo systemctl daemon-reload
+sudo systemctl enable --now angelbot-backup.timer angelbot-persona.timer
+```
+
+The backup directory stays outside the bot unit's `ReadWritePaths`, so the running bot cannot
+write its own backups. No member-file collection exists — that path was removed from the code.
 
 ### Backups and logs
 

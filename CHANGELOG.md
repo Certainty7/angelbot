@@ -77,6 +77,44 @@ found while fixing it. Every claim below is backed by a test in the test suite.
 - New: `AGENTS.md`, `KNOWN_ISSUES.md`, `docs/DATA_MODEL.md`, `docs/LIVE_VERIFICATION.md` and the
   `docs/recovery/` ledger, state and decision record.
 
+### Final review round (PR #9 remediation)
+
+- The daily budget is now reserved per provider attempt, not per fallback chain, and each
+  attempt's recorded usage releases its reservation inside one lock: a thought-only response
+  that still spent tokens can no longer admit unlimited paid retries past the ceiling.
+- An image-only or GIF-only model reply is delivered instead of silently dropped; a reply with
+  neither text nor media stays silent instead of inventing a fallback line.
+- `/rep`, `/afk` and the background summariser enforce opt-out in SQL, so they cannot re-create
+  rows for a member who erased their data — including the summary that started before the
+  deletion and committed after it.
+- The in-RAM ambient buffer stores `(author id, text)` and deletion filters on the id; legacy
+  unattributed lines are dropped rather than kept in other members' prompts.
+- Media downloads claim against one shared per-job byte budget *before* buffering each chunk,
+  across Instagram, TikTok and X including repair and retry passes: peak retained RAM is
+  bounded during the parallel download, not filtered after it.
+- A pending `[EXEC]` confirmation re-resolves the confirmer's current membership (one REST
+  fetch, message payload as fallback) and re-checks permission and role hierarchy before the
+  mutation: a staff member who lost the role inside the 60-second window can no longer
+  execute the queued action.
+- Channel-summary cooldown is checked and claimed before user and guild quota; a refused
+  request consumes nothing, and the claim is rolled back when a quota gate rejects.
+- A DAVE-blocked playback retry is cancelled if another `/play` started a track while it
+  waited; the old retry dequeued track after track until the queue was consumed.
+- `/announce` checks effective permissions in the selected channel (overwrites honoured) and
+  verifies the bot can actually send there.
+- `انسي كلمة …` in chat now queues for an explicit `تأكيد` in the same channel, exactly like
+  `/memory forget`, instead of deleting archive rows immediately.
+- The message-cap constant is shared by every retention path: the 30-minute cleanup no longer
+  deletes rows 51–60 per member nor removes short summaries the policy keeps.
+- `/data view` names any table that could not be counted instead of showing a shorter list.
+- History tools create `user_preferences` before their guarded inserts, never hide a failed
+  insert, and leave a failed page unmarked so a rerun retries it without duplicating rows.
+- `/warnings` respects Discord's aggregate embed size; administrative commands carry
+  guild-only `contexts`, not just `guild_only`; the Docker healthcheck requires `quick_check`
+  to answer `ok`, not merely exit 0; the weekly npm audit runs in its own workflow job; the
+  documented timer install provisions the backup directory (service owner, mode 0700) before
+  enabling the unit, because `ReadWritePaths` does not create the directory itself.
+
 ## 1.0.4 — 2026-11-19
 
 Privacy and public-repository hygiene pass.

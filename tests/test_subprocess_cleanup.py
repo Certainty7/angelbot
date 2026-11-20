@@ -40,17 +40,23 @@ class SubprocessCancellationTest(unittest.TestCase):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
+            timed_out = False
             try:
                 await read_bounded_subprocess_stdout(proc, timeout=0.4)
             except asyncio.TimeoutError:
-                pass
+                timed_out = True
             for _ in range(50):
                 if proc.returncode is not None:
                     break
                 await asyncio.sleep(0.05)
-            return proc.returncode
+            return timed_out, proc.returncode
 
-        self.assertIsNotNone(asyncio.run(_run()))
+        timed_out, returncode = asyncio.run(_run())
+        # The old assertion accepted `0`: a reader that ignored its timeout let the child
+        # exit normally after 30 seconds and the test still passed.
+        self.assertTrue(timed_out, "the reader ignored its timeout")
+        self.assertIsNotNone(returncode, "the child was still running after the timeout")
+        self.assertNotEqual(returncode, 0)
 
 
 if __name__ == "__main__":

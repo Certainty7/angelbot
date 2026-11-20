@@ -25,10 +25,9 @@ from .net import (
     validate_extracted_stream_url,
 )
 from .images import _is_safe_public_http_url
-from .downloader import read_bounded_subprocess_stdout
+from .downloader import _find_youtube_cookies_file, read_bounded_subprocess_stdout
 
 YTDLP = os.path.join(BASE_DIR, "venv", "bin", "yt-dlp")
-COOKIES = os.path.join(BASE_DIR, "cookies.txt")
 DENO = "/usr/local/bin/deno"
 DEFAULT_TIMEOUT = 30.0
 MAX_DURATION = 6 * 3600  # a 6-hour stream is a mistake, not a request
@@ -46,15 +45,20 @@ YOUTUBE_ENABLED = os.environ.get("MUSIC_YOUTUBE", "1").strip().lower() not in {"
 
 
 def _build_args(target: str, *, json_flag: str = "-j", extra: Optional[List[str]] = None) -> List[str]:
-  """Hardened yt-dlp argv: ignore user config, no generic extractor, `--`, scoped cookies."""
+  """Hardened yt-dlp argv: ignore user config, no generic extractor, `--`, scoped cookies.
+
+  The cookie file is discovered exactly like the social-media path (`YOUTUBE_COOKIES_FILE`
+  first), so the retry instruction that names that variable actually takes effect here.
+  """
   args = [json_flag, "--ignore-config", "--no-warnings", "--no-playlist",
           "--use-extractors", "default,-generic", "-S", "proto:https"]
   if os.path.exists(DENO):
     args += ["--js-runtimes", f"deno:{DENO}"]
   if extra:
     args += list(extra)
-  if os.path.exists(COOKIES) and is_valid_http_url_syntax(target) and is_allowed_hostname(target, _COOKIE_DOMAINS):
-    args += ["--cookies", COOKIES]
+  cookie_file = _find_youtube_cookies_file()
+  if cookie_file and is_valid_http_url_syntax(target) and is_allowed_hostname(target, _COOKIE_DOMAINS):
+    args += ["--cookies", cookie_file]
   args += ["--", target]
   return args
 
@@ -258,10 +262,15 @@ async def resolve(query: str, *, timeout: float = DEFAULT_TIMEOUT) -> Dict[str, 
     if title:
       try:
         info = await _resolve_target(f"scsearch1:{title}", timeout)
-        info["source"] = "SoundCloud"
-        info["search_title"] = title
-        logger.info(f"music-resolve youtube-fallback title={title[:60]!r}")
-        return info
+        # The fallback result must obey the same duration limit as a normal
+        # extraction, or a 10-hour "1 hour" remix skips the queue's own guard.
+        if info["duration"] > MAX_DURATION:
+          errors.append(f"SoundCloud (YouTube title): too long ({info['duration'] / 3600:.1f}h)")
+        else:
+          info["source"] = "SoundCloud"
+          info["search_title"] = title
+          logger.info(f"music-resolve youtube-fallback title={title[:60]!r}")
+          return info
       except ResolveError as exc:
         errors.append(f"SoundCloud (YouTube title): {exc}")
 

@@ -20,7 +20,9 @@ class ArtStudioView(discord.ui.View):
 
   def __init__(self, prompt: str, bot, author_id: int) -> None:
     super().__init__(timeout=600)
-    self.prompt = (prompt or "")[:3800]
+    # 4096 is the generation bound: a regeneration button must hold the whole prompt the
+    # first call used. The embed description is where the display limit is enforced.
+    self.prompt = (prompt or "")[:4096]
     self.bot = bot
     self.author_id = author_id
 

@@ -116,3 +116,71 @@ still requires a real voice session and is documented in `docs/LIVE_VERIFICATION
 
 Every test runs with credentials scrubbed and a temp database. An autouse fixture blocks unexpected
 outbound sockets so a regression cannot quietly reach Discord or Gemini from CI.
+
+## D-015 — The AI budget is reserved per provider attempt and settled atomically
+
+One chain-wide reservation bought unlimited paid retries: a thought-only response still spent
+tokens, and every fallback attempt was admitted against a recorded-spend check that ignored
+outstanding reservations. Each attempt now reserves its own estimate under the budget lock, and
+`_settle_usage` records the attempt's usage *and* releases its reservation inside the same lock
+hold, so a concurrent admission can never count the same call twice. The historical
+`budget_blocked()` precheck stays in front of the reservation because it owns two semantics the
+reservation does not: the owner override and the disabled-cap (`stop_at=inf`) reading.
+
+Rejected: re-checking the ceiling outside the critical section (the original defect); releasing
+the reservation before recording the usage (makes the call briefly uncounted and admits overspend);
+a single post-chain settle (leaves the double-count window the review found).
+
+## D-016 — Media jobs claim bytes per chunk, not per finished download
+
+A filter applied after `asyncio.gather` bounds the returned list, not peak RAM. Every media read
+now claims from one `SharedByteBudget` before buffering each chunk, with a Content-Length
+pre-flight for doomed transfers, releases on abort inside `read_bounded_stream`, and releases again
+at the discard sites in the extractors (dedup, invalid payload). Claims are event-loop-atomic, so
+concurrent downloads share the ceiling without a lock. The final `_fit_byte_budget` pass stays as a
+backstop for payloads that bypass the claim path.
+
+Rejected: a worst-case reservation per download (25 MiB × 20 slides would stop honest carousels at
+two slides); cancelling pending futures (aiohttp has no safe per-request cancellation on the shared
+session).
+
+## D-017 — Ambient context entries are `(author id, text)` tuples; legacy lines are dropped
+
+The old `"display_name: content"` format had no reliable author marker, and the deletion filter
+matched a trailing mention that was never written. Entries now carry the author id; `/data delete`
+filters on it, and a plain-string entry — whose author cannot be identified — is dropped instead of
+retained, which is the privacy-safe direction for text that may belong to the deleted member.
+The three producers (`bot.py`, `angel/autonomy.py`) and both consumers were updated together.
+
+## D-018 — Confirmation re-authorizes the current confirmer, with one bounded REST fetch
+
+The retained requester `Member` snapshot keeps its old role list, so re-checking it proves nothing
+about the confirmer's current authority. The confirmation handler resolves the confirmer's current
+membership with one `guild.fetch_member` call and falls back to the confirmation message's own
+gateway member payload (current roles) when the fetch fails; the original message survives only for
+request context and target resolution. Authorization inside `execute_ai_inferred_action` runs
+against that actor.
+
+Rejected: trusting `guild.get_member` cache (empty without the members intent); reusing the
+requester snapshot (the finding).
+
+## D-019 — Cooldown is claimed before the quota awaits and rolled back on refusal
+
+A summary request inside the 120-second window must consume no quota, and two simultaneous requests
+must not both pass. The claim is written immediately after the check (no await between), and a
+later quota refusal returns the claim with a compare-and-pop so a concurrent request's claim is
+never the one removed. Rejected: recording the timestamp only after the model call (reopens the
+concurrency window).
+
+## D-020 — A blocked-playback retry must prove the engine is still idle
+
+The DAVE-blocked path re-queues its track and schedules a delayed retry. If another `/play`
+started a track inside the delay, the retry is stale: `_advance_if_idle` checks, under the guild
+lock, that nothing is playing and no current track exists before calling `play_next`, and returns
+without dequeuing otherwise. The natural-end advance keeps the old behaviour (a track that just
+finished leaves `current` set).
+
+Rejected: a generation counter per attempt (equivalent state already exists: blocked sets
+`current = None`; playing sets it to a track); guarding inside `play_next` itself (would also gate
+legitimate advances).
+

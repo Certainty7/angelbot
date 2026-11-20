@@ -64,12 +64,19 @@ class Community(commands.Cog):
   async def afk_cmd(self, interaction: discord.Interaction, reason: str = "مشغول حالياً"):
     # The reason is member-authored and echoed later by the bot: cap it and never let it ping.
     reason = (reason or "مشغول حالياً").strip()[:120]
+    stored = await self.bot.db.set_afk(interaction.guild.id, interaction.user.id, reason)
+    if not stored:
+      # `/data delete` keeps this member's rows gone; the RAM cache must not resurrect
+      # the state the deletion just cleared.
+      await _safe_interaction_reply(
+          interaction, "💤 وضع الغياب محفوظ لك مؤقتاً فقط، لأنك أوقفت حفظ بياناتك.", ephemeral=False, untrusted=True
+      )
+      return
     self.bot.afk_cache[(interaction.guild.id, interaction.user.id)] = (
         reason, datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
     await _safe_interaction_reply(
         interaction, f"💤 تم تفعيل وضع الغياب: **{reason}**", ephemeral=False, untrusted=True
     )
-    await self.bot.db.set_afk(interaction.guild.id, interaction.user.id, reason)
 
 
   @app_commands.command(name="serverinfo", description="عرض معلومات السيرفر")

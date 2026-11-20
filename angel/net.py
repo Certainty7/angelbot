@@ -328,31 +328,83 @@ async def close_shared_http_session():
   _SHARED_HTTP_SESSION = None
 
 
+class SharedByteBudget:
+  """Event-loop-atomic claim against one job's byte ceiling.
+
+  Concurrent downloads coordinate through `claim` before buffering a chunk, so peak
+  retained RAM for a whole job stays near the ceiling instead of N × per-item caps
+  filtered only after `asyncio.gather` returns (C-007).
+  """
+  __slots__ = ("_remaining",)
+
+  def __init__(self, limit: int):
+    self._remaining = int(limit)
+
+  @property
+  def remaining(self) -> int:
+    return self._remaining
+
+  def claim(self, n: int) -> int:
+    """Reserve up to `n` bytes; returns what was granted (0 = exhausted)."""
+    if n <= 0:
+      return 0
+    granted = min(n, self._remaining)
+    self._remaining -= granted
+    return granted
+
+  def release(self, n: int) -> None:
+    """Give back bytes whose payload was discarded or never read."""
+    if n > 0:
+      self._remaining += int(n)
+
+
 async def read_bounded_stream(
     resp: aiohttp.ClientResponse,
     max_bytes: int = 10 * 1024 * 1024,
     min_bytes: int = 1,
+    budget: Optional[SharedByteBudget] = None,
 ) -> Optional[bytes]:
-  """Read a response body, refusing to buffer more than max_bytes."""
+  """Read a response body, refusing to buffer more than max_bytes.
+
+  With `budget`, every chunk is claimed from the shared ceiling *before* it is
+  buffered; a grant smaller than the chunk means the job's budget is exhausted and
+  the read aborts instead of retaining more than the ceiling. On failure paths the
+  claimed bytes are released; on success they stay claimed for the caller's payload.
+  """
   if max_bytes <= 0:
     raise ValueError("max_bytes must be positive")
+  claimed = 0
+  kept = False
   try:
     cl_header = resp.headers.get("Content-Length")
     if cl_header and cl_header.isdigit():
       cl_val = int(cl_header)
       if cl_val > max_bytes or cl_val < min_bytes:
         return None
+      if budget is not None and cl_val > budget.remaining:
+        # The transfer cannot fit the remaining job budget; refuse it before
+        # buffering the first chunk.
+        return None
     buf = bytearray()
     async for chunk in resp.content.iter_chunked(65536):
       if len(buf) + len(chunk) > max_bytes:
         return None
+      if budget is not None:
+        granted = budget.claim(len(chunk))
+        claimed += granted
+        if granted < len(chunk):
+          return None  # job budget exhausted mid-read
       buf.extend(chunk)
     if len(buf) < min_bytes:
       return None
+    kept = True
     return bytes(buf)
   except Exception as exc:
     logger.debug("bounded stream read failed: %s: %s", type(exc).__name__, exc)
     return None
+  finally:
+    if budget is not None and not kept:
+      budget.release(claimed)
 
 
 def _strip_sensitive_headers(headers: Optional[dict], prev_url: str, next_url: str) -> Optional[dict]:
@@ -441,6 +493,7 @@ async def safe_fetch_response(    url: str,
     max_bytes: int = 10 * 1024 * 1024,
     headers: Optional[dict] = None,
     session=None,
+    budget: Optional[SharedByteBudget] = None,
 ) -> Tuple[str, int, str, Optional[bytes]]:
   """GET with manual redirects; returns (final_url, status, content_type, body)."""
   sess = await _safe_session_or_shared(session)
@@ -464,7 +517,9 @@ async def safe_fetch_response(    url: str,
       ctype = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
       if resp.status != 200:
         return current_url, resp.status, ctype, None
-      return current_url, resp.status, ctype, await read_bounded_stream(resp, max_bytes=max_bytes)
+      return current_url, resp.status, ctype, await read_bounded_stream(
+          resp, max_bytes=max_bytes, budget=budget
+      )
 
   raise PermissionError(f"Exceeded max redirect hops ({_MAX_REDIRECT_HOPS})")
 

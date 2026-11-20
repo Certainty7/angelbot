@@ -75,8 +75,7 @@ behaviour with a workaround; **Low** = cosmetic or tooling.
 
 | ID | Issue | Test |
 |---|---|---|
-| C-001 | Fresh install could not boot (`--checkpoint-db` demanded the database) | `test_ops_and_gates.py` |
-| C-002 | systemd unit was unwritable and restarted forever | `test_ops_and_gates.py` |
+| C-001 | Fresh install could not boot (`--checkpoint-db` demanded the database) | `test_ops_and_gates.py` || C-002 | systemd unit was unwritable and restarted forever | `test_ops_and_gates.py` |
 | C-003 | Budget breaker failed open; `STOP_RATIO` unbounded; concurrent overspend | `test_cost_breaker.py` |
 | C-004 | NL channel summary bypassed `Read Message History` | `test_security_controls.py`, `test_summarize_security.py` |
 | C-005 | Ops tools leaked member text, skipped opt-out, key in URL | `test_privacy_lifecycle.py` |
@@ -118,3 +117,22 @@ behaviour with a workaround; **Low** = cosmetic or tooling.
 | P-007 | Dependency audit could not fail | `test_ops_and_gates.py` |
 | P-008 | `ANGEL_AUTO_INSTALL` installed at import | `test_config_and_time.py` |
 | P-009 | `_SESSION_LOCK` bound to one event loop | `test_security_controls.py` |
+
+## Resolved in the final review round (PR #9)
+
+| ID | Issue | Test |
+|---|---|---|
+| FR-A | One budget reservation covered a whole model-fallback chain | `test_cost_breaker.py` |
+| FR-B | Image-only / GIF-only AI replies were dropped before delivery | `test_admin_and_delivery.py` |
+| FR-C | `/rep`, `/afk` and the background summary re-created opted-out rows | `test_privacy_lifecycle.py` |
+| FR-C2 | Ambient prompt lines had no author marker and survived deletion | `test_privacy_lifecycle.py` |
+| FR-D | The media byte budget filtered results after `gather`, not peak RAM | `test_media_budget.py` |
+| FR-E | A confirmation authorized the stale requester snapshot | `test_confirm_gate.py` |
+| FR-F | A summary inside cooldown still consumed user and guild quota | `test_ai_quota.py`, confirm-gate suite |
+| FR-G | A stale DAVE retry dequeued tracks over active playback | `test_voice_and_guard.py` |
+| FR-H | `/announce` used guild-level `mention_everyone`, ignoring overwrites | `test_admin_and_delivery.py` |
+| FR-I | The backup directory was never provisioned before enabling the timer | `test_ops_and_gates.py` |
+| FR-J | History tools missed `user_preferences` and swallowed failed inserts | `test_operator_tools.py` |
+| FR-K | `cleanup_and_vacuum` fought the documented 60-line retention | `test_privacy_lifecycle.py` |
+| FR-L | NL `انسي كلمة` deleted archive rows with no confirmation | `test_confirm_gate.py` |
+| FR-M | 32 review minors (docs, tests, tools, workflow) — see `docs/recovery/LEDGER.md` | respective files |
