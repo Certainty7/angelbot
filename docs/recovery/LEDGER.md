@@ -500,5 +500,22 @@ Windows 11, Python 3.13.14, `ANGEL_OWNER_ID=42`, temp `ANGEL_DB_PATH`,
 | `npm audit --omit=dev --audit-level=high` | 0 vulnerabilities, exit 0 |
 | secret scan (tracked tree + new diff) | clean |
 
+### Post-merge re-review findings (CodeRabbit on `7b38ee1`, received after the merge)
+
+1. **User quota is consumed before the guild quota gate rejects (NL + slash summary).**
+   Valid observation, deliberately not changed: this is the established accounting shape of
+   every gated command (`/translate`, `/chat`, `/imagine`, `/rules` all admit the user before
+   the guild cap may refuse). Refunding the user quota only in the summary paths would fork the
+   semantics, and a general refund changes anti-abuse behaviour (probing past a guild cap would
+   become free for the prober). The original finding — cooldown rejection consuming quota — is
+   fixed and confirmed by the reviewer. Left for an owner decision if the semantics should ever
+   become transactional.
+2. **Instagram dedup released duplicate claims while the gather result still referenced the
+   payloads** (a repair could claim the released bytes while the duplicate stayed in RAM).
+   Confirmed defect in the remediation itself; fixed on the follow-up branch
+   `recovery/followup-media-budget`: `_dedupe_downloaded_slides` now returns the discarded
+   byte total, and the caller clears `valid_items`/`dl_results` before releasing. Regression:
+   `tests/test_media_budget.py::DuplicateSlideAccountingTest`.
+
 Still not executable here (unchanged): live Discord/DAVE, live YouTube, Docker build, systemd,
 live Cloudflare headers, live Gemini. `docs/LIVE_VERIFICATION.md` remains the checklist.
