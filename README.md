@@ -72,12 +72,13 @@ Discord API.
 
 <p align="center"><sub>One message through the pipeline. Every message the bot can see is archived; a reply goes through the model chain and the output filter.</sub></p>
 
-The archive is one SQLite file with FTS5. `server_messages` holds the raw messages,
-`server_messages_fts` is the search index, and the member-file table stores the reviewed profiles.
-There is no external state: the database file is the source of truth.
+The archive is one SQLite file with FTS5. `server_messages` holds the raw messages and
+`server_messages_fts` is the search index. There is no external state: the database file is the
+source of truth. Every table and its retention is listed in [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md).
 
 There is no profile builder and no nightly miner: automatic fact extraction was removed so the
 bot cannot profile anyone from API data. Memory is one row per member, written by that member.
+`user_dossier` is a legacy table with no writer; migration v2 empties it.
 
 ## Quick start
 
@@ -125,7 +126,7 @@ python tools/selftest.py
 The gate should end with `50/50 checks passed`. It imports every module, builds a temporary
 database, checks the schema and the FTS triggers, exercises the memory and archive paths, counts
 the registered commands and runs the output-filter cases. It does not contact Discord or a model
-provider. The full test story is: `pytest -q` (56 tests plus 322 subtests), `tools/selftest.py`
+provider. The full test story is: `pytest -q` (158 tests plus 322 subtests), `tools/selftest.py`
 (50/50), the security and recall probes, and the website suite (67 Playwright tests).
 
 ### Run
@@ -225,6 +226,11 @@ sudo systemctl enable --now angelbot.service
 journalctl -u angelbot -n 30 --no-pager
 ```
 
+The shipped unit sets `ANGEL_DB_PATH=/opt/angelbot/data/angel.db` explicitly, because
+`ProtectSystem=strict` makes the repository read-only. A value in `.env` still wins, since
+`EnvironmentFile` is applied after `Environment=`. Restart is bounded (`StartLimitBurst=5`), so a
+broken start stops the loop instead of hammering the database.
+
 ### Docker
 
 ```bash
@@ -252,9 +258,10 @@ checkpoints the database and starts the bot. FFmpeg is needed for music and vide
 
 ### Timers
 
-Only `angelbot.service` ships in [`deploy/`](deploy). Maintenance timers (learning, persona notes,
-backup, metrics) are local to the deployment; their units are not in the repository, and no member-file
-collection exists — that path was removed from the code entirely.
+Only `angelbot.service` starts the bot; the maintenance jobs ship with it in [`deploy/`](deploy):
+`angelbot-backup.timer` (nightly verified SQLite backup) and `angelbot-persona.timer` (weekly
+persona-culture refresh). Enable them with `systemctl enable --now angelbot-backup.timer
+angelbot-persona.timer`. No member-file collection exists — that path was removed from the code.
 
 ### Backups and logs
 
@@ -288,7 +295,7 @@ journalctl -u angelbot -n 30 --no-pager
 | Tool | Purpose |
 |---|---|
 | `tools/selftest.py` | 50 offline checks: imports, schema, FTS triggers, memory, archive scope, command census, output filter and deploy readiness. |
-| `pytest -q` | 56 unit/regression tests plus 322 subtests (security, cache, media, AI and database paths). |
+| `pytest -q` | 158 unit/regression tests plus 322 subtests (security, cache, media, AI, database, deployment and documentation paths). |
 | `tools/security_probe.py` | Confirms that injection attempts are stopped by authorization. |
 | `tools/recall_probe.py` | Runs 10 representative recall questions against a temporary database. |
 | `tools/gate_checks.py` | Static checks used by the gate, including the no-shell subprocess rule. |
@@ -327,9 +334,12 @@ necessary but not sufficient: it cannot replace a real Discord server.
 
 ## Known limitations
 
+The authoritative list, with severity and the test that protects each fix, is
+[`KNOWN_ISSUES.md`](KNOWN_ISSUES.md). The short version:
+
 - The bot knows only what a member pins, so personalization is smaller than a profiled bot's: that
   is the intended trade, because Discord's Developer Policy forbids profiling users from API data.
-- There is no off-host backup yet.
+- There is no off-host backup yet; the nightly backup writes to `ANGEL_BACKUP_DIR` on the same host.
 - The output filter is a first version. It catches the obvious cases, not every phrasing.
 - The reference deployment is a small single host, and the timers share that budget.
 - YouTube playback needs a cookies file and Deno. Without them the music search falls back to
