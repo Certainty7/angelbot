@@ -3,7 +3,7 @@
 ## 1.0.5 — 2026-11-20
 
 Recovery and security-hardening pass against an independent 35-finding audit, plus everything
-found while fixing it. Every claim below is backed by a test in `tests/`.
+found while fixing it. Every claim below is backed by a test in the test suite.
 
 ### Boot and deployment
 
