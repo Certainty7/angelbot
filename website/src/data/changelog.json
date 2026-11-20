@@ -9,8 +9,8 @@
       "version": "1.0.5",
       "date": "2026-11-20",
       "summary": {
-        "en": "Recovery and security-hardening pass against an independent 35-finding audit, plus everything found while fixing it. Every claim below is backed by a test in `tests/`.",
-        "ar": "جولة استعادة وتحصين أمني مقابل تدقيق مستقل بـ35 ملاحظة، مع كل ما ظهر أثناء الإصلاح. كل بند أدناه محمي باختبار في `tests/`."
+        "en": "Recovery and security-hardening pass against an independent 35-finding audit, plus everything found while fixing it. Every claim below is backed by a test in the test suite.",
+        "ar": "جولة استعادة وتحصين أمني مقابل تدقيق مستقل بـ35 ملاحظة، مع كل ما ظهر أثناء الإصلاح. كل بند أدناه محمي باختبار في حزمة الاختبارات."
       },
       "sections": [
         {
