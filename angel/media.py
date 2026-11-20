@@ -73,6 +73,22 @@ def _fit_byte_budget(
     return kept, dropped
 
 
+def _fit_file_budget(
+    files: List[Tuple[bytes, str]], budget: int = MAX_JOB_BYTES
+) -> Tuple[List[Tuple[bytes, str]], int]:
+    """Same budget for the (bytes, filename) shape the extractors return."""
+    kept: List[Tuple[bytes, str]] = []
+    total = 0
+    dropped = 0
+    for data, name in files:
+        if kept and total + len(data) > budget:
+            dropped += 1
+            continue
+        kept.append((data, name))
+        total += len(data)
+    return kept, dropped
+
+
 def _get_ffmpeg_semaphore(limit: int = 2) -> asyncio.Semaphore:
   """Loop-scoped semaphore capping concurrent libx264 transcodes."""
   lid = id(asyncio.get_running_loop())
@@ -1415,6 +1431,27 @@ async def extract_x_media_items(
 
 
 async def process_social_media_url_multi(
+    url: str, max_bytes: int = 10 * 1024 * 1024
+) -> Tuple[List[Tuple[bytes, str]], Optional[str], Optional[str]]:
+    """Extract media, then hold the whole job inside the byte budget (C-007).
+
+    The Instagram carousel trimmed itself; X, TikTok and Reddit returned whatever ten files
+    they downloaded, which could exceed the per-job budget by an order of magnitude.
+    """
+    files, fixed_url, caption = await _process_social_media_url_multi(url, max_bytes)
+    if files:
+        kept, dropped = _fit_file_budget(files)
+        if dropped:
+            logger.info(
+                "gallery-budget url_sha=%s dropped=%d kept=%d budget_mb=%d",
+                hashlib.sha256(url.encode()).hexdigest()[:8], dropped, len(kept),
+                MAX_JOB_BYTES // (1024 * 1024),
+            )
+        files = kept
+    return files, fixed_url, caption
+
+
+async def _process_social_media_url_multi(
     url: str, max_bytes: int = 10 * 1024 * 1024
 ) -> Tuple[List[Tuple[bytes, str]], Optional[str], Optional[str]]:
   """

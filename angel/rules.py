@@ -18,9 +18,17 @@ async def index_channel(client, db, guild_id: int, channel_id: int, limit: int =
             return 0
     if channel is None or getattr(getattr(channel, "guild", None), "id", None) != guild_id:
         return 0
+    try:
+        opted_out = await db.get_opted_out_ids()
+    except Exception:
+        # Fail closed: without the preference set we cannot know whose text not to store.
+        logger.warning("rules index refused: opt-out set unavailable")
+        return 0
     collected: list = []
     try:
         async for msg in channel.history(limit=limit, oldest_first=True):
+            if getattr(msg.author, "id", None) in opted_out:
+                continue
             text = (msg.content or "").strip()
             if not text:
                 continue

@@ -60,6 +60,7 @@ class EvolvePersonaTest(unittest.TestCase):
         env = {
             "ANGEL_DB_PATH": path,
             "GEMINI_API_KEY": "test-key-not-real",
+            "ANGEL_PERSONA_CHANNEL_ID": "10",
         }
         with patch.dict(os.environ, env, clear=False), \
                 patch("urllib.request.urlopen", fake_urlopen):
@@ -89,6 +90,23 @@ class EvolvePersonaTest(unittest.TestCase):
         header_names = {k.lower() for k in captured["headers"]}
         self.assertIn("x-goog-api-key", header_names)
         self.assertNotIn("key=", captured["url"])
+
+    def test_refuses_without_a_pinned_channel(self):
+        path = _database()
+        captured = []
+
+        def fake_urlopen(request, timeout=0):
+            captured.append(request)
+            return _FakeResponse(b"{}")
+
+        env = {"ANGEL_DB_PATH": path, "GEMINI_API_KEY": "test-key-not-real"}
+        env.pop("ANGEL_PERSONA_CHANNEL_ID", None)
+        with patch.dict(os.environ, env, clear=False), \
+                patch("urllib.request.urlopen", fake_urlopen):
+            os.environ.pop("ANGEL_PERSONA_CHANNEL_ID", None)
+            code = evolve_persona.main()
+        self.assertEqual(code, 2)
+        self.assertEqual(captured, [], "the tool reached the network without an allowed channel")
 
     def test_a_non_object_payload_is_rejected(self):
         code, _captured, row = self._run({

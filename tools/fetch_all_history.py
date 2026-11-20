@@ -70,19 +70,10 @@ def ensure_schema(db: sqlite3.Connection) -> None:
 
 
 def database_path() -> str:
-    """ANGEL_DB_PATH, resolved exactly like the bot does."""
-    root = pathlib.Path(__file__).resolve().parent.parent
-    configured = (os.environ.get("ANGEL_DB_PATH") or "").strip()
-    if configured:
-        return configured
-    env_file = root / ".env"
-    try:
-        for line in env_file.read_text(encoding="utf-8").splitlines():
-            if line.startswith("ANGEL_DB_PATH="):
-                return line.split("=", 1)[1].strip()
-    except OSError:
-        pass
-    return str(root / "chat_history.db")
+    """ANGEL_DB_PATH, resolved with the same rules as angel.config."""
+    import dbpath  # tools/ is on sys.path when a tool runs from the repository root
+
+    return dbpath.resolve()
 
 
 def main() -> None:

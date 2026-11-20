@@ -65,11 +65,17 @@ inventory plus a test that fails when a registered action has no policy.
 
 Rejected: adding checks ad hoc per route (that is how the original bypasses appeared).
 
-## D-008 — `AllowedMentions.none()` is the default for every outbound path
+## D-008 — Untrusted outbound text never pings
 
-Model output, archive text, media titles and third-party metadata are untrusted. A global default
-of "no pings" plus an explicit opt-in list at the few call sites that genuinely ping is safer than
-auditing every `send()`.
+Model output, transcripts, media titles, archive quotes and member-authored AFK reasons are
+untrusted. `safe_reply(..., untrusted=True)` and `_safe_interaction_reply(..., untrusted=True)`
+set `AllowedMentions.none()` on those paths, and `filter_outgoing` neutralises `<@id>`/`<@!id>`
+alongside `@everyone`/roles. The client default stays `users=True` so bot-authored confirmations
+("kicked @member") still notify the member they name.
+
+Rejected: making `AllowedMentions.none()` the global default. It reads safer, but it would turn
+every intentional moderation confirmation into a literal `<@id>` string, and the real hazard is
+untrusted text, not the client default.
 
 ## D-009 — Media memory is budgeted in bytes per job, not in "slides × size" comments
 

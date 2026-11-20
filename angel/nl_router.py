@@ -406,6 +406,11 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
     elif action_name == "PURGE":
       val = max(1, min(100, int(params.get("value", "15"))))
       await message.channel.purge(limit=val + 1)
+    else:
+      # An action the model named but this dispatcher has no branch for (MOVE_TO_ME,
+      # VOICE_MUTE, PIN_MSG, ...) did nothing; reporting "executed" would be a false success.
+      logger.warning(f"AI inferred action has no handler: {action_name}")
+      return "failed"
     return "executed"
   except _ActionBlocked:
     logger.warning(f"AI inferred action blocked by authorization ({action_name})")

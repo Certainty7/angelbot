@@ -552,9 +552,14 @@ class BotDatabase:
       version = 2
     if version < 3:
       # The archive index was created without `remove_diacritics`; recreate it and rebuild
-      # once so a search for "مُحَمَّد" can match "محمد".
+      # once so a search for "مُحَمَّد" can match "محمد". A durable marker survives a crash
+      # between the drop and the rebuild: otherwise the index would stay empty forever.
       for trigger in ("server_messages_ai", "server_messages_ad", "server_messages_au"):
         await db.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+      await db.execute(
+          "INSERT INTO state (key, value, updated_at) VALUES ('fts_rebuild_pending', '1', CURRENT_TIMESTAMP) "
+          "ON CONFLICT(key) DO UPDATE SET value = '1'"
+      )
       await db.execute("DROP TABLE IF EXISTS server_messages_fts")
       self._fts_rebuild_needed = True
       await db.execute("PRAGMA user_version = 3")
@@ -587,7 +592,9 @@ class BotDatabase:
           """
       )
     except Exception as exc:
-      logger.debug("retention pass skipped: %s", exc)
+      # Do not mark the day as done: a transient lock would otherwise defer the pass by 24h.
+      logger.warning("retention pass failed: %s: %s", type(exc).__name__, exc)
+      return
     await db.execute(
         "INSERT INTO state (key, value, updated_at) VALUES ('retention_day', ?, CURRENT_TIMESTAMP) "
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP",
@@ -667,6 +674,15 @@ class BotDatabase:
           "DELETE FROM messages WHERE user_id = ? AND LOWER(content) LIKE ? ESCAPE '\\'",
           (user_id, f"%{_like_escape(kw_lower)}%"),
       )
+      # The archive is what recall quotes back into a later prompt, so a "forgotten" word
+      # that survives there has not really been forgotten. The delete trigger keeps FTS in sync.
+      try:
+        await db.execute(
+            "DELETE FROM server_messages WHERE user_id = ? AND LOWER(content) LIKE ? ESCAPE '\\'",
+            (user_id, f"%{_like_escape(kw_lower)}%"),
+        )
+      except Exception as exc:
+        logger.debug("archive forget skipped: %s", exc)
       # Also scrub or clear user_summaries so the forgotten keyword never re-enters prompt context (F-07)
       async with db.execute("SELECT summary FROM user_summaries WHERE user_id = ?", (user_id,)) as cur:
         srow = await cur.fetchone()
@@ -1093,6 +1109,7 @@ class BotDatabase:
     evidence owned by the server; the reply text says so.
     """
     counts: Dict[str, int] = {}
+    failed: List[str] = []
     async with self._connect() as db:
       # persona_culture is an aggregate derived from member speech: clear the guilds this
       # member actually spoke in, otherwise the aggregate keeps reflecting them.
@@ -1107,13 +1124,17 @@ class BotDatabase:
           cur = await db.execute(f"DELETE FROM {table} WHERE {column} = ?", (user_id,))
           counts[table] = int(cur.rowcount or 0)
         except Exception as exc:
-          logger.debug("delete from %s skipped: %s", table, exc)
+          # A locked or damaged table must not be reported as "deleted" to the member.
+          logger.warning("delete from %s failed: %s: %s", table, type(exc).__name__, exc)
+          failed.append(table)
       for gid in guild_ids:
         try:
           cur = await db.execute("DELETE FROM persona_culture WHERE guild_id = ?", (gid,))
           counts["persona_culture"] = counts.get("persona_culture", 0) + int(cur.rowcount or 0)
-        except Exception:
-          continue
+        except Exception as exc:
+          logger.warning("persona_culture delete failed: %s", type(exc).__name__)
+          failed.append("persona_culture")
+          break
       await db.execute(
           "INSERT INTO user_preferences (user_id, pinned_facts, style_mode, opt_out, updated_at) "
           "VALUES (?, '', 'realistic', 1, CURRENT_TIMESTAMP) "
@@ -1121,6 +1142,10 @@ class BotDatabase:
           (user_id,),
       )
       await db.commit()
+    if failed:
+      # The caller surfaces this instead of a clean receipt.
+      counts["_failed"] = len(failed)  # type: ignore[assignment]
+      counts["_failed_tables"] = failed  # type: ignore[assignment]
     return counts
 
   # --- DM Spy Logs ---
@@ -1517,6 +1542,15 @@ class BotDatabase:
     """
     rebuild = getattr(self, "_fts_rebuild_needed", False)
     async with self._connect() as db:
+      if not rebuild:
+        try:
+          async with db.execute(
+              "SELECT value FROM state WHERE key = 'fts_rebuild_pending'"
+          ) as cur:
+            row = await cur.fetchone()
+          rebuild = bool(row and row[0] == "1")
+        except Exception:
+          rebuild = False
       await db.executescript(
           "CREATE VIRTUAL TABLE IF NOT EXISTS server_messages_fts USING fts5("
           " content, display_name, channel_id UNINDEXED, created_at UNINDEXED,"
@@ -1544,6 +1578,7 @@ class BotDatabase:
       if rebuild:
         # The tokenizer migration dropped the old index; repopulate it from the archive.
         await db.execute("INSERT INTO server_messages_fts(server_messages_fts) VALUES('rebuild')")
+        await db.execute("DELETE FROM state WHERE key = 'fts_rebuild_pending'")
         await db.commit()
         self._fts_rebuild_needed = False
 
@@ -1908,8 +1943,10 @@ class BotDatabase:
     left the guild with a partial rule set.
     """
     async with self._connect() as db:
-      async with db.execute("BEGIN IMMEDIATE"):
-        pass
+      # Finish anything the shared connection left open, otherwise BEGIN IMMEDIATE raises
+      # "cannot start a transaction within a transaction" and a rollback would discard it.
+      await db.commit()
+      await db.execute("BEGIN IMMEDIATE")
       try:
         await db.execute("DELETE FROM rules WHERE guild_id = ?", (guild_id,))
         for key, content in rules:

@@ -448,6 +448,18 @@ class AngelBrainService:
 
   async def generate_image_bytes(self, prompt: str, style_Preset: str = "anime",
                                  user: Any = None) -> Tuple[bytes, str]:
+    """One image call, reserved against the daily ceiling like a text call (C-003)."""
+    if await self.budget_blocked(user):
+      raise cost.BudgetExhausted("وصل البوت للحد اليومي للميزانية — وضع الاستماع.")
+    if not await self._reserve_budget(user):
+      raise cost.BudgetExhausted("وصل البوت للحد اليومي للميزانية — وضع الاستماع.")
+    try:
+      return await self._generate_image_bytes_locked(prompt, style_Preset, user)
+    finally:
+      await self._release_budget()
+
+  async def _generate_image_bytes_locked(self, prompt: str, style_Preset: str = "anime",
+                                         user: Any = None) -> Tuple[bytes, str]:
     if await self.budget_blocked(user):
       raise cost.BudgetExhausted("وصل البوت للحد اليومي للميزانية — وضع الاستماع.")
     english_prompt = prompt

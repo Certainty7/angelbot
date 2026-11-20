@@ -21,8 +21,12 @@ async def _safe_interaction_reply(
     *,
     embed: Optional[discord.Embed] = None,
     view: Optional[discord.ui.View] = None,
+    untrusted: bool = False,
 ):
-  """Send an interaction response or followup safely without crashing on expired 10062 tokens."""
+  """Send an interaction response or followup safely without crashing on expired 10062 tokens.
+
+  `untrusted=True` suppresses every ping for member-authored text echoed by the bot.
+  """
   kwargs: Dict[str, Any] = {"ephemeral": ephemeral}
   if content is not None:
     kwargs["content"] = content
@@ -30,6 +34,8 @@ async def _safe_interaction_reply(
     kwargs["embed"] = embed
   if view is not None:
     kwargs["view"] = view
+  if untrusted:
+    kwargs["allowed_mentions"] = discord.AllowedMentions.none()
   try:
     if not interaction.response.is_done():
       await interaction.response.send_message(**kwargs)

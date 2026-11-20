@@ -9,6 +9,9 @@ Group=angel
 WorkingDirectory=/opt/angelbot
 EnvironmentFile=/opt/angelbot/.env
 Environment=ANGEL_DB_PATH=/opt/angelbot/data/angel.db
+# Required: a public channel id. The tool refuses to sample anything else, because the
+# archive does not record whether a channel is a staff room.
+Environment=ANGEL_PERSONA_CHANNEL_ID=
 UMask=0077
 # Writes persona_culture, so it needs the same data directory as the bot.
 ReadWritePaths=/opt/angelbot/data

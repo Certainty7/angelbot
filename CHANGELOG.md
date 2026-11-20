@@ -33,6 +33,9 @@ found while fixing it. Every claim below is backed by a test in `tests/`.
   titles and archive quotes.
 - AI quota gaps closed: `/translate`, `/rules`, `/summarize_channel` and the NL summary all
   consume the user and guild quotas; image generation skips cooling/dead models.
+- `/rules` can only rebuild its index from the configured rules channel, and only staff can ask
+  for it: a cache miss no longer rewrites the server's rules from whatever channel the caller is
+  standing in.
 
 ### Privacy and data
 
@@ -46,6 +49,9 @@ found while fixing it. Every claim below is backed by a test in `tests/`.
   sends the key in a header and validates the payload.
 - `forget_user_keyword` treats `%` and `_` literally. `initialize()` no longer rewrites user data
   on every boot: legacy clean-up runs once behind `PRAGMA user_version`.
+- `/data view` reports every stored category again, the deletion receipt names any table that
+  failed instead of printing a clean success, and `/memory forget` asks for confirmation and also
+  scrubs the archive it would otherwise quote back.
 
 ### Reliability
 

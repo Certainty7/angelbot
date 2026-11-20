@@ -3,7 +3,7 @@ import asyncio
 import unittest
 from collections import deque
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import discord
 
@@ -108,6 +108,7 @@ class GhostPingTest(unittest.TestCase):
         bot = MagicMock()
         bot.db.get_user_prefs = AsyncMock(return_value={})
         bot.db.get_modlog_channel = AsyncMock(return_value=None)
+        bot.db.close = AsyncMock()
         bot.send_modlog = AsyncMock()
         bot.snipe_cache = {}
 
@@ -132,7 +133,11 @@ class GhostPingTest(unittest.TestCase):
         message.created_at = datetime.now(timezone.utc) - timedelta(seconds=5)
         message.channel.send = AsyncMock()
 
-        asyncio.run(module.on_message_delete(message))
+        # The handler reads the module-global client; without this patch it would use the
+        # real one, open a database the test never closes, and its non-daemon aiosqlite
+        # thread would keep the whole pytest process alive forever.
+        with patch.object(module, "bot", bot):
+            asyncio.run(module.on_message_delete(message))
         message.channel.send.assert_not_awaited()
 
 
