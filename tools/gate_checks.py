@@ -54,11 +54,10 @@ def _count_command_decorators(path: str) -> int:
 
 def _late_binding_offences(path: str) -> list:
     """AST-level detection: strings and comments can never trip this check."""
-    try:
-        with open(path, encoding="utf-8") as fh:
-            tree = ast.parse(fh.read(), filename=path)
-    except SyntaxError:
-        return []
+    with open(path, encoding="utf-8") as fh:
+        # A SyntaxError must fail the gate: swallowing it made this check green on a file
+        # that could not even be imported (C-029).
+        tree = ast.parse(fh.read(), filename=path)
     found = []
     for node in ast.walk(tree):
         # the old dynamic client lookup (globals() plus .get of the name)
@@ -267,9 +266,17 @@ def owner_id_not_in_source():
     from dotenv import dotenv_values
 
     values = dotenv_values(os.path.join(ROOT, ".env"))
-    declared = (values.get("ANGEL_OWNER_ID") or values.get("MALAK_OWNER_ID") or "").strip()
+    # CI sets ANGEL_OWNER_ID without a .env file; reading only the file made this gate
+    # report "skipped" exactly where it mattered (C-029).
+    declared = (
+        values.get("ANGEL_OWNER_ID")
+        or os.getenv("ANGEL_OWNER_ID")
+        or values.get("MALAK_OWNER_ID")
+        or os.getenv("MALAK_OWNER_ID")
+        or ""
+    ).strip()
     if not declared.isdigit() or len(declared) < 15:
-        return "skipped: no real 64-bit ANGEL_OWNER_ID in .env to search for"
+        return "skipped: no real 64-bit ANGEL_OWNER_ID in .env or environment to search for"
 
     # Production sources only: a test fixture is allowed to invent an id.
     targets = [os.path.join(ROOT, "bot.py")]
@@ -499,8 +506,29 @@ def no_shell_subprocess():
                 "run", "call", "check_call", "check_output", "Popen",
             }:
                 for kw in node.keywords:
-                    if kw.arg == "shell" and isinstance(kw.value, ast.Constant) and kw.value.value is True:
-                        offenders.append(f"{os.path.relpath(path, ROOT)}:{node.lineno} shell=True")
+                    # `shell=1` and a non-literal shell value are the same hazard as True.
+                    if kw.arg == "shell" and not (
+                        isinstance(kw.value, ast.Constant) and kw.value.value in (None, False)
+                    ):
+                        offenders.append(f"{os.path.relpath(path, ROOT)}:{node.lineno} shell=<truthy>")
+                # `**{"shell": True}` bypassed a keyword-only check.
+                for kw in node.keywords:
+                    if kw.arg is None and isinstance(kw.value, ast.Dict):
+                        for key in kw.value.keys:
+                            if isinstance(key, ast.Constant) and key.value == "shell":
+                                offenders.append(
+                                    f"{os.path.relpath(path, ROOT)}:{node.lineno} shell=**kwargs"
+                                )
+                # `sh -c "<string>"` is a shell even without the keyword.
+                if node.args and isinstance(node.args[0], ast.Constant) \
+                        and isinstance(node.args[0].value, str) \
+                        and os.path.basename(node.args[0].value) in {"sh", "bash", "zsh", "dash"}:
+                    for arg in node.args[1:]:
+                        if isinstance(arg, ast.Constant) and arg.value == "-c":
+                            offenders.append(
+                                f"{os.path.relpath(path, ROOT)}:{node.lineno} sh -c"
+                            )
+                            break
     assert not offenders, "shell subprocess: " + ", ".join(offenders)
     return f"{len(paths)} runtime modules use argv lists only"
 
@@ -648,18 +676,29 @@ def exec_confirmation_word():
     from angel.config import MISTRESS_INT_ID
 
     class _Msg:
-        guild = SimpleNamespace(id=1, members=[], voice_channels=[])
+        guild = SimpleNamespace(id=1, members=[], voice_channels=[], text_channels=[])
         author = SimpleNamespace(id=MISTRESS_INT_ID)
         mentions: list = []
         reference = None
 
         def __init__(self, content):
             self.content = content
-            self.channel = SimpleNamespace(id=2)
+            self.channel = SimpleNamespace(id=2, mention="<#2>")
+            self.channel_mentions = []
             self.sent = []
 
         async def reply(self, **kw):
             self.sent.append(kw)
+            return None
+
+    class _DB:
+        def __init__(self):
+            self.modlog = None
+
+        async def set_modlog_channel(self, _guild_id, channel_id):
+            self.modlog = channel_id
+
+        async def set_guard_mode(self, *_args):
             return None
 
     class _Bot:
@@ -668,7 +707,10 @@ def exec_confirmation_word():
             self.pending_step = {}
             self.summarize_cooldowns = {}
             self.last_social_target = {}
-            self.db = None
+            self.last_target_channel = {}
+            self.modlog_cache = {}
+            self.guard_modes_cache = {}
+            self.db = _DB()
             self.send_modlog = None
 
         def get_harem_title(self, _uid):
@@ -678,12 +720,14 @@ def exec_confirmation_word():
         bot = _Bot()
         original = _Msg("احظر هذا الشخص")
         bot.pending_confirm[(1, MISTRESS_INT_ID)] = {
-            "cmd": "BAN | reason=test", "message": original, "channel_id": 2, "ts": _time.monotonic(),
+            "cmd": "SET_MODLOG", "message": original, "channel_id": 2, "ts": _time.monotonic(),
         }
         confirm = _Msg("تأكيد")
         handled = await nl_router.try_execute_natural_command(bot, confirm, "تأكيد")
         assert handled is True, "the confirm word fell through to the model"
         assert (1, MISTRESS_INT_ID) not in bot.pending_confirm, "pending action was not drained"
+        # The reply must reflect the real outcome: SET_MODLOG here really executes.
+        assert bot.db.modlog == 2, "the confirmed action did not run"
         assert any("تم تنفيذ" in (m.get("content") or "") for m in confirm.sent), confirm.sent
 
         # A different word cancels instead of executing.
@@ -695,8 +739,17 @@ def exec_confirmation_word():
         assert handled is True and (1, MISTRESS_INT_ID) not in bot.pending_confirm
         assert any("ألغيت" in (m.get("content") or "") for m in cancel.sent), cancel.sent
 
+        # A confirmation typed in another channel must not execute the pending action.
+        bot.pending_confirm[(1, MISTRESS_INT_ID)] = {
+            "cmd": "SET_MODLOG", "message": original, "channel_id": 99, "ts": _time.monotonic(),
+        }
+        elsewhere = _Msg("تأكيد")
+        handled = await nl_router.try_execute_natural_command(bot, elsewhere, "تأكيد")
+        assert handled is True
+        assert any("نفس القناة" in (m.get("content") or "") for m in elsewhere.sent), elsewhere.sent
+
     asyncio.run(run())
-    return "تأكيد executes, إلغاء cancels"
+    return "تأكيد executes in-channel, another channel is refused, إلغاء cancels"
 
 
 def ytdlp_subprocess():

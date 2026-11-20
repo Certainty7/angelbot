@@ -69,9 +69,25 @@ def ensure_schema(db: sqlite3.Connection) -> None:
     db.commit()
 
 
+def database_path() -> str:
+    """ANGEL_DB_PATH, resolved exactly like the bot does."""
+    root = pathlib.Path(__file__).resolve().parent.parent
+    configured = (os.environ.get("ANGEL_DB_PATH") or "").strip()
+    if configured:
+        return configured
+    env_file = root / ".env"
+    try:
+        for line in env_file.read_text(encoding="utf-8").splitlines():
+            if line.startswith("ANGEL_DB_PATH="):
+                return line.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    return str(root / "chat_history.db")
+
+
 def main() -> None:
     tok = token()
-    db = sqlite3.connect("chat_history.db", timeout=30)
+    db = sqlite3.connect(database_path(), timeout=30)
     ensure_schema(db)
 
     total = db.execute("select count(*) from server_messages").fetchone()[0]
@@ -112,13 +128,16 @@ def main() -> None:
                         continue
                     ts = datetime.fromisoformat(m["timestamp"].replace("Z", "+00:00")).astimezone(timezone.utc)
                     try:
+                        # Never re-import a member who ran /data delete (C-005).
                         db.execute(
                             "INSERT OR IGNORE INTO server_messages "
                             "(guild_id, channel_id, user_id, display_name, content, created_at, message_id) "
-                            "VALUES (?,?,?,?,?,?,?)",
+                            "SELECT ?,?,?,?,?,?,? WHERE NOT EXISTS ("
+                            "SELECT 1 FROM user_preferences WHERE user_id = ? AND opt_out = 1)",
                             (int(guild["id"]), cid, int(a["id"]),
                              (a.get("global_name") or a.get("username") or "")[:80],
-                             m["content"].strip()[:1500], ts.isoformat(timespec="seconds"), m["id"]),
+                             m["content"].strip()[:1500], ts.isoformat(timespec="seconds"),
+                             m["id"], int(a["id"])),
                         )
                         added += 1
                     except sqlite3.Error:

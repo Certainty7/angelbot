@@ -97,6 +97,21 @@ class AiChat(commands.Cog):
       self,
       interaction: discord.Interaction, text: str, target_language: str
   ):
+    # Translation is a paid model call like any other; it used to skip both the user quota
+    # and the guild daily cap (C-014).
+    allowed, deny_reason = self.bot.quota.check_user_allowed(
+        interaction.user, is_harem=(self.bot.get_harem_title(interaction.user.id) is not None)
+    )
+    if not allowed:
+      await interaction.response.send_message(f"⚠️ {deny_reason}", ephemeral=True)
+      return
+    if interaction.guild and not is_mistress(interaction.user):
+      allowed_g, used_g = await self.bot.db.consume_guild_ai_quota(interaction.guild.id)
+      if not allowed_g:
+        await interaction.response.send_message(
+            f"⚠️ وصل السيرفر لحد استهلاك الذكاء الاصطناعي اليومي (`{used_g}`).", ephemeral=True
+        )
+        return
     await interaction.response.defer(thinking=True)
     try:
       prompt = (
@@ -193,6 +208,18 @@ class AiChat(commands.Cog):
         return
       # A 500-message summary is a real model call; keep a member from making it a loop.
       limit = min(limit, 200)
+      allowed_q, deny_q = self.bot.quota.check_user_allowed(
+          interaction.user, is_harem=(self.bot.get_harem_title(interaction.user.id) is not None)
+      )
+      if not allowed_q:
+        await interaction.response.send_message(f"⚠️ {deny_q}", ephemeral=True)
+        return
+      allowed_g, used_g = await self.bot.db.consume_guild_ai_quota(interaction.guild.id)
+      if not allowed_g:
+        await interaction.response.send_message(
+            f"⚠️ وصل السيرفر لحد استهلاك الذكاء الاصطناعي اليومي (`{used_g}`).", ephemeral=True
+        )
+        return
       now_m = time.monotonic()
       last_sum = self.bot.summarize_cooldowns.get(interaction.user.id)
       if last_sum is not None and now_m - last_sum < 120.0:

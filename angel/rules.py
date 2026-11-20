@@ -18,9 +18,7 @@ async def index_channel(client, db, guild_id: int, channel_id: int, limit: int =
             return 0
     if channel is None or getattr(getattr(channel, "guild", None), "id", None) != guild_id:
         return 0
-    stored = idx = 0
-    # A fresh index must not leave rules from an earlier, longer rules message.
-    await db.clear_rules(guild_id)
+    collected: list = []
     try:
         async for msg in channel.history(limit=limit, oldest_first=True):
             text = (msg.content or "").strip()
@@ -31,15 +29,18 @@ async def index_channel(client, db, guild_id: int, channel_id: int, limit: int =
             for chunk in chunks:
                 if len(chunk) < 8:
                     continue
-                idx += 1
-                await db.upsert_rule(guild_id, f"قاعدة {idx}", chunk[:1200])
-                stored += 1
+                collected.append((f"قاعدة {len(collected) + 1}", chunk[:1200]))
     except (discord.Forbidden, discord.HTTPException) as exc:
         logger.warning("rules index failed guild=%s: %s: %s", guild_id, type(exc).__name__, exc)
-    return stored
+        # Nothing was replaced: a failed read must not leave the guild with zero rules.
+        return 0
+    if not collected:
+        return 0
+    await db.replace_rules(guild_id, collected)
+    return len(collected)
 
 
-async def answer(ai, db, guild_id: int, question: str) -> str:
+async def answer(ai, db, guild_id: int, question: str, user=None) -> str:
     hits = await db.search_rules(guild_id, question, 3)
     if not hits:
         return "ما لقيت قاعدة تنطبق على هالسؤال في قوانين السيرفر."
@@ -52,7 +53,11 @@ async def answer(ai, db, guild_id: int, question: str) -> str:
         "إذا القواعد ما تغطي السؤال بالضبط قولي إنها ما تغطيه."
     )
     try:
-        raw = await ai.generate_angel_reply_raw(prompt, max_tokens=220, temperature=0.2)
+        # `user` carries the quota and the owner override; without it /rules was a free
+        # unlimited model call for any member (C-014).
+        raw = await ai.generate_angel_reply_raw(
+            prompt, max_tokens=220, temperature=0.2, user=user
+        )
         return (raw or "").strip()[:1900] or ("القواعد المتعلقة:\n" + bullets)
     except BudgetExhausted:
         return ("القواعد المتعلقة:\n" + bullets)[:1900]

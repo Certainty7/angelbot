@@ -36,7 +36,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(ROOT)
 sys.path.insert(0, ROOT)
 TMP_DB = os.path.join(tempfile.gettempdir(), "angel_selftest.db")
-os.environ.setdefault("ANGEL_DB_PATH", TMP_DB)
+# Force, never setdefault: under systemd the EnvironmentFile carries the production
+# ANGEL_DB_PATH, and inheriting it made the gate read and assert on the live database.
+os.environ["ANGEL_DB_PATH"] = TMP_DB
 # These two ids define the hermetic admin context the ACL checks assert on. They are forced
 # (not setdefault): under systemd the EnvironmentFile already carries the production admin ids,
 # and inheriting them made `context-acl` fail on the real deploy path. A false negative in a
@@ -89,8 +91,10 @@ def _base_dir():
     cfg = importlib.import_module("angel.config")
     assert os.path.realpath(cfg.BASE_DIR) == os.path.realpath(ROOT), cfg.BASE_DIR
     prod_db = os.path.realpath(os.path.join(ROOT, "chat_history.db"))
-    if os.path.realpath(cfg.DB_PATH) == prod_db:
-        assert os.path.isfile(cfg.DB_PATH), cfg.DB_PATH
+    if os.path.realpath(cfg.DB_PATH) == prod_db and not os.path.isfile(cfg.DB_PATH):
+        # A brand-new install has no database yet; setup_hook() creates it. Failing the
+        # startup gate here is what made every documented deployment path unbootable.
+        return "not created yet (first boot creates it)"
     return cfg.BASE_DIR
 
 
@@ -775,17 +779,26 @@ def _server_log():
     from angel.database import BotDatabase
 
     async def run():
-        path = os.path.join(tempfile.gettempdir(), "angel-serverlog-test.db")
-        if os.path.exists(path):
-            os.remove(path)
+        # A unique file per run: a leftover from an interrupted run on Windows can stay
+        # locked and would fail the gate for a reason unrelated to the code.
+        fd, path = tempfile.mkstemp(prefix="angel-serverlog-", suffix=".db")
+        os.close(fd)
         db = BotDatabase(path)
-        await db.log_server_message(1, 2, 3, "tester", "رسالة تجريبية للتعلم")
-        async with db._connect() as conn:  # noqa: SLF001
-            cur = await conn.execute("SELECT content FROM server_messages ORDER BY id DESC LIMIT 1")
-            row = await cur.fetchone()
-        await db.close()  # or the aiosqlite worker outlives the loop and prints a traceback
-        os.remove(path)
-        return row[0] if row else None
+        try:
+            await db.log_server_message(1, 2, 3, "tester", "رسالة تجريبية للتعلم")
+            async with db._connect() as conn:  # noqa: SLF001
+                cur = await conn.execute("SELECT content FROM server_messages ORDER BY id DESC LIMIT 1")
+                row = await cur.fetchone()
+            return row[0] if row else None
+        finally:
+            # A leaked aiosqlite worker is a non-daemon thread: the whole selftest would
+            # print its summary and then never exit.
+            await db.close()
+            for suffix in ("", "-wal", "-shm"):
+                try:
+                    os.remove(path + suffix)
+                except OSError:
+                    pass
 
     got = asyncio.run(run())
     assert got == "رسالة تجريبية للتعلم", got

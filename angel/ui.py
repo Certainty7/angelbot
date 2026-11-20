@@ -20,7 +20,7 @@ class ArtStudioView(discord.ui.View):
 
   def __init__(self, prompt: str, bot, author_id: int) -> None:
     super().__init__(timeout=600)
-    self.prompt = (prompt or "")[:4096]
+    self.prompt = (prompt or "")[:3800]
     self.bot = bot
     self.author_id = author_id
 
@@ -45,7 +45,7 @@ class ArtStudioView(discord.ui.View):
         return
       file = discord.File(io.BytesIO(img_bytes), filename="angel_studio.png")
       embed = discord.Embed(
-          description=f"🎨 **{self.prompt}** (`{label_ar}`)",
+          description=f"🎨 **{self.prompt}** (`{label_ar}`)"[:4096],
           color=0xD4AF37 if (is_mistress(interaction.user) or harem_title) else 0x2B2D31,
           timestamp=datetime.now(timezone.utc),
       )

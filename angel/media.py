@@ -50,6 +50,28 @@ def _allowed_social_host(url: str) -> bool:
 
 _FFMPEG_SEMS: Dict[int, asyncio.Semaphore] = {}
 
+# One media job may hold at most this much image/video data in RAM. The container is capped
+# at 1 GB and also runs Python, Pillow and the Discord client; 20 carousel slides at the
+# 25 MB upload ceiling would be 500 MB for a single job (C-007).
+MAX_JOB_BYTES = 50 * 1024 * 1024
+
+
+def _fit_byte_budget(
+    items: List[Tuple[int, bytes, str]], budget: int = MAX_JOB_BYTES
+) -> Tuple[List[Tuple[int, bytes, str]], int]:
+    """Keep slides until their combined payload reaches `budget`; return (kept, dropped)."""
+    kept: List[Tuple[int, bytes, str]] = []
+    total = 0
+    dropped = 0
+    for item in items:
+        size = len(item[1])
+        if kept and total + size > budget:
+            dropped += 1
+            continue
+        kept.append(item)
+        total += size
+    return kept, dropped
+
 
 def _get_ffmpeg_semaphore(limit: int = 2) -> asyncio.Semaphore:
   """Loop-scoped semaphore capping concurrent libx264 transcodes."""
@@ -127,7 +149,8 @@ async def resolve_social_redirect_and_clean(url: str) -> str:
   ):
     # A share short-link is still a URL from a member: never fetch loopback, the VPN subnet or
     # the cloud metadata address just because the text happens to contain "/share/".
-    if not _is_safe_public_http_url(clean_url):
+    # getaddrinfo is blocking; running it inline froze the event loop (and voice) on a slow DNS.
+    if not await asyncio.to_thread(_is_safe_public_http_url, clean_url):
       return clean_url
     try:
       session = await get_shared_http_session()
@@ -143,7 +166,7 @@ async def resolve_social_redirect_and_clean(url: str) -> str:
           q_params = urllib.parse.parse_qs(urllib.parse.urlsplit(final_u).query)
           red_list = q_params.get("redirect_url")
           if red_list and red_list[0].startswith("http") and _allowed_social_host(red_list[0]):
-            if _is_safe_public_http_url(red_list[0]):
+            if await asyncio.to_thread(_is_safe_public_http_url, red_list[0]):
               final_u = red_list[0]
         clean_url = final_u
     except Exception:
@@ -273,9 +296,18 @@ async def _ensure_discord_playable_mp4(video_bytes: bytes, max_bytes: int = 10 *
       try:
         await asyncio.wait_for(proc.wait(), timeout=14.0)
       except asyncio.TimeoutError:
-        proc.kill()
-        await proc.wait()
         raise
+      finally:
+        # A cancelled transcode used to delete tmp_dir while ffmpeg was still writing.
+        if proc.returncode is None:
+          try:
+            proc.kill()
+          except ProcessLookupError:
+            pass
+          try:
+            asyncio.get_running_loop().create_task(proc.wait())
+          except RuntimeError:
+            pass
       if os.path.isfile(out_p):
         sz = os.path.getsize(out_p)
         if 4096 < sz <= max_bytes:
@@ -900,6 +932,12 @@ async def extract_instagram_media_items(
           await _repair_from(fresh_list)
 
     kept.sort(key=lambda x: x[0])
+    kept, over_budget = _fit_byte_budget(kept)
+    if over_budget:
+        logger.info(
+            "gallery-budget platform=instagram dropped=%d kept=%d budget_mb=%d url=%s",
+            over_budget, len(kept), MAX_JOB_BYTES // (1024 * 1024), clean_ig_url,
+        )
     downloaded_files = [(b, f) for _i, b, f in kept]
     if discovered and len(downloaded_files) < discovered:
       # Never degrade silently: journalctl -u angelbot has to show the loss.
@@ -1386,7 +1424,9 @@ async def process_social_media_url_multi(
   if not _allowed_social_host(url):
     return [], None, None
   resolved_url = await resolve_social_redirect_and_clean(url)
-  if not _allowed_social_host(resolved_url) or not _is_safe_public_http_url(resolved_url):
+  if not _allowed_social_host(resolved_url) or not await asyncio.to_thread(
+      _is_safe_public_http_url, resolved_url
+  ):
     return [], None, None
 
   # 1. TikTok (Videos + Multi-Photo Slideshows)

@@ -15,7 +15,12 @@ def _fts_query(text: str) -> str:
   """Safe FTS5 MATCH expression (prefix tokens, OR-joined); empty when nothing usable."""
   import re
 
-  tokens = re.findall(r"[\w\u0621-\u064A\u0660-\u0669]{2,}", (text or "").lower())
+  from .persona import normalize_arabic_text
+
+  # Fold diacritics and tatweel before tokenising: "مُحَمَّد" otherwise splits into single
+  # letters and is dropped by the {2,} filter, so the search silently returns nothing.
+  normalized = normalize_arabic_text(text or "").lower()
+  tokens = re.findall(r"[\w\u0621-\u064A\u0660-\u0669]{2,}", normalized)
   stop = {"the", "and", "you", "are", "what", "وش", "في", "من", "على", "عن", "هو", "هي"}
   tokens = [t for t in tokens if t not in stop][:6]
   return " OR ".join(f'"{t}"*' for t in tokens)
@@ -312,47 +317,7 @@ class BotDatabase:
                     last_message_id INTEGER DEFAULT 0
                 )
             """)
-      # Clean up legacy repetitive vocatives ('يا اليقين', 'تأمرين يا اليقين', etc.) from stored history
-      # so old messages in chat_history.db do not cause few-shot repetition of 'يا اليقين'.
-      for noisy_phrase in (
-          "تفضلي يا اليقين، آمريني؟", "تأمرين يا اليقين، ", "تامرين يا اليقين، ",
-          "يا اليقين، ", "يا اليقين.. ", "يا اليقين. ", " يا اليقين", "يا اليقين",
-          "يا سيدتي، ", "يا سيدتي.. ", " يا سيدتي",
-          "عيون أنجل وقلبها.. ", "عيون أنجل وقلبها، ", "تأمرين ", "تامرين ", "آمريني؟", "آمريني",
-          "عيونof..", "عيونof",
-      ):
-        try:
-          await db.execute(
-              "UPDATE messages SET content = REPLACE(content, ?, '') WHERE role = 'model' AND content LIKE ?",
-              (noisy_phrase, f"%{noisy_phrase}%"),
-          )
-          await db.execute(
-              "UPDATE user_summaries SET summary = REPLACE(summary, ?, '') WHERE summary LIKE ?",
-              (noisy_phrase, f"%{noisy_phrase}%"),
-          )
-          await db.execute(
-              "UPDATE user_preferences SET pinned_facts = REPLACE(pinned_facts, ?, 'صاحبتي') WHERE pinned_facts LIKE ?",
-              (noisy_phrase, f"%{noisy_phrase}%"),
-          )
-        except Exception as exc:
-          logger.debug("preference cleanup skipped: %s", exc)
-      try:
-        # Remove broken/truncated summaries and prune old dm_logs/messages per-user (keep up to 60 recent messages per user)
-        await db.execute("DELETE FROM user_summaries WHERE LENGTH(TRIM(summary)) < 35")
-        await db.execute("DELETE FROM dm_logs WHERE created_at < datetime('now', '-30 days')")
-        await db.execute(
-            """
-            DELETE FROM messages
-            WHERE id NOT IN (
-                SELECT id FROM (
-                    SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) AS rn
-                    FROM messages
-                ) WHERE rn <= 60
-            )
-            """
-        )
-      except Exception as exc:
-        logger.debug("message prune skipped: %s", exc)
+      # Legacy clean-up and retention are versioned and bounded; see _run_migrations().
       # --- Social memory, silence map & autonomous-chat audit (2026-11) ---
       await db.execute("""
                 CREATE TABLE IF NOT EXISTS silent_channels (
@@ -474,6 +439,13 @@ class BotDatabase:
                     INSERT INTO rules_fts(rowid, rule_key, content) VALUES (new.id, new.rule_key, new.content);
                 END
             """)
+      # Without this trigger a deleted rule stays in the index and keeps matching forever.
+      await db.execute("""
+                CREATE TRIGGER IF NOT EXISTS rules_ad AFTER DELETE ON rules BEGIN
+                    INSERT INTO rules_fts(rules_fts, rowid, rule_key, content)
+                    VALUES ('delete', old.id, old.rule_key, old.content);
+                END
+            """)
       await db.execute("""
                 CREATE VIRTUAL TABLE IF NOT EXISTS user_profile_fts USING fts5(
                     fact_key, fact_value, content='user_profile', content_rowid='rowid',
@@ -501,6 +473,13 @@ class BotDatabase:
                 END
             """)
       await db.execute("""
+                CREATE TABLE IF NOT EXISTS persona_culture (
+                    guild_id INTEGER PRIMARY KEY,
+                    notes_json TEXT,
+                    updated_at TEXT
+                )
+            """)
+      await db.execute("""
                 CREATE TABLE IF NOT EXISTS llm_usage (
                     day TEXT PRIMARY KEY,
                     calls INTEGER DEFAULT 0,
@@ -518,12 +497,110 @@ class BotDatabase:
                 )
             """)
       await db.commit()
+      await self._run_migrations(db)
+      await self._apply_retention(db)
+      await db.commit()
     # Archive FTS + its sync triggers must exist on every deployment, not only where an
     # operator created them by hand: search_archive() silently returns [] without them.
     await self.ensure_archive_index()
     logger.info("Database initialized.")
 
+  async def _run_migrations(self, db) -> None:
+    """Versioned, one-time data migrations (PRAGMA user_version).
+
+    The old initialize() rewrote rows and deleted every summary shorter than 35 characters
+    on *every* boot: legitimate data ("يحب القهوة") vanished silently, and the write lock was
+    held at startup for 50+ full-table statements. Schema DDL above stays idempotent; only
+    data rewrites belong here.
+    """
+    async with db.execute("PRAGMA user_version") as cur:
+      row = await cur.fetchone()
+    version = int(row[0] if row else 0)
+    if version < 1:
+      for noisy_phrase in (
+          "تفضلي يا اليقين، آمريني؟", "تأمرين يا اليقين، ", "تامرين يا اليقين، ",
+          "يا اليقين، ", "يا اليقين.. ", "يا اليقين. ", " يا اليقين", "يا اليقين",
+          "يا سيدتي، ", "يا سيدتي.. ", " يا سيدتي",
+          "عيون أنجل وقلبها.. ", "عيون أنجل وقلبها، ", "تأمرين ", "تامرين ", "آمريني؟", "آمريني",
+          "عيونof..", "عيونof",
+      ):
+        try:
+          await db.execute(
+              "UPDATE messages SET content = REPLACE(content, ?, '') WHERE role = 'model' AND content LIKE ?",
+              (noisy_phrase, f"%{noisy_phrase}%"),
+          )
+          await db.execute(
+              "UPDATE user_summaries SET summary = REPLACE(summary, ?, '') WHERE summary LIKE ?",
+              (noisy_phrase, f"%{noisy_phrase}%"),
+          )
+          await db.execute(
+              "UPDATE user_preferences SET pinned_facts = REPLACE(pinned_facts, ?, 'صاحبتي') WHERE pinned_facts LIKE ?",
+              (noisy_phrase, f"%{noisy_phrase}%"),
+          )
+        except Exception as exc:
+          logger.debug("preference cleanup skipped: %s", exc)
+      await db.execute("PRAGMA user_version = 1")
+      version = 1
+    if version < 2:
+      # user_dossier has had no writer since automatic profiling was removed; clear any row
+      # inherited from an older build so the README's "no member files" claim is true.
+      try:
+        await db.execute("DELETE FROM user_dossier")
+      except Exception as exc:
+        logger.debug("dossier cleanup skipped: %s", exc)
+      await db.execute("PRAGMA user_version = 2")
+      version = 2
+    if version < 3:
+      # The archive index was created without `remove_diacritics`; recreate it and rebuild
+      # once so a search for "مُحَمَّد" can match "محمد".
+      for trigger in ("server_messages_ai", "server_messages_ad", "server_messages_au"):
+        await db.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+      await db.execute("DROP TABLE IF EXISTS server_messages_fts")
+      self._fts_rebuild_needed = True
+      await db.execute("PRAGMA user_version = 3")
+
+  async def _apply_retention(self, db) -> None:
+    """Documented caps, applied at most once per UTC day instead of on every boot.
+
+    - dm_logs: 30 days (the DM mirror is the most sensitive store in the database).
+    - messages: the 60 most recent chat lines per member, which is already far beyond the
+      10-line summary window the prompt uses.
+    """
+    from datetime import datetime, timezone
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    async with db.execute("SELECT value FROM state WHERE key = 'retention_day'") as cur:
+      row = await cur.fetchone()
+    if row and row[0] == today:
+      return
+    try:
+      await db.execute("DELETE FROM dm_logs WHERE created_at < datetime('now', '-30 days')")
+      await db.execute(
+          """
+          DELETE FROM messages
+          WHERE id NOT IN (
+              SELECT id FROM (
+                  SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) AS rn
+                  FROM messages
+              ) WHERE rn <= 60
+          )
+          """
+      )
+    except Exception as exc:
+      logger.debug("retention pass skipped: %s", exc)
+    await db.execute(
+        "INSERT INTO state (key, value, updated_at) VALUES ('retention_day', ?, CURRENT_TIMESTAMP) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP",
+        (today,),
+    )
+
   # --- Memory Vault (Pinned Facts & Style Mode) ---
+  async def get_opted_out_ids(self) -> set:
+    """Every member who asked to be forgotten; prompt builders filter against this set."""
+    async with self._connect() as db:
+      async with db.execute("SELECT user_id FROM user_preferences WHERE opt_out = 1") as cur:
+        return {int(row[0]) async for row in cur}
+
   async def get_user_prefs(self, user_id: int) -> Dict[str, Any]:
     async with self._connect() as db:
       db.row_factory = aiosqlite.Row
@@ -587,8 +664,8 @@ class BotDatabase:
           ("\n".join(lines), user_id),
       )
       await db.execute(
-          "DELETE FROM messages WHERE user_id = ? AND LOWER(content) LIKE ?",
-          (user_id, f"%{kw_lower}%"),
+          "DELETE FROM messages WHERE user_id = ? AND LOWER(content) LIKE ? ESCAPE '\\'",
+          (user_id, f"%{_like_escape(kw_lower)}%"),
       )
       # Also scrub or clear user_summaries so the forgotten keyword never re-enters prompt context (F-07)
       async with db.execute("SELECT summary FROM user_summaries WHERE user_id = ?", (user_id,)) as cur:
@@ -610,13 +687,14 @@ class BotDatabase:
       # Facts and the dossier are what actually reach the prompt; a keyword that survives
       # there keeps being recalled after the user asked to forget it.
       await db.execute(
-          "DELETE FROM user_profile WHERE user_id = ? AND (LOWER(fact_key) LIKE ? OR LOWER(fact_value) LIKE ?)",
-          (user_id, f"%{kw_lower}%", f"%{kw_lower}%"),
+          "DELETE FROM user_profile WHERE user_id = ? AND (LOWER(fact_key) LIKE ? ESCAPE '\\' "
+          "OR LOWER(fact_value) LIKE ? ESCAPE '\\')",
+          (user_id, f"%{_like_escape(kw_lower)}%", f"%{_like_escape(kw_lower)}%"),
       )
       await db.execute(
-          "DELETE FROM user_dossier WHERE user_id = ? AND (LOWER(COALESCE(facts_json, '')) LIKE ? "
-          "OR LOWER(COALESCE(summary, '')) LIKE ?)",
-          (user_id, f"%{kw_lower}%", f"%{kw_lower}%"),
+          "DELETE FROM user_dossier WHERE user_id = ? AND (LOWER(COALESCE(facts_json, '')) LIKE ? ESCAPE '\\' "
+          "OR LOWER(COALESCE(summary, '')) LIKE ? ESCAPE '\\')",
+          (user_id, f"%{_like_escape(kw_lower)}%", f"%{_like_escape(kw_lower)}%"),
       )
       await db.commit()
 
@@ -892,8 +970,15 @@ class BotDatabase:
 
   async def add_exchange(self, user_id: int, user_msg: str, model_reply: str):
     async with self._connect() as db:
-      await db.execute("INSERT INTO messages (user_id, role, content) VALUES (?, 'user', ?)", (user_id, user_msg))
-      await db.execute("INSERT INTO messages (user_id, role, content) VALUES (?, 'model', ?)", (user_id, model_reply))
+      # opt_out is evaluated in the statement: `/data delete` racing an in-flight reply used
+      # to re-insert the member it had just erased (P-004).
+      for role, text in (("user", user_msg), ("model", model_reply)):
+        await db.execute(
+            "INSERT INTO messages (user_id, role, content) "
+            "SELECT ?, ?, ? WHERE NOT EXISTS ("
+            "SELECT 1 FROM user_preferences WHERE user_id = ? AND opt_out = 1)",
+            (user_id, role, text, user_id),
+        )
       await db.commit()
 
   async def get_context_data(self, user_id: int) -> Tuple[Optional[str], List[Dict[str, str]]]:
@@ -934,43 +1019,101 @@ class BotDatabase:
       await db.execute("DELETE FROM user_dossier WHERE user_id = ?", (user_id,))
       await db.commit()
 
+  # Per-member tables and the column that identifies the member. `/data delete` iterates
+  # this map, and tests/test_deletion_coverage.py fails when the live schema grows a
+  # user-bearing table that is neither here nor in USER_DATA_EXEMPT.
+  USER_DATA_TABLES = {
+      "server_messages": "user_id",
+      "messages": "user_id",
+      "user_summaries": "user_id",
+      "user_profile": "user_id",
+      "user_dossier": "user_id",
+      "dm_logs": "sender_id",
+      "user_index": "user_id",
+      "ambient_log": "user_id",
+      "afk_users": "user_id",
+      "harem_members": "user_id",
+      "user_xp": "user_id",
+  }
+  # Deliberately retained, with the reason the user is told about:
+  USER_DATA_EXEMPT = {
+      "user_preferences": "kept with opt_out=1 only, so nothing is learned again",
+      "warnings": "moderation evidence owned by the server, not the member's chat history",
+      "saved_playlists": "guild playlists, keyed by whoever added them",
+      "server_knowledge": "staff-authored server notes",
+      "admin_memory": "staff-authored admin notes",
+      "rules": "the server's own rule text",
+      "giveaways": "guild-scoped, participants stored as an opaque id list",
+      "custom_action_triggers": "guild automation",
+      "auto_triggers": "guild automation",
+      "guild_settings": "guild configuration",
+      "guild_daily_usage": "guild counters",
+      "silent_channels": "guild configuration",
+      "sticky_messages": "guild configuration",
+      "sticky_state": "guild configuration",
+      "persona_culture": "guild aggregate derived from speech; cleared when the member spoke there",
+      "server_messages_fts": "FTS shadow of server_messages (synced by trigger)",
+      "user_profile_fts": "FTS shadow of user_profile (synced by trigger)",
+      "rules_fts": "FTS shadow of rules (synced by trigger)",
+      "llm_usage": "aggregated cost counters, no member identity",
+      "state": "bot state, no member identity",
+      "bot_flags": "bot state, no member identity",
+      "gif_pool": "GIF URLs only",
+      "persona_state": "persona state",
+      "modlog": "guild configuration",
+      "metrics": "aggregated counters",
+  }
+
   async def count_user_data(self, user_id: int) -> Dict[str, int]:
-    """What the bot currently holds for one member, used by `/data view`."""
+    """What the bot currently holds for one member, used by `/data view`.
+
+    Counts the same tables that `/data delete` erases; reporting a shorter list was how
+    the command told members "this is everything" while rows remained (C-006).
+    """
+    out: Dict[str, int] = {}
     async with self._connect() as db:
-      out: Dict[str, int] = {}
-      for key, sql in (
-          ("archived_messages", "SELECT COUNT(*) FROM server_messages WHERE user_id = ?"),
-          ("chat_messages", "SELECT COUNT(*) FROM messages WHERE user_id = ?"),
-          ("profile_facts", "SELECT COUNT(*) FROM user_profile WHERE user_id = ?"),
-          ("dm_logs", "SELECT COUNT(*) FROM dm_logs WHERE sender_id = ?"),
-      ):
-        async with db.execute(sql, (user_id,)) as cur:
-          row = await cur.fetchone()
-        out[key] = int(row[0] if row else 0)
-      return out
+      for table, column in self.USER_DATA_TABLES.items():
+        try:
+          async with db.execute(
+              f"SELECT COUNT(*) FROM {table} WHERE {column} = ?", (user_id,)
+          ) as cur:
+            row = await cur.fetchone()
+          out[table] = int(row[0] if row else 0)
+        except Exception:
+          continue
+    return out
 
   async def delete_all_user_data(self, user_id: int) -> Dict[str, int]:
     """Erase every per-member row the bot holds, and stop learning from them.
 
-    This is the `/data delete` path. It removes the archive rows for that member, the rolling
-    chat window, the summary, the inferred facts, any dossier and the DM logs they sent. The
-    preference row survives only to carry `opt_out = 1` with an empty pinned list, so nothing is
-    re-learned on the next message. Moderation records (warnings) and gameplay rows (XP) stay,
-    because they belong to the server, not to the member's chat history.
+    This is the `/data delete` path. It covers the archive, the rolling chat window, the
+    summary, inferred facts, the member index, ambient lines, AFK state, harem membership,
+    XP and the DM mirror. The preference row survives only to carry `opt_out = 1`, so
+    nothing is re-learned on the next message. `warnings` stays because it is moderation
+    evidence owned by the server; the reply text says so.
     """
     counts: Dict[str, int] = {}
     async with self._connect() as db:
-      for key, sql in (
-          ("archived_messages", "DELETE FROM server_messages WHERE user_id = ?"),
-          ("chat_messages", "DELETE FROM messages WHERE user_id = ?"),
-          ("summaries", "DELETE FROM user_summaries WHERE user_id = ?"),
-          ("profile_facts", "DELETE FROM user_profile WHERE user_id = ?"),
-          ("dossiers", "DELETE FROM user_dossier WHERE user_id = ?"),
-          ("dm_logs", "DELETE FROM dm_logs WHERE sender_id = ?"),
-          ("member_index", "DELETE FROM user_index WHERE user_id = ?"),
-      ):
-        cur = await db.execute(sql, (user_id,))
-        counts[key] = int(cur.rowcount or 0)
+      # persona_culture is an aggregate derived from member speech: clear the guilds this
+      # member actually spoke in, otherwise the aggregate keeps reflecting them.
+      async with db.execute(
+          "SELECT DISTINCT guild_id FROM server_messages WHERE user_id = ? "
+          "UNION SELECT DISTINCT guild_id FROM user_index WHERE user_id = ?",
+          (user_id, user_id),
+      ) as cur:
+        guild_ids = [row[0] for row in await cur.fetchall()]
+      for table, column in self.USER_DATA_TABLES.items():
+        try:
+          cur = await db.execute(f"DELETE FROM {table} WHERE {column} = ?", (user_id,))
+          counts[table] = int(cur.rowcount or 0)
+        except Exception as exc:
+          logger.debug("delete from %s skipped: %s", table, exc)
+      for gid in guild_ids:
+        try:
+          cur = await db.execute("DELETE FROM persona_culture WHERE guild_id = ?", (gid,))
+          counts["persona_culture"] = counts.get("persona_culture", 0) + int(cur.rowcount or 0)
+        except Exception:
+          continue
       await db.execute(
           "INSERT INTO user_preferences (user_id, pinned_facts, style_mode, opt_out, updated_at) "
           "VALUES (?, '', 'realistic', 1, CURRENT_TIMESTAMP) "
@@ -1198,6 +1341,13 @@ class BotDatabase:
   # --- Leveling & XP ---
   async def add_xp(self, guild_id: int, user_id: int, xp_gain: int) -> Tuple[int, int, bool]:
     async with self._connect() as db:
+      # A member who ran `/data delete` must not have an XP row re-created by the next line
+      # they type (C-006). The predicate lives in SQL so a concurrent write cannot win.
+      async with db.execute(
+          "SELECT 1 FROM user_preferences WHERE user_id = ? AND opt_out = 1", (user_id,)
+      ) as opt_cur:
+        if await opt_cur.fetchone():
+          return 0, 1, False
       async with db.execute("SELECT xp, level, messages_count FROM user_xp WHERE guild_id = ? AND user_id = ?", (guild_id, user_id)) as cursor:
         row = await cursor.fetchone()
         curr_xp, curr_lvl, msgs = (row[0], row[1], row[2]) if row else (0, 1, 0)
@@ -1365,11 +1515,13 @@ class BotDatabase:
     FTS table without a delete trigger keeps them in the index (stale hits, failed
     integrity-check). Update is covered for completeness.
     """
+    rebuild = getattr(self, "_fts_rebuild_needed", False)
     async with self._connect() as db:
       await db.executescript(
           "CREATE VIRTUAL TABLE IF NOT EXISTS server_messages_fts USING fts5("
           " content, display_name, channel_id UNINDEXED, created_at UNINDEXED,"
-          " content='server_messages', content_rowid='id');"
+          " content='server_messages', content_rowid='id',"
+          " tokenize='unicode61 remove_diacritics 2');"
       )
       await db.executescript(
           "CREATE TRIGGER IF NOT EXISTS server_messages_ai AFTER INSERT ON server_messages BEGIN "
@@ -1389,6 +1541,11 @@ class BotDatabase:
           " VALUES (new.id, new.content, new.display_name, new.channel_id, new.created_at); END;"
       )
       await db.commit()
+      if rebuild:
+        # The tokenizer migration dropped the old index; repopulate it from the archive.
+        await db.execute("INSERT INTO server_messages_fts(server_messages_fts) VALUES('rebuild')")
+        await db.commit()
+        self._fts_rebuild_needed = False
 
   async def reindex_archive(self) -> int:
     await self.ensure_archive_index()
@@ -1409,24 +1566,32 @@ class BotDatabase:
     clean = [k for k in keywords if k and len(k) >= 3][:6]
     if not clean:
       return []
-    match = " OR ".join(clean)
+    match = _fts_query(" ".join(clean))
+    if not match:
+      return []
+    if allowed_channels is None:
+      # Fail closed: the archive holds tickets and staff rooms, so an unfiltered search is
+      # never the safe default (P-002).
+      logger.warning("archive search refused: no allowed channel set")
+      return []
+    allowed = [int(c) for c in allowed_channels]
+    if not allowed:
+      return []
     async with self._connect() as db:
       db.row_factory = aiosqlite.Row
       try:
+        placeholders = ",".join("?" for _ in allowed)
         sql = ("SELECT m.content, m.display_name, m.channel_id, m.created_at "
                "FROM server_messages_fts f JOIN server_messages m ON m.id = f.rowid "
-               "WHERE server_messages_fts MATCH ?")
-        params: list = [match]
+               f"WHERE server_messages_fts MATCH ? AND m.channel_id IN ({placeholders})")
+        params: list = [match, *allowed]
         if guild_id is not None:
           sql += " AND m.guild_id = ?"
           params.append(guild_id)
         sql += " ORDER BY rank LIMIT ?"
-        params.append(limit * 8 if allowed_channels is not None else limit)
+        params.append(limit)
         async with db.execute(sql, params) as cur:
-          rows = [dict(r) async for r in cur]
-        if allowed_channels is not None:
-          rows = [r for r in rows if r["channel_id"] in allowed_channels][:limit]
-        return rows[:limit]
+          return [dict(r) async for r in cur]
       except Exception as exc:
         logger.warning("archive FTS query failed: %s: %s", type(exc).__name__, exc)
         return []
@@ -1445,9 +1610,9 @@ class BotDatabase:
     """Channel the cited words came from; a dossier cites the member, not the room."""
     async with self._connect() as db:
       async with db.execute(
-          "SELECT channel_id FROM server_messages WHERE user_id = ? AND content LIKE ? "
+          "SELECT channel_id FROM server_messages WHERE user_id = ? AND content LIKE ? ESCAPE '\\' "
           "ORDER BY created_at DESC LIMIT 1",
-          (user_id, f"%{quote}%"),
+          (user_id, f"%{_like_escape(quote)}%"),
       ) as cur:
         row = await cur.fetchone()
         return row[0] if row else None
@@ -1499,6 +1664,12 @@ class BotDatabase:
             "CREATE INDEX IF NOT EXISTS idx_srv_msg_guild ON server_messages (guild_id, created_at);"
             "CREATE INDEX IF NOT EXISTS idx_srv_msg_user ON server_messages (user_id, created_at);"
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_srv_msg_mid ON server_messages (message_id);"
+            # The insert below carries the opt-out predicate, so the preferences table must
+            # exist even when this tool is the first thing to touch the file.
+            "CREATE TABLE IF NOT EXISTS user_preferences ("
+            " user_id INTEGER PRIMARY KEY, pinned_facts TEXT DEFAULT '',"
+            " style_mode TEXT DEFAULT 'realistic', opt_out INTEGER DEFAULT 0,"
+            " updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);"
         )
         self._server_log_ready = True
       # message_id makes the live line and a later backfill of the same Discord message one
@@ -1506,10 +1677,11 @@ class BotDatabase:
       await db.execute(
           "INSERT OR IGNORE INTO server_messages "
           "(guild_id, channel_id, user_id, display_name, content, created_at, message_id) "
-          "VALUES (?, ?, ?, ?, ?, ?, ?)",
+          "SELECT ?, ?, ?, ?, ?, ?, ? WHERE NOT EXISTS ("
+          "SELECT 1 FROM user_preferences WHERE user_id = ? AND opt_out = 1)",
           (guild_id, channel_id, user_id, display_name[:80], text[:1500],
            datetime.now(timezone.utc).isoformat(timespec="seconds"),
-           str(message_id) if message_id else None),
+           str(message_id) if message_id else None, user_id),
       )
       await db.commit()
       self._server_log_writes = getattr(self, "_server_log_writes", 0) + 1
@@ -1598,14 +1770,15 @@ class BotDatabase:
       await db.execute(
           """
           INSERT INTO user_index (guild_id, user_id, display_name, last_seen, msg_count, topics)
-          VALUES (?, ?, ?, CURRENT_TIMESTAMP, 1, ?)
+          SELECT ?, ?, ?, CURRENT_TIMESTAMP, 1, ?
+          WHERE NOT EXISTS (SELECT 1 FROM user_preferences WHERE user_id = ? AND opt_out = 1)
           ON CONFLICT(guild_id, user_id) DO UPDATE SET
               display_name = CASE WHEN excluded.display_name != '' THEN excluded.display_name ELSE user_index.display_name END,
               last_seen = CURRENT_TIMESTAMP,
               msg_count = user_index.msg_count + 1,
               topics = CASE WHEN excluded.topics != '' THEN excluded.topics ELSE user_index.topics END
           """,
-          (guild_id, user_id, (display_name or "")[:64], (topic or "")[:200]),
+          (guild_id, user_id, (display_name or "")[:64], (topic or "")[:200], user_id),
       )
       await db.commit()
 
@@ -1623,8 +1796,10 @@ class BotDatabase:
   async def log_ambient(self, guild_id: int, channel_id: int, user_id: int, angel_text: str):
     async with self._connect() as db:
       await db.execute(
-          "INSERT INTO ambient_log (guild_id, channel_id, user_id, angel_text) VALUES (?, ?, ?, ?)",
-          (guild_id, channel_id, user_id, (angel_text or "")[:600]),
+          "INSERT INTO ambient_log (guild_id, channel_id, user_id, angel_text) "
+          "SELECT ?, ?, ?, ? WHERE NOT EXISTS ("
+          "SELECT 1 FROM user_preferences WHERE user_id = ? AND opt_out = 1)",
+          (guild_id, channel_id, user_id, (angel_text or "")[:600], user_id),
       )
       await db.execute(
           "DELETE FROM ambient_log WHERE id NOT IN (SELECT id FROM ambient_log ORDER BY id DESC LIMIT 400)"
@@ -1707,8 +1882,8 @@ class BotDatabase:
       db.row_factory = aiosqlite.Row
       async with db.execute(
           "SELECT topic, content, channel_id FROM admin_memory WHERE guild_id = ? "
-          "AND (topic LIKE ? OR content LIKE ?) ORDER BY id DESC LIMIT ?",
-          (guild_id, f"%{query[:60]}%", f"%{query[:60]}%", limit),
+          "AND (topic LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\') ORDER BY id DESC LIMIT ?",
+          (guild_id, f"%{_like_escape(query[:60])}%", f"%{_like_escape(query[:60])}%", limit),
       ) as cur:
         rows = [dict(r) async for r in cur]
         if rows:
@@ -1725,6 +1900,28 @@ class BotDatabase:
     async with self._connect() as db:
       await db.execute("DELETE FROM rules WHERE guild_id = ?", (guild_id,))
       await db.commit()
+
+  async def replace_rules(self, guild_id: int, rules: List[tuple]) -> int:
+    """Replace every rule for a guild in ONE transaction.
+
+    The old re-index loop cleared first and then upserted row by row; a failure halfway
+    left the guild with a partial rule set.
+    """
+    async with self._connect() as db:
+      async with db.execute("BEGIN IMMEDIATE"):
+        pass
+      try:
+        await db.execute("DELETE FROM rules WHERE guild_id = ?", (guild_id,))
+        for key, content in rules:
+          await db.execute(
+              "INSERT INTO rules (guild_id, rule_key, content) VALUES (?, ?, ?)",
+              (guild_id, key[:60], content[:1500]),
+          )
+        await db.commit()
+      except Exception:
+        await db.rollback()
+        raise
+    return len(rules)
 
   async def upsert_rule(self, guild_id: int, key: str, content: str):
     async with self._connect() as db:

@@ -54,8 +54,12 @@ def call(token: str, method: str, path: str, body: dict | None = None) -> tuple[
 
 
 def authorised(status: int) -> bool:
-    """403 = no permission; 400/404/200 = permission present."""
-    return status not in (401, 403)
+    """Only 200/400/404 prove the permission exists.
+
+    A transport failure (0), a throttle (429) or a provider outage (5xx) proves nothing;
+    the old `status not in (401, 403)` reported all of them as PASS (C-028).
+    """
+    return status in (200, 400, 404)
 
 
 def main() -> int:

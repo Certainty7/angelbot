@@ -28,7 +28,6 @@ from .config import logger
 
 # 0.5 Shared HTTP Pool, Bounded Stream Reader & CPU Guards (small single-core host)
 _SHARED_HTTP_SESSION: Optional[aiohttp.ClientSession] = None
-_SESSION_LOCK: Optional[asyncio.Lock] = None
 # An asyncio.Semaphore binds to the loop that first waits on it. A module-level
 # instance created at import time breaks the next `asyncio.run()` (tests, CLI jobs),
 # so each running loop gets its own bounded set.
@@ -284,10 +283,21 @@ class SafeAsyncResolver(AbstractResolver):
 
 
 def _session_lock() -> asyncio.Lock:
-  global _SESSION_LOCK
-  if _SESSION_LOCK is None:
-    _SESSION_LOCK = asyncio.Lock()
-  return _SESSION_LOCK
+  """One session lock per running loop.
+
+  A module-level `asyncio.Lock()` binds to the loop that first acquires it; the next
+  `asyncio.run()` (a CLI job or a test) then raises "bound to a different event loop"
+  (P-009). Mirrors the per-loop semaphore registry above.
+  """
+  loop = asyncio.get_running_loop()
+  per_loop = _SEMAPHORES.get(loop)
+  if per_loop is None:
+    per_loop = {}
+    _SEMAPHORES[loop] = per_loop
+  lock = per_loop.get("__session__")
+  if lock is None:
+    lock = per_loop["__session__"] = asyncio.Lock()
+  return lock
 
 
 async def get_shared_http_session() -> aiohttp.ClientSession:

@@ -3,6 +3,8 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
+from .config import MISTRESS_INT_ID
+
 ADMIN_TOPIC_HINTS = (
     "سجل الإدارة", "سجلات الإدارة", "قرارات الإدارة", "اجتماع الإدارة", "خاص بالإدارة",
     "admin log", "admin memory", "mod log", "staff notes", "إدارة فقط",
@@ -20,8 +22,9 @@ def _id_set(name: str) -> set:
 
 ADMIN_ROLE_IDS = _id_set("ANGEL_ADMIN_ROLE_IDS") | _id_set("MALAK_ADMIN_ROLE_IDS")
 ADMIN_CHANNEL_IDS = _id_set("ANGEL_ADMIN_CHANNEL_IDS") | _id_set("MALAK_ADMIN_CHANNEL_IDS")
-_owner_raw = (os.getenv("ANGEL_OWNER_ID") or os.getenv("MALAK_OWNER_ID") or "0").strip()
-OWNER_ID = int(_owner_raw) if _owner_raw.isdigit() else 0
+# Resolved once by angel.config, which honours every owner alias; re-reading the environment
+# here silently dropped MISTRESS_USER_ID and left the owner without admin-memory access.
+OWNER_ID = MISTRESS_INT_ID
 
 
 class AclError(PermissionError):

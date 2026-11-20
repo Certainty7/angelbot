@@ -154,7 +154,7 @@ class Owner(commands.Cog):
         body = "\n".join(f"• <@{uid}> — `{name}`" for uid, name in members[:12])
         if len(members) > 12:
           body += f"\n… و{len(members) - 12} غيرهنّ"
-        embed.add_field(name=f"🏷️ {rank} · {len(members)}", value=body, inline=False)
+        embed.add_field(name=f"🏷️ {rank[:200]} · {len(members)}"[:256], value=body[:1024], inline=False)
       if len(groups) > 6:
         embed.add_field(name="…", value=f"و{len(groups) - 6} ألقاب أخرى", inline=False)
       embed.set_footer(text="إضافة: /harem action:Add · إزالة: /harem action:Remove · عرض: action:List")

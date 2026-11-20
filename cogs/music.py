@@ -14,7 +14,7 @@ from discord.ext import commands
 
 from angel.audio_source import ResolveError, clean_reason
 from angel.config import is_mistress, logger
-from angel.voice_engine import MusicEngine
+from angel.voice_engine import MusicEngine, VoiceBusyError
 
 MUSIC_ENABLED = os.environ.get("MUSIC_ENABLED", "1").strip().lower() not in {"0", "false", "no", "off"}
 MAX_QUEUE = 50
@@ -88,6 +88,11 @@ class Music(commands.Cog):
     try:
       await self.engine.ensure_connected(channel)
       track = await self.engine.enqueue(channel, query, interaction.user)
+    except VoiceBusyError as exc:
+      await interaction.followup.send(
+          f"🎧 أنجل مشغّلة في {exc.channel.mention} الآن. انضم لنفس الروم أولاً.", ephemeral=True
+      )
+      return
     except ResolveError as exc:
       await interaction.followup.send(f"⚠️ تعذر إيجاد الصوت: `{clean_reason(str(exc))}`", ephemeral=True)
       return
@@ -107,15 +112,17 @@ class Music(commands.Cog):
 
     playing = await self.engine.start(guild)
     if playing is track:
-      msg = f"🎶 أشغّل الآن: **{track.title}** (`{track.duration_text}`) من `{track.source}`"
+      msg = f"🎶 أشغّل الآن: **{track.title[:180]}** (`{track.duration_text}`) من `{track.source}`"
       dave = self.engine.last_dave.get(guild.id) or {}
       if dave.get("ver") and not dave.get("can_encrypt"):
         msg += "\n🔇 التشفير الصوتي لم يكتمل بعد — إن لم تسمعي شيئاً أعيدي المحاولة بعد ثانية."
-      await interaction.followup.send(msg)
+      # The title comes from YouTube/SoundCloud: never let it ping a member.
+      await interaction.followup.send(msg, allowed_mentions=discord.AllowedMentions.none())
     else:
       position = len(state.tracks)
       await interaction.followup.send(
-          f"➕ أُضيفت للقائمة (#{position}): **{track.title}** (`{track.duration_text}`)"
+          f"➕ أُضيفت للقائمة (#{position}): **{track.title[:180]}** (`{track.duration_text}`)",
+          allowed_mentions=discord.AllowedMentions.none(),
       )
 
   @app_commands.command(name="skip", description="تخطي الأغنية الحالية")
@@ -261,6 +268,12 @@ class Music(commands.Cog):
       return
     try:
       await self.engine.ensure_connected(channel)
+    except VoiceBusyError as exc:
+      await interaction.followup.send(
+          f"🎧 أنجل مشغّلة في {exc.channel.mention} الآن. انضمي لنفس الروم أولاً.",
+          ephemeral=True,
+      )
+      return
     except Exception as exc:  # noqa: BLE001 - answer the failure instead of crashing the interaction
       logger.warning(f"music-playlist join failed: {type(exc).__name__}: {exc}")
       await interaction.followup.send("⚠️ تعذر الدخول للروم الصوتي.", ephemeral=True)

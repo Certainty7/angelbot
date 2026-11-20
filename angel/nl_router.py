@@ -18,6 +18,7 @@ from angel.config import (
     can_assign_role,
     can_create_action_trigger,
     can_moderate_member,
+    can_read_history,
     check_staff_action_permission,
     get_or_fetch_member,
     is_mistress,
@@ -74,10 +75,19 @@ _EXEC_INTENT_GUARDS: Dict[str, Tuple[str, ...]] = {
 _CONFIRM_REQUIRED = {
     "BAN", "KICK", "PURGE", "DELETE_CHANNEL",
     "ADD_ROLE", "REMOVE_ROLE", "CREATE_ROLE", "NICKNAME", "UNBAN",
+    # State-changing actions that used to run immediately (C-013).
+    "TIMEOUT", "UNTIMEOUT", "CLEAR_WARNINGS", "SET_MODLOG", "AUTOROLE",
+    "HIDE", "UNHIDE", "LOCK", "UNLOCK", "SLOWMODE", "RENAME_CHANNEL",
+    "CREATE_TEXT", "CREATE_VOICE", "CLONE_CHANNEL", "SET_TOPIC",
 }
 _CONFIRM_TTL = 60.0
-_CONFIRM_WORDS = ("تأكيد", "تاكيد", "confirm", "نفذي", "نفذ")
-_CANCEL_WORDS = ("الغاء", "إلغاء", "كنسل", "cancel", "لا")
+# Bare "نفذ" and "لا" were triggers: both are ordinary Arabic words.
+_CONFIRM_WORDS = ("تأكيد", "تاكيد", "confirm", "نفذي")
+_CANCEL_WORDS = ("الغاء", "إلغاء", "كنسل", "cancel")
+
+
+class _ActionBlocked(Exception):
+  """A hierarchy or resolution check refused the action; nothing was executed."""
 
 
 async def resolve_natural_target_member(
@@ -274,30 +284,36 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
       bot.guard_modes_cache[guild.id] = gmode
     elif action_name == "KICK":
       strict_mem = await resolve_natural_target_member(bot, message, message.content or "", strict_target=True)
-      if strict_mem and can_moderate_member(author, strict_mem, guild)[0]:
-        await strict_mem.kick(reason=f"AI Order by {author}")
-        await bot.send_modlog(guild, "👢 طرد عضو", f"**العضو:** {strict_mem.mention}\n**بواسطة:** {author.mention}")
+      if not (strict_mem and can_moderate_member(author, strict_mem, guild)[0]):
+        raise _ActionBlocked
+      await strict_mem.kick(reason=f"AI Order by {author}")
+      await bot.send_modlog(guild, "👢 طرد عضو", f"**العضو:** {strict_mem.mention}\n**بواسطة:** {author.mention}")
     elif action_name == "BAN":
       strict_mem = await resolve_natural_target_member(bot, message, message.content or "", strict_target=True)
-      if strict_mem and can_moderate_member(author, strict_mem, guild)[0]:
-        await strict_mem.ban(reason=f"AI Order by {author}")
-        await bot.send_modlog(guild, "🔨 حظر عضو", f"**العضو:** {strict_mem.mention}\n**بواسطة:** {author.mention}", color=discord.Color.red().value)
+      if not (strict_mem and can_moderate_member(author, strict_mem, guild)[0]):
+        raise _ActionBlocked
+      await strict_mem.ban(reason=f"AI Order by {author}")
+      await bot.send_modlog(guild, "🔨 حظر عضو", f"**العضو:** {strict_mem.mention}\n**بواسطة:** {author.mention}", color=discord.Color.red().value)
     elif action_name == "TIMEOUT":
       strict_mem = await resolve_natural_target_member(bot, message, message.content or "", strict_target=True)
-      if strict_mem and can_moderate_member(author, strict_mem, guild)[0]:
-        mins = max(1, min(40320, int(params.get("minutes", "15"))))
-        await strict_mem.timeout(timedelta(minutes=mins), reason=f"AI Order by {author}")
-        await bot.send_modlog(guild, "⏳ كتم عضو", f"**العضو:** {strict_mem.mention} (`{mins}m`)\n**بواسطة:** {author.mention}")
+      if not (strict_mem and can_moderate_member(author, strict_mem, guild)[0]):
+        raise _ActionBlocked
+      mins = max(1, min(40320, int(params.get("minutes", "15"))))
+      await strict_mem.timeout(timedelta(minutes=mins), reason=f"AI Order by {author}")
+      await bot.send_modlog(guild, "⏳ كتم عضو", f"**العضو:** {strict_mem.mention} (`{mins}m`)\n**بواسطة:** {author.mention}")
     elif action_name == "UNTIMEOUT":
-      if target_member and can_moderate_member(author, target_member, guild)[0]:
-        await target_member.timeout(None, reason=f"AI Order by {author}")
+      if not (target_member and can_moderate_member(author, target_member, guild)[0]):
+        raise _ActionBlocked
+      await target_member.timeout(None, reason=f"AI Order by {author}")
     elif action_name == "WARN":
-      if target_member and can_moderate_member(author, target_member, guild)[0]:
-        rsn = params.get("reason", "توجيه إداري")
-        await bot.db.add_warning(guild.id, target_member.id, author.id, rsn)
+      if not (target_member and can_moderate_member(author, target_member, guild)[0]):
+        raise _ActionBlocked
+      rsn = params.get("reason", "توجيه إداري")
+      await bot.db.add_warning(guild.id, target_member.id, author.id, rsn)
     elif action_name == "CLEAR_WARNINGS":
-      if target_member and can_moderate_member(author, target_member, guild)[0]:
-        await bot.db.clear_warnings(guild.id, target_member.id)
+      if not (target_member and can_moderate_member(author, target_member, guild)[0]):
+        raise _ActionBlocked
+      await bot.db.clear_warnings(guild.id, target_member.id)
     elif action_name == "UNBAN":
       uid_str = params.get("user_id") or ""
       if not uid_str:
@@ -308,9 +324,10 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
         await guild.unban(discord.Object(id=int(uid_str)), reason=f"AI Order by {author}")
     elif action_name == "AUTOROLE":
       r_obj = resolve_natural_role(guild, message, params.get("role", ""))
-      if r_obj and can_assign_role(author, r_obj, guild)[0]:
-        await bot.db.set_autorole(guild.id, r_obj.id)
-        bot.autorole_cache[guild.id] = r_obj.id
+      if not (r_obj and can_assign_role(author, r_obj, guild)[0]):
+        raise _ActionBlocked
+      await bot.db.set_autorole(guild.id, r_obj.id)
+      bot.autorole_cache[guild.id] = r_obj.id
     elif action_name == "DELETE_CHANNEL":
       target_ch = resolve_natural_text_channel(guild, message, params.get("name", ""))
       if target_ch:
@@ -343,12 +360,16 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
         bot.last_target_channel[guild.id] = ch.id
     elif action_name == "ADD_ROLE":
       r_obj = resolve_natural_role(guild, message, params.get("role", ""))
-      if r_obj and target_member and can_assign_role(author, r_obj, guild)[0] and can_moderate_member(author, target_member, guild)[0]:
-        await target_member.add_roles(r_obj)
+      if not (r_obj and target_member and can_assign_role(author, r_obj, guild)[0]
+              and can_moderate_member(author, target_member, guild)[0]):
+        raise _ActionBlocked
+      await target_member.add_roles(r_obj)
     elif action_name == "REMOVE_ROLE":
       r_obj = resolve_natural_role(guild, message, params.get("role", ""))
-      if r_obj and target_member and can_assign_role(author, r_obj, guild)[0] and can_moderate_member(author, target_member, guild)[0]:
-        await target_member.remove_roles(r_obj)
+      if not (r_obj and target_member and can_assign_role(author, r_obj, guild)[0]
+              and can_moderate_member(author, target_member, guild)[0]):
+        raise _ActionBlocked
+      await target_member.remove_roles(r_obj)
     elif action_name == "CREATE_ROLE":
       r_name = params.get("name")
       if r_name:
@@ -356,8 +377,9 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
     elif action_name == "NICKNAME":
       new_nick = params.get("name", "")[:32]
       t_mem = target_member or (author if isinstance(author, discord.Member) else None)
-      if t_mem and new_nick:
-        await t_mem.edit(nick=new_nick)
+      if not (t_mem and new_nick and can_moderate_member(author, t_mem, guild)[0]):
+        raise _ActionBlocked
+      await t_mem.edit(nick=new_nick)
     elif action_name == "LOCK":
       target_ch = resolve_natural_text_channel(guild, message) or message.channel
       overwrite = target_ch.overwrites_for(guild.default_role)
@@ -385,6 +407,9 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
       val = max(1, min(100, int(params.get("value", "15"))))
       await message.channel.purge(limit=val + 1)
     return "executed"
+  except _ActionBlocked:
+    logger.warning(f"AI inferred action blocked by authorization ({action_name})")
+    return "blocked"
   except Exception as exc:
     logger.warning(f"AI inferred action warning ({action_name}): {exc}")
     return "failed"
@@ -623,10 +648,22 @@ async def try_execute_natural_command(
     pending_ts = pending.get("ts")
     if pending_ts is None or time.monotonic() - pending_ts > _CONFIRM_TTL:
       bot.pending_confirm.pop(confirm_key, None)
+    elif pending.get("channel_id") and pending["channel_id"] != message.channel.id:
+      # A confirmation typed in another channel is not consent for this one (C-013).
+      bot.pending_confirm.pop(confirm_key, None)
+      await safe_reply(message, "⚠️ التأكيد لازم يكون في نفس القناة اللي طُلب فيها الإجراء. ألغيته.")
+      return True
     elif cmd_lower in _CONFIRM_WORDS:
       bot.pending_confirm.pop(confirm_key, None)
-      await execute_ai_inferred_action(bot, pending["message"], pending["cmd"], confirmed=True)
-      await safe_reply(message, "✅ تم تنفيذ الإجراء المؤكد.")
+      outcome = await execute_ai_inferred_action(
+          bot, pending["message"], pending["cmd"], confirmed=True
+      )
+      if outcome == "executed":
+        await safe_reply(message, "✅ تم تنفيذ الإجراء المؤكد.")
+      elif outcome == "blocked":
+        await safe_reply(message, "🚫 ما نفذت الإجراء: الصلاحية أو الرتبة ما تسمح الآن.")
+      else:
+        await safe_reply(message, "⚠️ تعذر تنفيذ الإجراء المؤكد. راجعي السجل.")
       return True
     elif cmd_lower in _CANCEL_WORDS:
       bot.pending_confirm.pop(confirm_key, None)
@@ -951,6 +988,23 @@ async def try_execute_natural_command(
 
   # 4. Deep Channel Reading & Summarization ("انجل لخصي الشات")
   if any(k in cmd_lower for k in ("لخصي", "ملخص", "اقرئي الشات", "اقري الشات", "وش صار في الشات", "ايش صار في الشات", "حللي الشات", "حللي المحادثة", "وش فاتني")):
+    # Same guard as /summarize_channel: the NL twin is a front end, not a permission bypass.
+    if not can_read_history(message.channel, author):
+      await safe_reply(
+          message, "⚠️ تحتاج صلاحية `Read Message History` في هذه القناة لتلخيصها."
+      )
+      return True
+    allowed_q, deny_q = bot.quota.check_user_allowed(
+        author, is_harem=bool(bot.get_harem_title(author.id))
+    )
+    if not allowed_q:
+      await safe_reply(message, f"⚠️ {deny_q}")
+      return True
+    if guild and hasattr(bot.db, "consume_guild_ai_quota"):
+      allowed_g, used_g = await bot.db.consume_guild_ai_quota(guild.id)
+      if not allowed_g and not mistress:
+        await safe_reply(message, f"⚠️ وصل السيرفر لحد استهلاك الذكاء الاصطناعي اليومي (`{used_g}`).")
+        return True
     nums = [int(n) for n in re.findall(r"\b(\d+)\b", cmd_lower)]
     limit_msgs = nums[0] if nums else 100
     if not mistress:
@@ -964,7 +1018,7 @@ async def try_execute_natural_command(
     async with message.channel.typing():
       report = await analyze_channel_history_deep(bot, message.channel, author, limit=limit_msgs, focus_query=cmd_body)
       for chunk in split_message(report):
-        await safe_reply(message, chunk)
+        await safe_reply(message, chunk, untrusted=True)
     return True
 
   # 4.5 Universal Community & Utility Lookups via Natural Words (Snipe, EditSnipe, Avatar, UserInfo, ServerInfo, Rank, Leaderboard, Rep, Ping)
@@ -1034,8 +1088,10 @@ async def try_execute_natural_command(
           "نظفي ملفاتك", "امسحي الملفات المؤقتة", "نظفي الذاكرة المؤقتة", "تنظيف شامل",
       )
   ) or cmd_lower in ("تنظيف", "نظفي", "cleanup"):
-    if not (mistress or is_server_staff(author, guild)):
-      await safe_reply(message, "🚫 أمر تنظيف تخزين السيرفر مخصص للمالكة والإدارة فقط.")
+    # `/cleanup` is owner-only; the NL twin was open to every moderator and could wipe the
+    # snipe caches, reset guard counters and hold the DB lock (C-012).
+    if not mistress:
+      await safe_reply(message, "🚫 أمر تنظيف تخزين السيرفر مخصص للمالكة فقط.")
       return True
     async with message.channel.typing():
       stats = await perform_storage_cleanup(deep=True)

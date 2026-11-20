@@ -80,6 +80,14 @@ AUDIO_WATCH_S = 6.0
 PCM_BYTES_PER_SECOND = 48000 * 2 * 2
 
 
+class VoiceBusyError(RuntimeError):
+  """The bot already streams in another voice channel of this guild."""
+
+  def __init__(self, channel):
+    self.channel = channel
+    super().__init__(f"already connected to {getattr(channel, 'name', channel)}")
+
+
 class _CountingSource(discord.AudioSource):
   """Counts decoded bytes so the logs can tell 'decoder stalled' from 'frames dropped'."""
 
@@ -217,13 +225,18 @@ class MusicEngine:
 
   # ---- connection --------------------------------------------------------
   async def ensure_connected(self, channel: discord.VoiceChannel) -> discord.VoiceClient:
-    """Join (or move to) the member's voice channel using public API only."""
+    """Join the member's voice channel, never silently moving out of another one.
+
+    `/play` refuses when the bot is busy elsewhere, but `/playlist load` and the
+    message-based player reached this method directly and dragged the bot away from
+    listeners in another room (C-016).
+    """
     self._loop = asyncio.get_running_loop()
     async with self._guild_lock(channel.guild.id):
       voice = channel.guild.voice_client
       if voice is not None and voice.is_connected():
         if voice.channel and voice.channel.id != channel.id:
-          await voice.move_to(channel, timeout=20.0)
+          raise VoiceBusyError(voice.channel)
         return voice
       if voice is not None:
         try:
