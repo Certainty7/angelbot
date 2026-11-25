@@ -79,8 +79,9 @@ Evidence and fix sketches live there; this file tracks order and status only.
 
 ### 13 · 13. Slow moderation actions can succeed after the interaction deadline
 
-- **Status:** todo
+- **Status:** done (#35)
 - **Done when:** a delayed mutation is deferred first and its followup/modlog still run after the delay.
+- **Evidence:** `run_moderation_action()` in `angel/interactions.py` (defer → mutate → report → best-effort modlog; a rejected defer mutates nothing; `NotFound`/`HTTPException` produce a failure line and no modlog) wired into kick, ban, unban, timeout, untimeout, add_role, remove_role, warn, clear_warnings, lock, unlock, slowmode; red proof: the old order turns 14 assertions red, `tests/test_moderation_defer.py` = 5 tests + 12 subtests.
 
 ### 14 · 14. Destructive action surfaces do not share the required confirmation gate
 
