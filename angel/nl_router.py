@@ -752,7 +752,7 @@ async def try_execute_natural_command(
   if forget_m:
     kw_forget = forget_m.group(1).strip()
     if kw_forget in ("كل شي", "كل شيء", "المحادثة", "السجل", "ذاكرتي"):
-      await bot.db.clear_user_memory(author.id)
+      await bot.db.clear_user_memory(message.channel.id, author.id)
       await safe_reply(message, "🧹 مسحت سجل محادثتنا المؤقت ونبدأ صفحة جديدة.")
     elif guild:
       # The deletion is irreversible and substring-matched, so it needs the same explicit
@@ -775,7 +775,7 @@ async def try_execute_natural_command(
     return True
 
   if any(k in cmd_lower for k in ("صفري ذاكرتي", "امسحي ذاكرتي", "امسحي سجل محادثتنا", "نسيتيني")):
-    await bot.db.clear_user_memory(author.id)
+    await bot.db.clear_user_memory(message.channel.id, author.id)
     await safe_reply(message, "🧹 تم تصفير سجل المحادثة المؤقت بنجاح.")
     return True
 

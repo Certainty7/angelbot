@@ -582,7 +582,7 @@ def forget_purges_memory():
                 (7, "يسكن مسقط", json.dumps([{"key": "city", "value": "مسقط"}], ensure_ascii=False), "2026-11-13"),
             )
             await conn.commit()
-        await db.clear_user_memory(7)
+        await db.clear_user_memory(1, 7)
         assert await db.get_profile_facts(7) == [], "profile facts survived clear_user_memory"
         assert await db.get_user_dossier(7) is None, "member file survived clear_user_memory"
 

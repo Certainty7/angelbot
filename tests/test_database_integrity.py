@@ -25,12 +25,12 @@ class ForgetKeywordTest(unittest.TestCase):
             db = BotDatabase(path)
             try:
                 await db.initialize()
-                await db.add_exchange(42, "alpha secret", "reply one")
-                await db.add_exchange(42, "beta normal", "reply two")
-                await db.add_exchange(99, "other member", "reply three")
+                await db.add_exchange(1, 42, "alpha secret", "reply one")
+                await db.add_exchange(1, 42, "beta normal", "reply two")
+                await db.add_exchange(1, 99, "other member", "reply three")
                 await db.forget_user_keyword(42, "%")
-                _, mine = await db.get_context_data(42)
-                _, theirs = await db.get_context_data(99)
+                _, mine = await db.get_context_data(1, 42)
+                _, theirs = await db.get_context_data(1, 99)
                 return len(mine), len(theirs)
             finally:
                 await db.close()
@@ -46,10 +46,10 @@ class ForgetKeywordTest(unittest.TestCase):
             db = BotDatabase(path)
             try:
                 await db.initialize()
-                await db.add_exchange(42, "alpha secret", "reply one")
-                await db.add_exchange(42, "beta normal", "reply two")
+                await db.add_exchange(1, 42, "alpha secret", "reply one")
+                await db.add_exchange(1, 42, "beta normal", "reply two")
                 await db.forget_user_keyword(42, "alpha")
-                _, mine = await db.get_context_data(42)
+                _, mine = await db.get_context_data(1, 42)
                 return mine
             finally:
                 await db.close()
@@ -63,6 +63,10 @@ class MigrationTest(unittest.TestCase):
     """C-021 / P-003: initialize() must be idempotent and non-destructive."""
 
     def test_a_short_summary_survives_a_second_initialize(self):
+        """Finding 06: summaries now carry a channel. A summary written after the v4 migration
+        must survive a restart; rows from before it are discarded because no channel can be
+        attributed to them (see test_memory_channel_scope)."""
+
         async def _run():
             path = _fresh_db()
             db = BotDatabase(path)
@@ -70,14 +74,14 @@ class MigrationTest(unittest.TestCase):
                 await db.initialize()
                 async with db._connect() as conn:
                     await conn.execute(
-                        "INSERT INTO user_summaries (user_id, summary) VALUES (42, ?)",
+                        "INSERT INTO user_summaries (channel_id, user_id, summary) VALUES (1, 42, ?)",
                         ("يحب القهوة",),
                     )
                     await conn.commit()
                 await db.close()
                 db = BotDatabase(path)
                 await db.initialize()
-                summary, _ = await db.get_context_data(42)
+                summary, _ = await db.get_context_data(1, 42)
                 return summary
             finally:
                 await db.close()
