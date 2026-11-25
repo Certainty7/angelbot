@@ -54,8 +54,10 @@ Evidence and fix sketches live there; this file tracks order and status only.
 
 ### 09 · 9. PR-Agent runs mutable third-party code with write credentials
 
-- **Status:** todo
+- **Status:** done (#27)
 - **Done when:** CI rejects mutable action refs and rolling runtime tags, and the enabled workflow uses the approved immutable artifacts.
+- **Evidence:** `pr_agent.yml` is disabled (`workflow_dispatch` only, `if: false`, read-only token) with a re-enable checklist; `WorkflowPinningTest` fails any mutable `uses:` ref, any missing `docker://…@sha256:` digest, and any restored automatic trigger.
+- **Deferred:** the action is not pinned instead of disabled — a fixed action SHA still builds whatever base image its Dockerfile names, so the digest requirement cannot be met by a SHA alone.
 
 ### 10 · 10. Archive work is unbounded, unobserved and cancelled on shutdown
 
