@@ -15,7 +15,7 @@ production archive from the pre-deploy backup that is already on the server.
 - `angel/database.py:587-615` is the v4 migration. Legacy rows carry no channel and cannot be
   attributed, so it runs `DELETE FROM messages` (line 611) and rebuilds `user_summaries` without
   copying the old rows.
-- Production (`/opt/angelbot` on `ubuntu@<deploy-host>`) was deployed to `9e40a43` today, so v4
+- Production (`/opt/angelbot` on `<deploy-host>`) was deployed to `9e40a43` today, so v4
   already ran there and dropped **140** `messages` rows and **10** `user_summaries` rows. A
   verified pre-deploy backup exists at `/opt/angelbot/data/angel-3.20261125T141655Z.db`.
 - Restoring those rows into `messages` is **not** acceptable: reads are `ORDER BY id ASC`
@@ -473,7 +473,7 @@ when runs exist — always query `actions/runs?head_sha=`.
 ### Task 8 — deploy and replay on the server
 
 ```bash
-ssh -i <home>/keys/<ssh-key> ubuntu@<deploy-host> \
+ssh -i <ssh-key> <deploy-host> \
   'sudo -n git -c safe.directory=/opt/angelbot -C /opt/angelbot pull -q --ff-only && \
    sudo -n systemctl restart angelbot && sleep 15 && sudo -n systemctl is-active angelbot'
 ```
@@ -483,7 +483,7 @@ Expected: `active`.
 Dry run first:
 
 ```bash
-ssh -i <home>/keys/<ssh-key> ubuntu@<deploy-host> \
+ssh -i <ssh-key> <deploy-host> \
   'cd /opt/angelbot && sudo -n -u angel venv/bin/python -m tools.archive_legacy_memory \
      --backup data/angel-3.20261125T141655Z.db --db data/angel.db'
 ```
@@ -494,7 +494,7 @@ backup's counts before writing anything.
 Apply:
 
 ```bash
-ssh -i <home>/keys/<ssh-key> ubuntu@<deploy-host> \
+ssh -i <ssh-key> <deploy-host> \
   'cd /opt/angelbot && sudo -n -u angel venv/bin/python -m tools.archive_legacy_memory \
      --backup data/angel-3.20261125T141655Z.db --db data/angel.db --apply && \
    sudo -n -u angel venv/bin/python -m tools.archive_legacy_memory \
