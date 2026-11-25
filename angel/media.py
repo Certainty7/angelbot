@@ -119,7 +119,7 @@ def _dedupe_downloaded_slides(
   discarded_bytes = 0
   for item in valid_items:
     idx, b_data, _fname = item
-    h = hashlib.md5(b_data).hexdigest()
+    h = hashlib.md5(b_data, usedforsecurity=False).hexdigest()
     if h not in seen_hashes:
       seen_hashes.add(h)
       kept.append(item)
@@ -1000,7 +1000,7 @@ async def extract_instagram_media_items(
         for r in await asyncio.gather(*(_download_slide(i, k, u) for i, k, u in pending), return_exceptions=True):
           if not (isinstance(r, tuple) and len(r) == 3) or r[0] not in missing:
             continue
-          h = hashlib.md5(r[1]).hexdigest()
+          h = hashlib.md5(r[1], usedforsecurity=False).hexdigest()
           if h in seen_hashes:
             continue
           seen_hashes.add(h)
@@ -1200,7 +1200,7 @@ async def extract_tiktok_media_items(
     out_files: List[Tuple[bytes, str]] = []
     for idx in sorted(got):
       b_data, fn = got[idx]
-      h = hashlib.md5(b_data).hexdigest()
+      h = hashlib.md5(b_data, usedforsecurity=False).hexdigest()
       if h not in seen_h:
         seen_h.add(h)
         out_files.append((b_data, fn))
