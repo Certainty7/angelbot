@@ -67,8 +67,9 @@ Evidence and fix sketches live there; this file tracks order and status only.
 
 ### 11 · 11. Conversation state is saved before Discord confirms delivery
 
-- **Status:** todo
+- **Status:** done (#31)
 - **Done when:** a failed or partial multi-chunk/media delivery creates no rolling/ambient/forwarded reply state, while one complete delivery stores it exactly once.
+- **Evidence:** `ConversationTurn` + `commit_turn` + `deliver_turn` in `angel/client.py` (generation is inert; the caller commits only after every chunk and file is accepted); `/chat` commits after the last `followup.send`; `filter_outgoing(pending)` turns a claim into a promise; probe: complete delivery stored one exchange, chunk-2 failure left `messages` unchanged; `tests/test_delivery_before_persist.py` (8 tests).
 
 ### 12 · 12. Killing yt-dlp leaves its child processes alive
 
