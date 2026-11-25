@@ -9,10 +9,87 @@
       "version": "1.1.0",
       "date": "2026-11-25",
       "summary": {
-        "en": "Release notes land in Task 6.",
-        "ar": "Release notes land in Task 6."
+        "en": "A truth and proof release: the repository now states only the numbers it can prove, and checks the two things a reader cannot verify by eye — the version and the secrets.",
+        "ar": "إصدار «الحقيقة والدليل»: صار المستودع يعلن الأرقام التي يستطيع إثباتها فقط، ويفحص ما لا يستطيع القارئ التحقق منه بالعين: رقم الإصدار، والأسرار."
       },
-      "sections": []
+      "sections": [
+        {
+          "title": {
+            "en": "Proof, not prose",
+            "ar": "دليل لا خطابة"
+          },
+          "items": [
+            {
+              "en": "A release-consistency test fails the build when the package version, the top of this changelog and the site data disagree; the README badges read from the same source. A release can no longer ship under three different numbers.",
+              "ar": "اختبار توحيد الإصدار يفشل البناء إذا اختلف إصدار الحزمة مع أعلى عنوان في هذا السجل ومع بيانات الموقع؛ وتُقرأ شارات الـ`README` من المصدر نفسه. فلا يصدر إصدار بثلاثة أرقام مختلفة مرة أخرى."
+            },
+            {
+              "en": "A secret scanner walks the working tree and every blob in the history for Discord, Google, OpenAI, AWS, GitHub and private-key shapes. It runs as its own CI step, and a base64 run of letters is not reported as a key.",
+              "ar": "فاحص الأسرار يمرّ على الشجرة وعلى كل `blob` في تاريخ `git` باحثًا عن أشكال مفاتيح `Discord` و`Google` و`OpenAI` و`AWS` و`GitHub` والمفاتيح الخاصة. ويعمل خطوة مستقلة في `CI`، ولا يعدّ سلسلة `base64` من الحروف مفتاحًا."
+            },
+            {
+              "en": "Hard-coded test counts are gone from both READMEs: they claimed 182/322 tests and 67 browser tests where the truth was 367 and 32, and they rot on every commit. This file records the count at the tag.",
+              "ar": "اختفت الأعداد الصلبة للاختبارات من الـ`README`ين: كانت تزعم 182/322 اختبارًا و67 اختبار متصفح والصحيح 367 و32، وهي تتقادم مع كل `commit`. ويسجّل هذا الملف العدد عند الوسم بدلًا من ذلك."
+            }
+          ]
+        },
+        {
+          "title": {
+            "en": "Figures that cannot go stale",
+            "ar": "أشكال لا تتقادم"
+          },
+          "items": [
+            {
+              "en": "The raster screenshots are replaced by SVGs generated from the code: one generator draws the four layers from the module list, one the five stages and the confirmation gate, one the real offline gate run, one the recall table.",
+              "ar": "استُبدلت صور الشاشة النقطية بأشكال `SVG` يولّدها الكود: مولّد يرسم الطبقات الأربع من قائمة الوحدات، وآخر يرسم المراحل الخمس وبوابة التأكيد، وثالث يشغّل بوابة الفحص الحقيقية، ورابع يبني جدول الاستدعاء."
+            },
+            {
+              "en": "A docs-assets test parses every figure and fails when a module it names disappears, when the gate card quotes a failing run, or when a README points at a file that is not there.",
+              "ar": "اختبار أصول الوثائق يحلّل كل شكل ويفشل إذا اختفت وحدة يسمّيها، أو أوردت بطاقة البوابة تشغيلًا فاشلًا، أو أشار أحد الـ`README`ين إلى ملف غير موجود."
+            },
+            {
+              "en": "The recall probe's demo facts are now plainly fictional, and `docs/SECURITY/pii-sweep-2026-11-25.md` records what was reviewed in every image and identifier.",
+              "ar": "حقائق أداة الاستدعاء التجريبية صارت خيالية صراحةً، ويسجّل `docs/SECURITY/pii-sweep-2026-11-25.md` ما رُوجع في كل صورة ومعرّف."
+            }
+          ]
+        },
+        {
+          "title": {
+            "en": "Documentation",
+            "ar": "الوثائق"
+          },
+          "items": [
+            {
+              "en": "Both READMEs gain a repository map and a quality-gates table: gate, command, and the failure it refuses. The list matches the offline gate, the test suite, the secret scan, the release test and the asset test one for one.",
+              "ar": "اكتسب الـ`README`ان خريطة مستودع وجدول بوابات جودة: البوابة، والأمر، والفشل الذي ترفضه. وتطابق القائمة بوابة الفحص وحزمة الاختبارات وفحص الأسرار واختبار الإصدار واختبار الأصول واحدًا لواحد."
+            },
+            {
+              "en": "`docs/DECISIONS.md` states the catalogue count at this version: 71 entries, 68 slash commands and 3 context menus.",
+              "ar": "يعلن `docs/DECISIONS.md` عدد الكتالوج عند هذا الإصدار: 71 مدخلًا، منها 68 أمر `slash` و3 قوائم سياق."
+            }
+          ]
+        },
+        {
+          "title": {
+            "en": "Counts at this tag",
+            "ar": "الأعداد عند هذا الوسم"
+          },
+          "items": [
+            {
+              "en": "`pytest -q`: 367 tests and 339 subtests, one warning (a third-party `discord.py` deprecation).",
+              "ar": "`pytest -q`: 367 اختبارًا و339 `subtest`، مع تحذير واحد (إهمال من طرف ثالث في `discord.py`)."
+            },
+            {
+              "en": "`tools/selftest.py`: 50/50 checks.",
+              "ar": "`tools/selftest.py`: 50/50 فحصًا."
+            },
+            {
+              "en": "`npx playwright test`: 32 browser tests over the built site.",
+              "ar": "`npx playwright test`: 32 اختبار متصفح على الموقع المبني."
+            }
+          ]
+        }
+      ]
     },
     {
       "version": "1.0.5",

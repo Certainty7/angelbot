@@ -11,8 +11,8 @@
     "version": "1.1.0",
     "date": "2026-11-25",
     "summary": {
-      "en": "Release notes land in Task 6.",
-      "ar": "Release notes land in Task 6."
+      "en": "A truth and proof release: the repository now states only the numbers it can prove, and checks the two things a reader cannot verify by eye — the version and the secrets.",
+      "ar": "إصدار «الحقيقة والدليل»: صار المستودع يعلن الأرقام التي يستطيع إثباتها فقط، ويفحص ما لا يستطيع القارئ التحقق منه بالعين: رقم الإصدار، والأسرار."
     }
   }
 }

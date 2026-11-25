@@ -2,7 +2,43 @@
 
 ## 1.1.0 — 2026-11-25
 
-Release notes land in Task 6.
+A truth and proof release: the repository now states only the numbers it can prove, and checks the two
+things a reader cannot verify by eye — the version and the secrets.
+
+### Proof, not prose
+
+- A release-consistency test fails the build when the package version, the top of this changelog and
+  the site data disagree; the README badges read from the same source. A release can no longer ship
+  under three different numbers.
+- A secret scanner walks the working tree and every blob in the history for Discord, Google, OpenAI,
+  AWS, GitHub and private-key shapes. It runs as its own CI step, and a base64 run of letters is not
+  reported as a key.
+- Hard-coded test counts are gone from both READMEs: they claimed 182/322 tests and 67 browser tests
+  where the truth was 367 and 32, and they rot on every commit. This file records the count at the tag.
+
+### Figures that cannot go stale
+
+- The raster screenshots are replaced by SVGs generated from the code: one generator draws the four
+  layers from the module list, one the five stages and the confirmation gate, one the real offline
+  gate run, one the recall table.
+- A docs-assets test parses every figure and fails when a module it names disappears, when the gate
+  card quotes a failing run, or when a README points at a file that is not there.
+- The recall probe's demo facts are now plainly fictional, and `docs/SECURITY/pii-sweep-2026-11-25.md`
+  records what was reviewed in every image and identifier.
+
+### Documentation
+
+- Both READMEs gain a repository map and a quality-gates table: gate, command, and the failure it
+  refuses. The list matches the offline gate, the test suite, the secret scan, the release test and
+  the asset test one for one.
+- `docs/DECISIONS.md` states the catalogue count at this version: 71 entries, 68 slash commands and
+  3 context menus.
+
+### Counts at this tag
+
+- `pytest -q`: 367 tests and 339 subtests, one warning (a third-party `discord.py` deprecation).
+- `tools/selftest.py`: 50/50 checks.
+- `npx playwright test`: 32 browser tests over the built site.
 
 ## 1.0.5 — 2026-11-20
 
