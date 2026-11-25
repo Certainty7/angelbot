@@ -61,8 +61,9 @@ Evidence and fix sketches live there; this file tracks order and status only.
 
 ### 10 · 10. Archive work is unbounded, unobserved and cancelled on shutdown
 
-- **Status:** todo
+- **Status:** done (#29)
 - **Done when:** 1,000 blocked messages create no more than 256 queued/active jobs and no waiting producers, rejected message IDs are logged, failures are observed, and a graceful shutdown persists accepted work within the drain window.
+- **Evidence:** `angel/work_queue.py` (`BoundedWorkQueue`, capacity 256, non-blocking admission, one observed `ERROR` per failure, `drain(10)` returning unsent ids); `client.close()` drains before `db.close()`; probe with a locked real database: 1,000 submits in 7.8 ms, 256 accepted, 744 logged rejections, 256 rows persisted; `tests/test_archive_queue.py` (7 tests).
 
 ### 11 · 11. Conversation state is saved before Discord confirms delivery
 
