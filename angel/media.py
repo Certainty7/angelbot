@@ -330,6 +330,23 @@ async def _normalize_image_bytes(data: Optional[bytes],
   return out
 
 
+def _mp4_transcode_argv(in_p: str, out_p: str, max_bytes: int) -> list:
+  """FFmpeg argv for the H.264 fallback, capped while it writes.
+
+  `-fs` makes the muxer stop at the limit instead of filling the temp volume with a payload the
+  post-check will discard anyway (finding 19c). It has to precede the output path.
+  """
+  return [
+      FFMPEG_EXE, "-nostdin", "-y", "-loglevel", "error",
+      "-i", in_p,
+      "-c:v", "libx264", "-preset", "ultrafast", "-crf", "25",
+      "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
+      "-movflags", "+faststart",
+      "-fs", str(int(max_bytes)),
+      out_p,
+  ]
+
+
 async def _ensure_discord_playable_mp4(video_bytes: bytes, max_bytes: int = 10 * 1024 * 1024) -> bytes:
   """
   If a downloaded TikTok/Instagram MP4 uses HEVC/ByteVC1 (`hvc1` / `hev1` without `avc1`),
@@ -352,11 +369,7 @@ async def _ensure_discord_playable_mp4(video_bytes: bytes, max_bytes: int = 10 *
     async with _get_ffmpeg_semaphore():
       await asyncio.to_thread(_write_file_sync, in_p, video_bytes)
       proc = await asyncio.create_subprocess_exec(
-          FFMPEG_EXE, "-nostdin", "-y", "-loglevel", "error",
-          "-i", in_p,
-          "-c:v", "libx264", "-preset", "ultrafast", "-crf", "25",
-          "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
-          "-movflags", "+faststart", out_p,
+          *_mp4_transcode_argv(in_p, out_p, max_bytes),
           stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
       )
       try:
