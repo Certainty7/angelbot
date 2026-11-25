@@ -9,6 +9,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from angel.config import can_assign_role, can_moderate_member, has_perm_or_mistress, is_mistress
+from angel.interactions import run_moderation_action
 
 
 class Admin(commands.Cog):
@@ -26,11 +27,14 @@ class Admin(commands.Cog):
     if not allowed:
       await interaction.response.send_message(why, ephemeral=True)
       return
-    await member.kick(reason=f"By {interaction.user}: {reason}")
     desc = f"**العضو:** {member.mention}\n**السبب:** {reason}"
     embed = discord.Embed(title="👢 تم طرد العضو", description=desc, color=0x2B2D31)
-    await interaction.response.send_message(embed=embed)
-    await self.bot.send_modlog(interaction.guild, "👢 طرد عضو", desc)
+    await run_moderation_action(
+        interaction,
+        lambda: member.kick(reason=f"By {interaction.user}: {reason}"),
+        embed=embed,
+        modlog=lambda: self.bot.send_modlog(interaction.guild, "👢 طرد عضو", desc),
+    )
 
 
   @app_commands.command(name="ban", description="حظر عضو من السيرفر")
@@ -48,11 +52,14 @@ class Admin(commands.Cog):
     if not allowed:
       await interaction.response.send_message(why, ephemeral=True)
       return
-    await member.ban(reason=f"By {interaction.user}: {reason}", delete_message_days=delete_days)
     desc = f"**العضو:** {member.mention}\n**السبب:** {reason}"
     embed = discord.Embed(title="🔨 تم حظر العضو", description=desc, color=discord.Color.red().value)
-    await interaction.response.send_message(embed=embed)
-    await self.bot.send_modlog(interaction.guild, "🔨 حظر عضو", desc, color=discord.Color.red().value)
+    await run_moderation_action(
+        interaction,
+        lambda: member.ban(reason=f"By {interaction.user}: {reason}", delete_message_days=delete_days),
+        embed=embed,
+        modlog=lambda: self.bot.send_modlog(interaction.guild, "🔨 حظر عضو", desc, color=discord.Color.red().value),
+    )
 
 
   @app_commands.command(name="unban", description="فك الحظر عن مستخدم عبر معرفه")
@@ -63,11 +70,12 @@ class Admin(commands.Cog):
     if not user_id.isdigit():
       await interaction.response.send_message("⚠️ أدخل معرفاً رقمياً صحيحاً.", ephemeral=True)
       return
-    try:
-      await interaction.guild.unban(discord.Object(id=int(user_id)), reason=reason)
-      await interaction.response.send_message(f"🔓 تم فك الحظر عن `{user_id}`.")
-    except discord.NotFound:
-      await interaction.response.send_message("⚠️ غير موجود في قائمة الحظر.", ephemeral=True)
+    await run_moderation_action(
+        interaction,
+        lambda: interaction.guild.unban(discord.Object(id=int(user_id)), reason=reason),
+        content=f"🔓 تم فك الحظر عن `{user_id}`.",
+        not_found="⚠️ غير موجود في قائمة الحظر.",
+    )
 
 
   @app_commands.command(name="timeout", description="كتم عضو مؤقتاً")
@@ -85,9 +93,12 @@ class Admin(commands.Cog):
     if not allowed:
       await interaction.response.send_message(why, ephemeral=True)
       return
-    await member.timeout(timedelta(minutes=minutes), reason=reason)
-    await interaction.response.send_message(f"⏳ تم كتم {member.mention} لمدة **{minutes} دقيقة**.")
-    await self.bot.send_modlog(interaction.guild, "⏳ كتم عضو", f"**العضو:** {member.mention} (`{minutes}m`)\n**السبب:** {reason}")
+    await run_moderation_action(
+        interaction,
+        lambda: member.timeout(timedelta(minutes=minutes), reason=reason),
+        content=f"⏳ تم كتم {member.mention} لمدة **{minutes} دقيقة**.",
+        modlog=lambda: self.bot.send_modlog(interaction.guild, "⏳ كتم عضو", f"**العضو:** {member.mention} (`{minutes}m`)\n**السبب:** {reason}"),
+    )
 
 
   @app_commands.command(name="untimeout", description="إلغاء الكتم عن عضو")
@@ -99,9 +110,12 @@ class Admin(commands.Cog):
     if not allowed:
       await interaction.response.send_message(why, ephemeral=True)
       return
-    await member.timeout(None)
-    await interaction.response.send_message(f"🔊 تم رفع الكتم عن {member.mention}.")
-    await self.bot.send_modlog(interaction.guild, "🔊 رفع الكتم", f"**العضو:** {member.mention}")
+    await run_moderation_action(
+        interaction,
+        lambda: member.timeout(None),
+        content=f"🔊 تم رفع الكتم عن {member.mention}.",
+        modlog=lambda: self.bot.send_modlog(interaction.guild, "🔊 رفع الكتم", f"**العضو:** {member.mention}"),
+    )
 
 
   @app_commands.command(name="purge", description="مسح عدد من الرسائل في القناة")
@@ -130,11 +144,12 @@ class Admin(commands.Cog):
     if not allowed:
       await interaction.response.send_message(why, ephemeral=True)
       return
-    total = await self.bot.db.add_warning(interaction.guild.id, member.id, interaction.user.id, reason)
-    await interaction.response.send_message(
-        f"⚠️ تم توجيه إنذار إلى {member.mention} — السبب: **{reason}** (الإجمالي: `{total}`)."
+    await run_moderation_action(
+        interaction,
+        lambda: self.bot.db.add_warning(interaction.guild.id, member.id, interaction.user.id, reason),
+        content=lambda total: f"⚠️ تم توجيه إنذار إلى {member.mention} — السبب: **{reason}** (الإجمالي: `{total}`).",
+        modlog=lambda: self.bot.send_modlog(interaction.guild, "⚠️ إنذار عضو", f"**العضو:** {member.mention}\n**السبب:** {reason}"),
     )
-    await self.bot.send_modlog(interaction.guild, "⚠️ إنذار عضو", f"**العضو:** {member.mention}\n**السبب:** {reason}")
 
 
   @app_commands.command(name="warnings", description="عرض إنذارات عضو")
@@ -174,8 +189,12 @@ class Admin(commands.Cog):
     if not allowed:
       await interaction.response.send_message(why, ephemeral=True)
       return
-    count = await self.bot.db.clear_warnings(interaction.guild.id, member.id)
-    await interaction.response.send_message(f"✅ تم مسح **{count}** إنذار لـ {member.mention}.", ephemeral=True)
+    await run_moderation_action(
+        interaction,
+        lambda: self.bot.db.clear_warnings(interaction.guild.id, member.id),
+        content=lambda count: f"✅ تم مسح **{count}** إنذار لـ {member.mention}.",
+        modlog=lambda: self.bot.send_modlog(interaction.guild, "🧽 مسح إنذارات", f"**العضو:** {member.mention}"),
+    )
 
 
   @app_commands.command(name="lock", description="قفل القناة")
@@ -191,8 +210,11 @@ class Admin(commands.Cog):
     target = channel or interaction.channel
     overwrite = target.overwrites_for(interaction.guild.default_role)
     overwrite.send_messages = False
-    await target.set_permissions(interaction.guild.default_role, overwrite=overwrite, reason=reason)
-    await interaction.response.send_message(f"🔒 تم قفل {target.mention}.")
+    await run_moderation_action(
+        interaction,
+        lambda: target.set_permissions(interaction.guild.default_role, overwrite=overwrite, reason=reason),
+        content=f"🔒 تم قفل {target.mention}.",
+    )
 
 
   @app_commands.command(name="unlock", description="فتح القناة")
@@ -203,8 +225,11 @@ class Admin(commands.Cog):
     target = channel or interaction.channel
     overwrite = target.overwrites_for(interaction.guild.default_role)
     overwrite.send_messages = None
-    await target.set_permissions(interaction.guild.default_role, overwrite=overwrite)
-    await interaction.response.send_message(f"🔓 تم فتح {target.mention}.")
+    await run_moderation_action(
+        interaction,
+        lambda: target.set_permissions(interaction.guild.default_role, overwrite=overwrite),
+        content=f"🔓 تم فتح {target.mention}.",
+    )
 
 
   @app_commands.command(name="slowmode", description="ضبط الوضع البطيء للقناة")
@@ -212,9 +237,10 @@ class Admin(commands.Cog):
   @app_commands.describe(seconds="الثواني (0 للإلغاء)")
   @has_perm_or_mistress(manage_channels=True)
   async def slowmode_cmd(self, interaction: discord.Interaction, seconds: app_commands.Range[int, 0, 21600]):
-    await interaction.channel.edit(slowmode_delay=seconds)
-    await interaction.response.send_message(
-        "⚡ تم إلغاء الوضع البطيء." if seconds == 0 else f"🐢 تم ضبط الوضع البطيء على **{seconds} ثانية**."
+    await run_moderation_action(
+        interaction,
+        lambda: interaction.channel.edit(slowmode_delay=seconds),
+        content="⚡ تم إلغاء الوضع البطيء." if seconds == 0 else f"🐢 تم ضبط الوضع البطيء على **{seconds} ثانية**.",
     )
 
 
@@ -231,9 +257,12 @@ class Admin(commands.Cog):
     if not ok_m:
       await interaction.response.send_message(deny_m, ephemeral=True)
       return
-    await member.add_roles(role, reason=f"By {interaction.user}")
-    await interaction.response.send_message(f"✅ تم منح {role.mention} لـ {member.mention}.")
-    await self.bot.send_modlog(interaction.guild, "🎭 منح رتبة", f"**العضو:** {member.mention}\n**الرتبة:** {role.mention}\n**بواسطة:** {interaction.user.mention}")
+    await run_moderation_action(
+        interaction,
+        lambda: member.add_roles(role, reason=f"By {interaction.user}"),
+        content=f"✅ تم منح {role.mention} لـ {member.mention}.",
+        modlog=lambda: self.bot.send_modlog(interaction.guild, "🎭 منح رتبة", f"**العضو:** {member.mention}\n**الرتبة:** {role.mention}\n**بواسطة:** {interaction.user.mention}"),
+    )
 
 
   @app_commands.command(name="remove_role", description="سحب رتبة من عضو")
@@ -249,9 +278,12 @@ class Admin(commands.Cog):
     if not ok_m:
       await interaction.response.send_message(deny_m, ephemeral=True)
       return
-    await member.remove_roles(role, reason=f"By {interaction.user}")
-    await interaction.response.send_message(f"✅ تم سحب {role.mention} من {member.mention}.")
-    await self.bot.send_modlog(interaction.guild, "🎭 سحب رتبة", f"**العضو:** {member.mention}\n**الرتبة:** {role.mention}\n**بواسطة:** {interaction.user.mention}")
+    await run_moderation_action(
+        interaction,
+        lambda: member.remove_roles(role, reason=f"By {interaction.user}"),
+        content=f"✅ تم سحب {role.mention} من {member.mention}.",
+        modlog=lambda: self.bot.send_modlog(interaction.guild, "🎭 سحب رتبة", f"**العضو:** {member.mention}\n**الرتبة:** {role.mention}\n**بواسطة:** {interaction.user.mention}"),
+    )
 
 
   @app_commands.command(name="announce", description="نشر إعلان منسق في قناة")

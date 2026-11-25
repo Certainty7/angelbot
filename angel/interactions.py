@@ -2,7 +2,7 @@
 
 A cog answers an interaction without importing `bot`, which would be an import cycle.
 """
-from typing import Any, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, Optional
 
 import discord
 
@@ -76,3 +76,43 @@ async def _safe_interaction_defer(interaction: discord.Interaction, ephemeral: b
     return True
   except (discord.NotFound, discord.HTTPException):
     return False
+
+
+async def run_moderation_action(
+    interaction: discord.Interaction,
+    action: Callable[[], Awaitable[Any]],
+    *,
+    content: Optional[Any] = None,
+    embed: Optional[discord.Embed] = None,
+    modlog: Optional[Callable[[], Awaitable[Any]]] = None,
+    not_found: Optional[str] = None,
+) -> bool:
+  """Defer, mutate, report, best-effort modlog — in that order, for every moderator surface.
+
+  Discord kills the first response at three seconds. Mutating first meant a slow kick could
+  succeed while the ACK failed with 10062, so the moderator saw a failure and retried an
+  action that had already happened (audit finding 13). Nothing is mutated until the
+  acknowledgement is accepted; `content` may be a callable that receives the action result.
+  """
+  if not await _safe_interaction_defer(interaction, ephemeral=False):
+    return False
+  try:
+    result = await action()
+  except discord.NotFound as exc:
+    logger.warning("moderation action not found: %s: %s", type(exc).__name__, exc)
+    await _safe_interaction_reply(
+        interaction, not_found or "⚠️ الهدف غير موجود.", ephemeral=False
+    )
+    return False
+  except discord.HTTPException as exc:
+    logger.warning("moderation action failed: %s: %s", type(exc).__name__, exc)
+    await _safe_interaction_reply(interaction, "⚠️ فشل الإجراء، لم يُنفَّذ شيء.", ephemeral=False)
+    return False
+  text = content(result) if callable(content) else content
+  await _safe_interaction_reply(interaction, text, ephemeral=False, embed=embed)
+  if modlog is not None:
+    try:
+      await modlog()
+    except Exception as log_err:  # noqa: BLE001 - the action succeeded; a modlog must not undo it
+      logger.warning("modlog failed: %s: %s", type(log_err).__name__, log_err)
+  return True
