@@ -27,8 +27,12 @@ and fallback produces the text: `gemini-3-flash-preview`, `gemini-3.1-flash-lite
 `gemini-3.5-flash-lite`, then `gemini-4-hydrogen`. A per-day free-tier `429` cools until midnight
 Pacific instead of retrying every message. There is no external queue, cache or worker.
 
-Most of the design is about restraint. The model can propose a moderation action, but it runs only
-after the person who asked confirms it, and the permission is checked again at execution. Durable personal memory is written by the member with `/memory pin`; the bot infers nothing from
+Most of the design is about restraint. An irreversible action — purge, ban, warning erasure — runs
+only after the person who asked types `تأكيد` in the same channel within a minute, whichever surface
+proposed it, and the permission is checked again at execution. Reversible commands such as timeout
+or kick run immediately; `docs/remediation/14-confirmation-scope.md` records that boundary.
+
+Durable personal memory is written by the member with `/memory pin`; the bot infers nothing from
 what someone says.
 
 ## Features
@@ -42,9 +46,9 @@ what someone says.
   want remembered with `/memory pin`, removes one item with `/memory forget`, and erases everything
   with `/data`. The bot builds no profiles.
 - **Guarded moderation.** Kick, ban, timeout, purge, warnings, lock, slowmode, roles and
-  announcements, with a modlog and an anti-spam guard. Destructive actions are queued and need the
-  same owner to type `تأكيد` within 60 seconds. Permissions are checked again when the confirmation
-  arrives.
+  announcements, with a modlog and an anti-spam guard. Irreversible actions (purge, ban, warning
+  erasure) are queued from every surface and need the same person to type `تأكيد` within 60 seconds;
+  permissions are checked again when the confirmation arrives. Reversible commands stay immediate.
 - **Media extraction.** TikTok and X links resolve through their public endpoints, with yt-dlp as
   a fallback; Instagram returns the embed or the slide files the source serves; Reddit links are
   rewritten to an embed. Downloads run in a subprocess with time and size limits, and temporary
@@ -323,9 +327,12 @@ necessary but not sufficient: it cannot replace a real Discord server.
 ## Security
 
 - Owner checks use immutable Discord user IDs, never names or nicknames.
-- `BAN`, `KICK`, `PURGE` and `DELETE_CHANNEL` are queued and need the same person who triggered them
-  to type `تأكيد` within 60 seconds. A cancel word clears it; anything else leaves it pending until
-  the minute runs out. The permission check is repeated when the confirmation arrives.
+- `PURGE`, `BAN` and `CLEAR_WARNINGS` are queued on every surface — slash, natural language, custom
+  trigger, model — and need the same person who triggered them to type `تأكيد` in the same channel
+  within 60 seconds. A confirmation typed elsewhere cancels the action; a cancel word clears it;
+  anything else leaves it pending until the minute runs out. Permission and target are re-resolved
+  when the confirmation arrives. `KICK`, `TIMEOUT`, `LOCK` and role changes are reversible and run
+  immediately (approved exception, `docs/remediation/14-confirmation-scope.md`).
 - Archive recall is scoped to the channels the requester can read. Direct messages are excluded
   from the server archive. AFK status and sticky messages are scoped per guild.
 - Every outbound HTTP session must use `SafeAsyncResolver`; redirects and cached stream URLs are
