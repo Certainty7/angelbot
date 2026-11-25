@@ -26,6 +26,7 @@ from angel.confirmations import (
 from angel.config import (
     can_assign_role,
     can_create_action_trigger,
+    can_manage_channel,
     can_moderate_member,
     can_read_history,
     check_staff_action_permission,
@@ -421,25 +422,45 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
       await t_mem.edit(nick=new_nick)
     elif action_name == "LOCK":
       target_ch = resolve_natural_text_channel(guild, message) or message.channel
+      ok_ch, deny_ch = can_manage_channel(author, target_ch, guild)
+      if not ok_ch:
+        await safe_reply(message, deny_ch)
+        return "blocked"
       overwrite = target_ch.overwrites_for(guild.default_role)
       overwrite.send_messages = False
       await target_ch.set_permissions(guild.default_role, overwrite=overwrite)
     elif action_name == "UNLOCK":
       target_ch = resolve_natural_text_channel(guild, message) or message.channel
+      ok_ch, deny_ch = can_manage_channel(author, target_ch, guild)
+      if not ok_ch:
+        await safe_reply(message, deny_ch)
+        return "blocked"
       overwrite = target_ch.overwrites_for(guild.default_role)
       overwrite.send_messages = None
       await target_ch.set_permissions(guild.default_role, overwrite=overwrite)
     elif action_name == "HIDE":
       target_ch = resolve_natural_text_channel(guild, message) or message.channel
+      ok_ch, deny_ch = can_manage_channel(author, target_ch, guild)
+      if not ok_ch:
+        await safe_reply(message, deny_ch)
+        return "blocked"
       overwrite = target_ch.overwrites_for(guild.default_role)
       overwrite.view_channel = False
       await target_ch.set_permissions(guild.default_role, overwrite=overwrite)
     elif action_name == "UNHIDE":
       target_ch = resolve_natural_text_channel(guild, message) or message.channel
+      ok_ch, deny_ch = can_manage_channel(author, target_ch, guild)
+      if not ok_ch:
+        await safe_reply(message, deny_ch)
+        return "blocked"
       overwrite = target_ch.overwrites_for(guild.default_role)
       overwrite.view_channel = None
       await target_ch.set_permissions(guild.default_role, overwrite=overwrite)
     elif action_name == "SLOWMODE":
+      ok_ch, deny_ch = can_manage_channel(author, message.channel, guild)
+      if not ok_ch:
+        await safe_reply(message, deny_ch)
+        return "blocked"
       sec = max(0, min(21600, int(params.get("seconds", "5"))))
       await message.channel.edit(slowmode_delay=sec)
     elif action_name == "PURGE":
@@ -643,6 +664,10 @@ async def try_execute_custom_action_trigger(bot, message: discord.Message) -> bo
       return True
 
     if act == "lock":
+      ok_ch, deny_ch = can_manage_channel(author, message.channel, guild)
+      if not ok_ch:
+        await safe_reply(message, deny_ch)
+        return True
       overwrite = message.channel.overwrites_for(guild.default_role)
       overwrite.send_messages = False
       await message.channel.set_permissions(guild.default_role, overwrite=overwrite)
@@ -650,6 +675,10 @@ async def try_execute_custom_action_trigger(bot, message: discord.Message) -> bo
       return True
 
     if act == "unlock":
+      ok_ch, deny_ch = can_manage_channel(author, message.channel, guild)
+      if not ok_ch:
+        await safe_reply(message, deny_ch)
+        return True
       overwrite = message.channel.overwrites_for(guild.default_role)
       overwrite.send_messages = None
       await message.channel.set_permissions(guild.default_role, overwrite=overwrite)
@@ -1700,6 +1729,10 @@ async def try_execute_natural_command(
     if not (mistress or author.guild_permissions.moderate_members):
       await safe_reply(message, "⚡ لا تملك صلاحية مسح الإنذارات.")
       return True
+    ok_target, deny_target = can_moderate_member(author, target_member, guild)
+    if not ok_target:
+      await safe_reply(message, deny_target)
+      return True
     async def _run_clear(confirm_message, _tid=target_member.id, _mention=target_member.mention, bot=bot):
       actor = confirm_message.author
       if not (is_mistress(actor) or getattr(actor.guild_permissions, "moderate_members", False)):
@@ -1733,6 +1766,10 @@ async def try_execute_natural_command(
   if target_member and any(k in cmd_lower for k in ("حذري", "حذريه", "انذري", "انذريه", "اعطيه انذار", "اعطيها انذار", "عطيه انذار", "وجهي انذار", "انذار ل", "تحذير ل")):
     if not (mistress or author.guild_permissions.moderate_members):
       await safe_reply(message, "⚡ لا تملك صلاحية توجيه الإنذارات.")
+      return True
+    ok_target, deny_target = can_moderate_member(author, target_member, guild)
+    if not ok_target:
+      await safe_reply(message, deny_target)
       return True
     rsn_m = re.search(r"(?:بسبب|لان|لأن|السبب|:)\s*(.+)$", cmd_body, re.IGNORECASE)
     rsn = rsn_m.group(1).strip() if rsn_m else "مخالفة قوانين السيرفر"
@@ -1926,6 +1963,10 @@ async def try_execute_natural_command(
       await safe_reply(message, "⚡ لا تملك صلاحية إدارة القنوات.")
       return True
     target_ch = resolve_natural_text_channel(guild, message) or message.channel
+    ok_ch, deny_ch = can_manage_channel(author, target_ch, guild)
+    if not ok_ch:
+      await safe_reply(message, deny_ch)
+      return True
     overwrite = target_ch.overwrites_for(guild.default_role)
     overwrite.view_channel = False
     await target_ch.set_permissions(guild.default_role, overwrite=overwrite)
@@ -1940,6 +1981,10 @@ async def try_execute_natural_command(
       await safe_reply(message, "⚡ لا تملك صلاحية إدارة القنوات.")
       return True
     target_ch = resolve_natural_text_channel(guild, message) or message.channel
+    ok_ch, deny_ch = can_manage_channel(author, target_ch, guild)
+    if not ok_ch:
+      await safe_reply(message, deny_ch)
+      return True
     overwrite = target_ch.overwrites_for(guild.default_role)
     overwrite.view_channel = None
     await target_ch.set_permissions(guild.default_role, overwrite=overwrite)
@@ -1955,6 +2000,10 @@ async def try_execute_natural_command(
       await safe_reply(message, "⚡ لا تملك صلاحية قفل القنوات.")
       return True
     target_ch = resolve_natural_text_channel(guild, message) or message.channel
+    ok_ch, deny_ch = can_manage_channel(author, target_ch, guild)
+    if not ok_ch:
+      await safe_reply(message, deny_ch)
+      return True
     try:
       overwrite = target_ch.overwrites_for(guild.default_role)
       overwrite.send_messages = False
@@ -1973,6 +2022,10 @@ async def try_execute_natural_command(
       await safe_reply(message, "⚡ لا تملك صلاحية فتح القنوات.")
       return True
     target_ch = resolve_natural_text_channel(guild, message) or message.channel
+    ok_ch, deny_ch = can_manage_channel(author, target_ch, guild)
+    if not ok_ch:
+      await safe_reply(message, deny_ch)
+      return True
     try:
       overwrite = target_ch.overwrites_for(guild.default_role)
       overwrite.send_messages = None
@@ -1986,6 +2039,10 @@ async def try_execute_natural_command(
   if any(k in cmd_lower for k in ("سلو مود", "الوضع البطيء", "بطئي الشات", "slowmode")):
     if not (mistress or author.guild_permissions.manage_channels):
       return False
+    ok_ch, deny_ch = can_manage_channel(author, message.channel, guild)
+    if not ok_ch:
+      await safe_reply(message, deny_ch)
+      return True
     nums = [int(n) for n in re.findall(r"\b(\d+)\b", cmd_lower)]
     sec = 0 if any(u in cmd_lower for u in ("الغي", "شيل", "شيلي", "فك", "فكي", "وقفي")) else (nums[0] if nums else 5)
     await message.channel.edit(slowmode_delay=max(0, min(21600, sec)))

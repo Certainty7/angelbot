@@ -8,7 +8,13 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from angel.config import can_assign_role, can_moderate_member, has_perm_or_mistress, is_mistress
+from angel.config import (
+    can_assign_role,
+    can_manage_channel,
+    can_moderate_member,
+    has_perm_or_mistress,
+    is_mistress,
+)
 from angel.confirmations import queue_slash_confirmation
 from angel.interactions import run_moderation_action
 
@@ -234,6 +240,10 @@ class Admin(commands.Cog):
       reason: str = "بأمر الإدارة",
   ):
     target = channel or interaction.channel
+    ok_ch, deny_ch = can_manage_channel(interaction.user, target, interaction.guild)
+    if not ok_ch:
+      await interaction.response.send_message(deny_ch, ephemeral=True)
+      return
     overwrite = target.overwrites_for(interaction.guild.default_role)
     overwrite.send_messages = False
     await run_moderation_action(
@@ -249,6 +259,10 @@ class Admin(commands.Cog):
   @has_perm_or_mistress(manage_channels=True)
   async def unlock_cmd(self, interaction: discord.Interaction, channel: Optional[discord.TextChannel] = None):
     target = channel or interaction.channel
+    ok_ch, deny_ch = can_manage_channel(interaction.user, target, interaction.guild)
+    if not ok_ch:
+      await interaction.response.send_message(deny_ch, ephemeral=True)
+      return
     overwrite = target.overwrites_for(interaction.guild.default_role)
     overwrite.send_messages = None
     await run_moderation_action(
@@ -263,6 +277,10 @@ class Admin(commands.Cog):
   @app_commands.describe(seconds="الثواني (0 للإلغاء)")
   @has_perm_or_mistress(manage_channels=True)
   async def slowmode_cmd(self, interaction: discord.Interaction, seconds: app_commands.Range[int, 0, 21600]):
+    ok_ch, deny_ch = can_manage_channel(interaction.user, interaction.channel, interaction.guild)
+    if not ok_ch:
+      await interaction.response.send_message(deny_ch, ephemeral=True)
+      return
     await run_moderation_action(
         interaction,
         lambda: interaction.channel.edit(slowmode_delay=seconds),
