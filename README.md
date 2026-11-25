@@ -340,9 +340,8 @@ necessary but not sufficient: it cannot replace a real Discord server.
 
 ## Quality gates
 
-Five gates run before a tag. The same commands are wired into `.github/workflows/checks.yml`; GitHub
-Actions is configured for this repository but was not enabled on it at the time of writing, so a green
-local run is what gates a release.
+Five gates run before a tag, and the same commands run in `.github/workflows/checks.yml` on every
+push, so the `Checks` run and a local run agree by construction.
 
 | Gate | Command | What it refuses |
 |---|---|---|
