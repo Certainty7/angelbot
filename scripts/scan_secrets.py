@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail on token-shaped strings in the working tree or anywhere in git history.
+"""Fail on token-shaped strings in every blob any ref can reach, and in every file git would commit.
 
 The patterns are deliberately narrow: a false positive costs one allowlist entry, a missed Discord
 token costs an incident. Binary blobs over 1 MiB and known placeholder files are skipped.
@@ -7,6 +7,7 @@ token costs an incident. Binary blobs over 1 MiB and known placeholder files are
 
 from __future__ import annotations
 
+import pathlib
 import re
 import subprocess
 import sys
@@ -16,7 +17,7 @@ PATTERNS = [
     ("google-api-key", re.compile(r"AIza[0-9A-Za-z_-]{35}")),
     ("openai-key", re.compile(r"sk-[A-Za-z0-9]{32,}")),
     # Real key ids carry digits; a base64 blob of "A"s does not. Lighthouse reports are full of those.
-    ("aws-key", re.compile(r"(?<![A-Za-z0-9+/])AKIA(?=[A-Z0-9]*[0-9])[A-Z0-9]{16}(?![A-Za-z0-9+/=])")),
+    ("aws-key", re.compile(r"(?<![A-Za-z0-9+/])AKIA[A-Z0-9]{16}(?![A-Za-z0-9+/=])")),
     ("private-key", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----")),
     ("github-token", re.compile(r"gh[pousr]_[A-Za-z0-9]{36,}")),
 ]
@@ -48,6 +49,34 @@ def _blobs() -> list[tuple[str, bytes]]:
     return list(blobs.values())
 
 
+def _worktree() -> list[tuple[str, bytes]]:
+    """Files git would commit right now: tracked, plus untracked but not ignored.
+
+    Scanning history alone answers "was a secret committed", which is already too late. The
+    working tree is where a token sits for the minutes before someone types `git add`.
+    """
+    out = subprocess.run(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        capture_output=True,
+        check=True,
+    ).stdout
+    files: list[tuple[str, bytes]] = []
+    for raw in out.split(b"\0"):
+        if not raw:
+            continue
+        rel = raw.decode("utf-8", "ignore")
+        if rel in ALLOW:
+            continue
+        path = pathlib.Path(rel)
+        try:
+            if not path.is_file() or path.stat().st_size > MAX_BYTES:
+                continue
+            files.append((rel, path.read_bytes()))
+        except OSError:
+            continue
+    return files
+
+
 def scan(files: list[tuple[str, bytes]]) -> list[str]:
     hits = []
     for path, data in files:
@@ -61,7 +90,7 @@ def scan(files: list[tuple[str, bytes]]) -> list[str]:
 
 
 def main() -> int:
-    hits = scan(_blobs())
+    hits = sorted(set(scan(_blobs()) + scan(_worktree())))
     print("\n".join(hits) if hits else "no secrets found")
     return 1 if hits else 0
 

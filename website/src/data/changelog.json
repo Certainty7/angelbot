@@ -6,6 +6,96 @@
   ],
   "releases": [
     {
+      "version": "1.1.2",
+      "date": "2026-11-25",
+      "summary": {
+        "en": "An audit of the whole tree and its history. Four things a reader was entitled to rely on were not true; each is closed with a test that fails without the fix.",
+        "ar": "تدقيق للشجرة كلها ولتاريخها. أربعة أشياء كان للقارئ أن يعتمد عليها لم تكن صحيحة، وكل واحدة أُغلقت باختبار يفشل دون الإصلاح."
+      },
+      "sections": [
+        {
+          "title": {
+            "en": "The scanner did not look where it said it looked",
+            "ar": "الفاحص لم يكن ينظر حيث قال إنه ينظر"
+          },
+          "items": [
+            {
+              "en": "`scripts/scan_secrets.py` promised the working tree and read only committed blobs. A token in a file nobody had committed yet was invisible — precisely the minute before `git add`.",
+              "ar": "كان `scripts/scan_secrets.py` يَعِد بالشجرة ويقرأ الـ`blob`s المثبَّتة فقط، فالـ`token` في ملف لم يثبّته أحد بعد كان غير مرئي، وهي الدقيقة التي يسبق بها `git add`."
+            },
+            {
+              "en": "It reads every path `git` would commit now, and a test builds a repository, plants a token in an untracked file and requires exit status 1.",
+              "ar": "صار يقرأ كل مسار يوشك `git` أن يثبّته، واختبار يبني مستودعًا ويزرع `token` في ملف غير متتبَّع ويشترط رمز خروج `1`."
+            },
+            {
+              "en": "The AWS pattern required a digit among the sixteen characters after `AKIA`; real key ids are base32, so about one in a hundred and sixty was skipped. The digit lookahead is gone and the base64 boundary guards stay, which is what it was guarding against.",
+              "ar": "كان نمط `AWS` يشترط رقمًا بين المحارف الستة عشر التي تلي `AKIA`، ومعرّفات المفاتيح الحقيقية `base32`، فكان نحو مفتاح من كل مئة وستين يفوت. أُزيل شرط الرقم وبقيت حدود `base64` التي وُضع الشرط لأجلها."
+            }
+          ]
+        },
+        {
+          "title": {
+            "en": "Two figures and three sentences were wider than the truth",
+            "ar": "شكلان وثلاث جمل كانت أوسع من الحقيقة"
+          },
+          "items": [
+            {
+              "en": "`architecture.svg` printed `permissions.py`, which has not existed for a long time. The figure's lanes are hand-written, so nothing noticed. `tests/test_docs_assets.py` now resolves every path a figure prints, and the chip names `authz.py`.",
+              "ar": "كان `architecture.svg` يطبع `permissions.py` من وحدة لم تعد موجودة. مسارات الشكل مكتوبة بيد، فلم يلحظ أحد. صار `tests/test_docs_assets.py` يحلّ كل مسار يطبعه شكل، والبطاقة تسمّي `authz.py`."
+            },
+            {
+              "en": "The README said five gates run before a tag. `selftest` runs on service start and the rest run in CI; it says that now.",
+              "ar": "كان الـ`README` يقول إن خمس بوابات تعمل قبل الوسم. الـ`selftest` يعمل عند إقلاع الخدمة والباقي في `CI`، وهذا ما يقوله الآن."
+            },
+            {
+              "en": "The changelog said the README badges are generated. Only the release badge is asserted.",
+              "ar": "كان سجل التغييرات يقول إن شارات الـ`README` مولَّدة. والشارة الوحيدة المفحوصة هي شارة الإصدار."
+            },
+            {
+              "en": "The pipeline component called itself generated while the generator called it hand-maintained.",
+              "ar": "وكان مكوّن خط الأنابيب يصف نفسه بأنه مولَّد بينما المولّد يصفه بأنه مكتوب بيد."
+            }
+          ]
+        },
+        {
+          "title": {
+            "en": "Hashes that only fingerprint",
+            "ar": "بصمات لا تؤمّن شيئًا"
+          },
+          "items": [
+            {
+              "en": "Five `hashlib.md5` calls in `media.py` and `tools/selftest.py` now say `usedforsecurity=False`; `tests/test_crypto_hygiene.py` fails on a bare call. The digest dedupes downloads and compares test output, so the algorithm is not a security property.",
+              "ar": "خمسة استدعاءات `hashlib.md5` في وحدة الوسائط وفي الفحص الذاتي صارت تقول `usedforsecurity=False`، و`tests/test_crypto_hygiene.py` يفشل عند استدعاء عارٍ. البصمة تمنع تكرار التنزيل وتقارن مخرجات الاختبار، فالخوارزمية ليست خاصية أمنية."
+            },
+            {
+              "en": "`tools/metrics.py` stops hardcoding `/tmp`.",
+              "ar": "توقف `tools/metrics.py` عن كتابة `/tmp` مباشرة."
+            }
+          ]
+        },
+        {
+          "title": {
+            "en": "Counts at this tag",
+            "ar": "الأعداد عند هذا الوسم"
+          },
+          "items": [
+            {
+              "en": "`pytest -q`: 377 tests and 339 subtests.",
+              "ar": "`pytest -q`: 377 اختبارًا و339 `subtest`."
+            },
+            {
+              "en": "`selftest`: 50/50.",
+              "ar": "`selftest`: 50/50."
+            },
+            {
+              "en": "`npx playwright test`: 67.",
+              "ar": "`npx playwright test`: 67."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.1.1",
       "date": "2026-11-25",
       "summary": {
@@ -72,8 +162,8 @@
               "ar": "حُجب النص، وأضيف `tests/test_no_infra_in_docs.py` الذي يفشل عند ظهور أي منها في ملف `Markdown` متتبَّع."
             },
             {
-              "en": "The commits that carried the text remain in history; rewriting them is an owner decision, recorded rather than assumed.",
-              "ar": "أما الـ`commits` التي حملتها فما زالت في التاريخ؛ وإعادة كتابتها قرار للمالك، مسجَّل لا مفترض."
+              "en": "The commits that carried the text remained in history; the owner took that decision the same day, every ref was rewritten and force-pushed, and a fresh clone shows no trace of the three strings.",
+              "ar": "أما الـ`commits` التي حملتها فبقيت في التاريخ حينها؛ وأخذ المالك القرار في اليوم نفسه، فأُعيدت كتابة كل المراجع ودُفعت قسريًا، ولا يُظهر `clone` جديد أثرًا للسلاسل الثلاث."
             }
           ]
         },
@@ -114,8 +204,8 @@
           },
           "items": [
             {
-              "en": "A release-consistency test fails the build when the package version, the top of this changelog and the site data disagree; the README badges read from the same source. A release can no longer ship under three different numbers.",
-              "ar": "اختبار توحيد الإصدار يفشل البناء إذا اختلف إصدار الحزمة مع أعلى عنوان في هذا السجل ومع بيانات الموقع؛ وتُقرأ شارات الـ`README` من المصدر نفسه. فلا يصدر إصدار بثلاثة أرقام مختلفة مرة أخرى."
+              "en": "A release-consistency test fails the build when the package version, the top of this changelog and the site data disagree; the release badge is checked against that number, and the rest are hand- edited. A release can no longer ship under three different numbers.",
+              "ar": "اختبار توحيد الإصدار يفشل البناء إذا اختلف إصدار الحزمة مع أعلى عنوان في هذا السجل ومع بيانات الموقع؛ وشارة الإصدار وحدها هي المفحوصة، والباقي محرَّر بيد. فلا يصدر إصدار بثلاثة أرقام مختلفة مرة أخرى."
             },
             {
               "en": "A secret scanner walks the working tree and every blob in the history for Discord, Google, OpenAI, AWS, GitHub and private-key shapes. It runs as its own CI step, and a base64 run of letters is not reported as a key.",

@@ -28,6 +28,23 @@ def test_the_figures_name_the_modules_they_claim():
     assert "بوابة التأكيد" in pipeline
 
 
+MODULE_TOKEN = re.compile(r"(?<![\w/])((?:[\w-]+/)*[\w-]+\.py|cogs/\*)")
+THIRD_PARTY = {"discord.py"}  # named as a dependency, not a repository path
+
+
+def test_the_architecture_figure_names_only_modules_that_exist():
+    """A figure is an index. An index that points at a deleted file is worse than no index.
+
+    `LANES` is hand-maintained, so the figure cannot notice a module that landed or left; a
+    reader can. This is that reader, automated: every path the figure prints must resolve.
+    """
+    svg = (SVGS / "architecture.svg").read_text(encoding="utf-8")
+    tokens = sorted(set(MODULE_TOKEN.findall(svg)))
+    assert tokens, "the architecture figure names no modules"
+    missing = [t for t in tokens if t not in THIRD_PARTY and not list(ROOT.glob(t))]
+    assert missing == [], f"architecture.svg advertises paths that do not exist: {missing}"
+
+
 def test_the_gate_card_quotes_a_passing_run():
     gate = (SVGS / "deploy-gate.svg").read_text(encoding="utf-8")
     assert "checks passed" in gate

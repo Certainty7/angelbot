@@ -6,7 +6,7 @@
 
 [**Website**](https://angel.aetherisnode.cloud/en/) · [العربية](README.ar.md)
 
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![discord.py](https://img.shields.io/badge/discord.py-2.7.1-5865F2?logo=discord&logoColor=white)](https://discordpy.readthedocs.io/) [![SQLite](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/fts5.html) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Release](https://img.shields.io/badge/release-v1.1.1-D4AF37)](https://github.com/Certainty7/angelbot/releases/tag/v1.1.1)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![discord.py](https://img.shields.io/badge/discord.py-2.7.1-5865F2?logo=discord&logoColor=white)](https://discordpy.readthedocs.io/) [![SQLite](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/fts5.html) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Release](https://img.shields.io/badge/release-v1.1.2-D4AF37)](https://github.com/Certainty7/angelbot/releases/tag/v1.1.2)
 
 [Overview](#overview) · [Features](#features) · [Architecture](#architecture) · [Quick start](#quick-start) · [Configuration](#configuration) · [Commands](#commands) · [Deployment](#deployment) · [Testing](#testing) · [Security](#security) · [Contributing](#contributing)
 
@@ -340,8 +340,9 @@ necessary but not sufficient: it cannot replace a real Discord server.
 
 ## Quality gates
 
-Five gates run before a tag, and the same commands run in `.github/workflows/checks.yml` on every
-push, so the `Checks` run and a local run agree by construction.
+`tools/selftest.py` runs on every service start, before the bot binds a socket. The rest run in
+`.github/workflows/checks.yml` on every push; a tag is meant to wait for a green run of all of
+them, and nothing but the release checklist enforces that.
 
 | Gate | Command | What it refuses |
 |---|---|---|
@@ -414,7 +415,7 @@ The authoritative list, with severity and the test that protects each fix, is
 
 ## Status
 
-Angel runs in production on a single server. The current release is **v1.1.1** (2026-11-25); the
+Angel runs in production on a single server. The current release is **v1.1.2** (2026-11-25); the
 repository is public and open source, and issues and pull requests are welcome and reviewed on a
 best-effort basis.
 

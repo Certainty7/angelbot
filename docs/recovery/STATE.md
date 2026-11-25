@@ -1,28 +1,30 @@
-# RECOVERY STATE — AngelBot stabilization
+# RECOVERY STATE — AngelBot stabilization (archive)
 
-Durable continuation point. Read this first in a new session, then `LEDGER.md` and `DECISIONS.md`.
+This file recorded a continuation point for the stabilization pass of 2026-11-20. That pass is
+closed: everything it opened was merged, released and verified. The numbers below are kept as the
+record of that pass, not as the current state — for those, read `CHANGELOG.md` at the tag and
+`docs/LIVE_VERIFICATION.md`.
 
-## Current phase
+## Status
 
-Checkpoint 5 — documentation, independent review, final validation and GitHub delivery.
+Closed. The stabilization branch merged into `master`; releases `1.0.1` through `1.1.2` shipped from
+it. `docs/SECURITY/static-audit-2026-11-25.md` carries the current audit, and `CHANGELOG.md` carries
+the counts measured at each tag.
 
-## Repository anchors
+## What the pass covered
 
-| Item | Value |
-|---|---|
-| Local path | `C:\OpenCode\Angel Bot` |
-| Remote | `https://github.com/Certainty7/angelbot.git` (`origin`) |
-| Baseline commit | `51090aa66c60f4fba94ce13cc5066f9d809672c3` |
-| Remote `master` at start | `51090aa` (identical to local `HEAD`) |
-| Working branch | `recovery/stabilization` |
-| Recovery tag | `recovery/pre-stabilization-2026-11-20` |
-| Recovery area | `%TEMP%\opencode\angelbot-recovery` |
+- Phase Zero preflight: recovery tag, `--all` bundle, working-tree snapshot, diff and untracked
+  inventory.
+- Local/remote reconciliation, then the audio hotfix committed unchanged so later edits stayed
+  reviewable as a diff.
+- Checkpoints 1–4: bootstrap and deploy, database and migrations, security and authorization,
+  privacy and deletion, audio/media/resources, website and CI.
+- Documentation: `AGENTS.md`, `KNOWN_ISSUES.md`, `docs/DATA_MODEL.md`,
+  `docs/LIVE_VERIFICATION.md`, `SECURITY.md` data-flow matrix, bilingual changelog, both READMEs.
+- The review round on the pull request: the full inventory re-verified against the tree, with every
+  finding fixed or justified and covered by a regression test.
 
-The working tree arrived carrying the audio hotfix (`angel/config.py`, `angel/audio_source.py`,
-`angel/voice_engine.py`, `bot.py`, `cogs/music.py` + `tests/test_audio_hardening.py`). It is now
-commit 1 of the branch (unchanged), so later changes to those files are reviewable as a diff.
-
-## Baseline measurements (before changes)
+## Baseline measurements (before the pass)
 
 | Command | Result |
 |---|---|
@@ -32,71 +34,33 @@ commit 1 of the branch (unchanged), so later changes to those files are reviewab
 | `ffmpeg` on PATH | absent (imageio_ffmpeg fallback used) |
 | `deno`, `docker`, `sqlite3` CLI, `gitleaks`, `semgrep` | absent |
 
-## Completed
-
-- Phase Zero preflight, recovery tag, `--all` bundle, working-tree snapshot, diff + untracked
-  inventory.
-- Local/remote reconciliation: identical at `51090aa`; the two remote Dependabot branches are
-  superseded by the pinned versions in `requirements.txt`.
-- Full audit (35 confirmed + 9 potential) extracted into `LEDGER.md`, each item re-checked against
-  the tree.
-- Audio patch compared hunk by hunk with the current source and committed unchanged.
-- Checkpoints 1–4 implemented: bootstrap/deploy, database/migrations, security/authorization,
-  privacy/deletion, audio/media/resources, website/CI.
-- Documentation: `AGENTS.md`, `KNOWN_ISSUES.md`, `docs/DATA_MODEL.md`,
-  `docs/LIVE_VERIFICATION.md`, `SECURITY.md` data-flow matrix, bilingual changelog, README.
-- New regression suite: 182 tests plus 322 subtests (final run).
-- Final review round (PR #9): the complete CodeRabbit inventory re-verified against the tree;
-  11 majors + 3 outside-diff + 32 minors all fixed or justified with new regression tests
-  (223 tests + 322 subtests final run). See `LEDGER.md` → "Final review round" and
-  `DECISIONS.md` D-015..D-020.
-
-## Verification ledger (last run)
+## Verification at the end of the pass
 
 | Command | Result |
 |---|---|
 | `python -m compileall -q bot.py angel cogs tools tests` | 0 |
-| `python -m pytest -q` | 223 passed, 322 subtests passed (exits cleanly) |
+| `python -m pytest -q` | 223 passed, 322 subtests passed |
 | `python tools/selftest.py` | 50/50 |
 | `python tools/security_probe.py` | PASS |
 | `python tools/recall_probe.py` | 10/10 |
-| secret scan | no real credential; one documented placeholder |
 | `npx playwright test` (website) | 67/67 |
-| GitHub Actions on the PR | `checks`, `website-build`, `website-data`, `catalogue`, `build/typecheck/e2e` PASS |
 
-## Delivery
+Superseded: current counts live in `CHANGELOG.md` under the newest tag, because a number written
+into a document without a date becomes a claim about the future.
 
-| Item | Value |
-|---|---|
-| Pushed branch | `recovery/stabilization` |
-| Verified green tip | `dfe227b` (`checks`, `website-build`, `website-data`, `catalogue`, `build/typecheck/e2e` all pass) |
-| Pull request | https://github.com/Certainty7/angelbot/pull/9 (base `master`, open, **not merged**) |
-| `master` | unchanged at `51090aa`; merging would trigger the Cloudflare Pages production build |
+## Checking out an old state
 
-After `dfe227b` the branch only receives documentation commits (this state update); the code and
-tests that CI verified are unchanged.
-
-## Remaining work
-
-1. ~~Final full-suite run~~ — done: 182 tests + 322 subtests, suite exits cleanly.
-2. ~~Independent adversarial review~~ — done; the findings it produced are N-006..N-010 in
-   `LEDGER.md` and are fixed in commit `3fe74a4`.
-3. ~~Push and open the pull request~~ — done: PR #9, branch `recovery/stabilization`.
-4. Owner decision: merge PR #9 (this triggers the Cloudflare Pages production build) and restart
-   the bot service, then run `docs/LIVE_VERIFICATION.md` §1–§4.
-
-## Resume instructions
-
-```powershell
-cd "C:\OpenCode\Angel Bot"
-git switch recovery/stabilization
-Get-Content docs/recovery/STATE.md, docs/recovery/LEDGER.md, docs/recovery/DECISIONS.md
-$env:ANGEL_OWNER_ID="42"; $env:ANGEL_AUTO_INSTALL="0"
-$env:ANGEL_DB_PATH="$env:TEMP\angel-verify.db"
-python -m pytest -q
+```bash
+git fetch --all --tags
+git log --oneline --decorate -n 20
+git show <tag>:docs/recovery/STATE.md
 ```
+
+Set `ANGEL_DB_PATH` to a scratch file and run `python -m pytest -q`. The bot needs nothing else to
+run its offline gates.
 
 ## Open blockers
 
-Local: none. External: live Discord voice/DAVE, YouTube extraction, a Docker build, real systemd
-and Cloudflare headers; tracked in `docs/LIVE_VERIFICATION.md` and `KNOWN_ISSUES.md`.
+None in the repository. External surfaces that no offline gate can prove — live Discord voice and
+DAVE, YouTube extraction, a Docker build, real systemd behaviour, response headers on the deployed
+host — stay listed in `docs/LIVE_VERIFICATION.md` and `KNOWN_ISSUES.md`.

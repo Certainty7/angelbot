@@ -29,6 +29,14 @@ def test_it_ignores_a_base64_run_of_letters():
     assert _module().scan([("report.json", blob)]) == []
 
 
+def test_it_catches_an_aws_key_id_that_has_no_digit():
+    """A real key id is 16 base32 characters; roughly one in 160 has no digit at all."""
+    # Split so this file does not itself contain an unbroken key-shaped run.
+    fake = b"AKIA" + b"QWERTYUIOPASDFGH"
+    hits = _module().scan([("ci.yml", b"AWS_ACCESS_KEY_ID=" + fake)])
+    assert len(hits) == 1 and hits[0].startswith("aws-key:ci.yml")
+
+
 def test_it_accepts_a_placeholder():
     hits = _module().scan([("x.py", b'TOKEN = os.environ["DISCORD_TOKEN"]')])
     assert hits == []
@@ -55,6 +63,28 @@ def test_it_catches_a_token_that_a_later_commit_deleted(tmp_path):
     )
     assert result.returncode == 1, f"a deleted secret went unseen: {result.stdout!r}"
     assert "discord-token:config.py" in result.stdout
+
+
+def test_it_catches_a_token_in_a_file_that_is_not_committed_yet(tmp_path):
+    """The moment before a commit is the moment the scanner is supposed to matter."""
+    repo = tmp_path / "worktree"
+    repo.mkdir()
+    git = ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@example.com"]
+    subprocess.run(git[:3] + ["init", "-q"], check=True, capture_output=True)
+    (repo / "README.md").write_text("clean\n", encoding="utf-8")
+    subprocess.run(git + ["add", "."], check=True, capture_output=True)
+    subprocess.run(git + ["commit", "-qm", "init"], check=True, capture_output=True)
+    fake = "M" + "a" * 23 + "." + "b" * 6 + "." + "c" * 27
+    (repo / "settings.py").write_text(f'TOKEN = "{fake}"\n', encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/scan_secrets.py")],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1, f"an uncommitted secret went unseen: {result.stdout!r}"
+    assert "discord-token:settings.py" in result.stdout
 
 
 def test_this_repository_is_clean():

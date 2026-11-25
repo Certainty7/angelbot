@@ -43,7 +43,7 @@ def parse(text: str) -> list[tuple[str, str, str, str, str]]:
     return rows
 
 
-def render(rows: list[tuple[str, str, str, str, str]], total_line: str) -> str:
+def render(rows: list[tuple[str, str, str, str, str]]) -> str:
     height = HEAD_H + ROW * (len(rows) + 1) + 78
     right = W - PAD
     cols = {"cat": right - 16, "fact": right - 150, "q": right - 450, "n": PAD + 26}
@@ -92,8 +92,7 @@ def main() -> None:
     rows = parse(text)
     if len(rows) != 10 or any(row[0] != "HIT" for row in rows):
         raise SystemExit(f"expected 10 HIT rows, parsed {len(rows)}: {[r[0] for r in rows]}")
-    total = next((line.strip() for line in text.splitlines() if line.startswith("recall:")), "")
-    pathlib.Path(args.out).write_text(render(rows, total), encoding="utf-8")
+    pathlib.Path(args.out).write_text(render(rows), encoding="utf-8")
     print(f"wrote {args.out}")
 
 

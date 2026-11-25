@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.1.2 — 2026-11-25
+
+An audit of the whole tree and its history. Four things a reader was entitled to rely on were not
+true; each is closed with a test that fails without the fix.
+
+### The scanner did not look where it said it looked
+
+- `scripts/scan_secrets.py` promised the working tree and read only committed blobs. A token in a
+  file nobody had committed yet was invisible — precisely the minute before `git add`.
+- It reads every path `git` would commit now, and a test builds a repository, plants a token in an
+  untracked file and requires exit status 1.
+- The AWS pattern required a digit among the sixteen characters after `AKIA`; real key ids are
+  base32, so about one in a hundred and sixty was skipped. The digit lookahead is gone and the
+  base64 boundary guards stay, which is what it was guarding against.
+
+### Two figures and three sentences were wider than the truth
+
+- `architecture.svg` printed `permissions.py`, which has not existed for a long time. The
+  figure's lanes are hand-written, so nothing noticed. `tests/test_docs_assets.py` now resolves every
+  path a figure prints, and the chip names `authz.py`.
+- The README said five gates run before a tag. `selftest` runs on service start and the rest run in
+  CI; it says that now.
+- The changelog said the README badges are generated. Only the release badge is asserted.
+- The pipeline component called itself generated while the generator called it hand-maintained.
+
+### Hashes that only fingerprint
+
+- Five `hashlib.md5` calls in `media.py` and `tools/selftest.py` now say
+  `usedforsecurity=False`; `tests/test_crypto_hygiene.py` fails on a bare call. The digest dedupes
+  downloads and compares test output, so the algorithm is not a security property.
+- `tools/metrics.py` stops hardcoding `/tmp`.
+
+### Counts at this tag
+
+- `pytest -q`: 377 tests and 339 subtests.
+- `selftest`: 50/50.
+- `npx playwright test`: 67.
+
 ## 1.1.1 — 2026-11-25
 
 A review of 1.1.0, not a feature release. Three defects, all of them in the machinery that exists to
@@ -22,7 +60,7 @@ prove things.
 
 - The v1.1.0 plan was committed with the production address, the SSH key path and the operator's home directory.
 - The text is redacted, and `tests/test_no_infra_in_docs.py` fails on any of them in tracked Markdown.
-- The commits that carried the text remain in history; rewriting them is an owner decision, recorded rather than assumed.
+- The commits that carried the text remained in history; the owner took that decision the same day, every ref was rewritten and force-pushed, and a fresh clone shows no trace of the three strings.
 
 ### Counts at this tag
 
@@ -38,7 +76,8 @@ things a reader cannot verify by eye — the version and the secrets.
 ### Proof, not prose
 
 - A release-consistency test fails the build when the package version, the top of this changelog and
-  the site data disagree; the README badges read from the same source. A release can no longer ship
+  the site data disagree; the release badge is checked against that number, and the rest are hand-
+edited. A release can no longer ship
   under three different numbers.
 - A secret scanner walks the working tree and every blob in the history for Discord, Google, OpenAI,
   AWS, GitHub and private-key shapes. It runs as its own CI step, and a base64 run of letters is not

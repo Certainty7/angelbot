@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Angel — architecture diagram, derived from the module list the code actually has.
+"""Angel — architecture diagram, drawn from a hand-written list of lanes and modules.
 
-The picture is generated, so it cannot advertise a module that was deleted or miss one that
-landed. Regenerate after moving code:
+`LANES` is maintained by hand, so the picture cannot notice a module that landed or left on its
+own; `tests/test_docs_assets.py` fails when a path printed here stops existing. Regenerate after
+moving code:
 
     python3 tools/design/gen_architecture.py
 
@@ -32,7 +33,7 @@ LANES: list[tuple[str, str, list[tuple[str, str]]]] = [
     (
         "الوارد",
         "inbound",
-        [("حدث ديسكورد", "bot.py"), ("أوامر السلاش", "cogs/*"), ("الصلاحيات", "angel/permissions.py")],
+        [("حدث ديسكورد", "bot.py"), ("أوامر السلاش", "cogs/*"), ("الصلاحيات", "angel/authz.py")],
     ),
     (
         "القرار",

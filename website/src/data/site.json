@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "version": "1.1.1",
+  "version": "1.1.2",
   "license": "MIT",
   "license_url": "https://github.com/Certainty7/angelbot/blob/master/LICENSE",
   "repository": "https://github.com/Certainty7/angelbot",
@@ -8,11 +8,11 @@
   "default_branch": "master",
   "media_platforms": 4,
   "latest_release": {
-    "version": "1.1.1",
+    "version": "1.1.2",
     "date": "2026-11-25",
     "summary": {
-      "en": "A review of 1.1.0, not a feature release. Three defects, all of them in the machinery that exists to prove things.",
-      "ar": "مراجعة للإصدار 1.1.0، لا إصدار ميزات. ثلاثة عيوب، كلها في آلات وُضعت لتُثبت الأشياء."
+      "en": "An audit of the whole tree and its history. Four things a reader was entitled to rely on were not true; each is closed with a test that fails without the fix.",
+      "ar": "تدقيق للشجرة كلها ولتاريخها. أربعة أشياء كان للقارئ أن يعتمد عليها لم تكن صحيحة، وكل واحدة أُغلقت باختبار يفشل دون الإصلاح."
     }
   }
 }

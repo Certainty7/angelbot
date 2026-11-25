@@ -283,3 +283,17 @@ command re-sync — a separate card, out of scope here.
 menus; 67 load eagerly and the 4 music commands load lazily. The historical measurements above
 refer to the 68-entry census captured on 2026-11-14.
 
+
+## D-040 — Four older commit subjects stay as written
+
+**Decision:** the four subjects that exceed 72 characters or read as statements (`b7c9ffa`,
+`7dd5e58`, `6830bc4`, `f7807e9` in the pre-rewrite numbering) are not reworded. The rule in
+`CONTRIBUTING.md` applies from the commit that introduced it onward.
+
+**Why:** rewording them means rewriting every ref again and moving three tags, which would cost an
+owner announcement, a fresh protect/unprotect cycle and another published release for a cosmetic
+gain. The rule itself is not weakened — a new subject over the limit is a defect; those four are
+history.
+
+**Consequence:** `git log --format=%s` on `master` will keep showing them. Anyone reading the history
+sees the rule applied from 2026-11-25 forward, which is what the rule can honestly claim.

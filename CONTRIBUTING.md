@@ -9,10 +9,12 @@ python -m compileall -q bot.py angel cogs tools tests
 python tools/selftest.py
 python tools/security_probe.py
 python tools/recall_probe.py
+python scripts/scan_secrets.py
 pytest -q
 ```
 
-The gate must end with `N/N checks passed` and the test suite must be green. Paste that line in the
+The gate must end with `N/N checks passed`, the secret scan must print `no secrets found`, and the
+test suite must be green. Paste that line in the
 pull request. If a check fails, fix the code, not the check.
 
 ## What a change should look like

@@ -44,3 +44,31 @@ Bandit is not wired into CI. Twelve triaged findings would train the next reader
 output, and the checks that do run (secret scan, infra-doc gate, release consistency) are the ones
 with a demonstrated failure. Reconsider if the allowlist in `angel/database.py` is ever replaced
 by a query builder that takes names from a request.
+
+## Follow-up the two reviews produced
+
+Two review passes (Standards and Spec) ran over the release diff after the first audit. Each
+finding that was still true in the tree is closed here, test first:
+
+**The secret scanner did not look at the working tree**, though its docstring and three documents
+said it did. `_blobs()` reads refs; a token in a file that had not been committed yet was invisible
+— the exact moment a scanner is worth having. `scripts/scan_secrets.py` now also reads every path
+`git ls-files --cached --others --exclude-standard` reports, and
+`tests/test_scan_secrets.py::test_it_catches_a_token_in_a_file_that_is_not_committed_yet` builds a
+repository, plants a token in an untracked file, and requires exit status 1.
+
+**The AWS key pattern required a digit** in the 16 characters after `AKIA`. Real key ids are base32,
+so about one in a hundred and sixty has none. The digit lookahead is gone; the base64 boundary
+guards stay, and `test_it_ignores_a_base64_run_of_letters` still holds, which is what the lookahead
+was added for in the first place.
+
+**The architecture figure advertised `angel/permissions.py`**, deleted long ago. The figure's lanes
+are hand-written, so nothing noticed. `tests/test_docs_assets.py` now extracts every `.py` path the
+SVG prints and requires each one to resolve; the chip points at `angel/authz.py`, and the
+generator's docstring no longer claims the list is derived from the code.
+
+Three smaller corrections, all to text that was wider than the behaviour: the README no longer says
+five gates run before a tag (`selftest` runs on service start; the rest run in CI), the changelog no
+longer says the README badges come from a generator (only the release badge is asserted), the
+pipeline component's header no longer calls itself generated, and a dead parameter left
+`gen_recall_svg.py`.
