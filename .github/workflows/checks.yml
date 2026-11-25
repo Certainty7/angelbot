@@ -39,6 +39,9 @@ jobs:
           sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
           pip install -r requirements.txt pytest ruff
 
+      - name: Secret scan
+        run: python scripts/scan_secrets.py
+
       - name: Compile
         run: python -m compileall -q bot.py angel cogs tools tests
 
