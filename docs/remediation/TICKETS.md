@@ -95,17 +95,20 @@ Evidence and fix sketches live there; this file tracks order and status only.
 
 ### 15 · 15. FFmpeg may fetch private URLs hidden inside an HLS manifest
 
-- **Status:** todo
+- **Status:** done (#40)
+- **Evidence:** `angel/net.py` (`HLS_ALLOWED_HOSTS`, `is_hls_manifest_url`, host check before DNS), `tests/test_hls_manifest_guard.py` (5 tests + 3 subtests)
 - **Done when:** an end-to-end supported-source test cannot make FFmpeg request a private segment/key URL.
 
 ### 16 · 16. Alternate moderation paths skip hierarchy or target-channel checks
 
-- **Status:** todo
+- **Status:** done (#41)
+- **Evidence:** `angel/config.py` (`can_manage_channel`), `angel/nl_router.py`, `cogs/admin.py`, `tests/test_channel_authority.py` (10 tests)
 - **Done when:** lower-ranked warning targets and denied target channels are refused without mutation, while allowed cases still work.
 
 ### 17 · 17. A confirmation can execute against a different target
 
-- **Status:** todo
+- **Status:** done (#42)
+- **Evidence:** `angel/nl_router.py` (`_freeze_action_targets`, `_frozen_channel`, `_frozen_member`, `_missing_frozen_target`), `tests/test_confirmation_target_identity.py` (4 tests)
 - **Done when:** each target class keeps its original identity and a deleted/replaced target causes refusal.
 
 ### 18 · 18. Secondary send paths bypass mention and secret filtering
