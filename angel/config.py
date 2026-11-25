@@ -520,6 +520,36 @@ def has_effective_perm(channel, member, **perms: bool) -> bool:
   return all(bool(getattr(user_perms, p, False)) == req for p, req in perms.items())
 
 
+def can_manage_channel(actor, channel, guild) -> Tuple[bool, str]:
+  """Authorize a channel mutation against the channel it changes (finding 16).
+
+  The guild-level `manage_channels` flag can be granted while the target channel denies it,
+  and a caller who may speak in the invocation channel is not automatically allowed to lock
+  another one. The bot's own permission in that channel is checked too, so a refusal happens
+  before any Discord call instead of surfacing as an API error.
+  """
+  if is_mistress(actor):
+    return True, ""
+  if channel is None or guild is None:
+    return False, "⚙️ ما لقيت القناة المطلوبة."
+  try:
+    actor_perms = channel.permissions_for(actor)
+  except Exception:
+    return False, "⚡ لا أملك بيانات صلاحيات هذه القناة."
+  if not getattr(actor_perms, "manage_channels", False):
+    return False, "⚡ لا تملك صلاحية إدارة هذه القناة."
+  me = getattr(guild, "me", None)
+  if me is None:
+    return False, "⚙️ ما أقدر أتحقق من صلاحياتي في هذه القناة."
+  try:
+    bot_perms = channel.permissions_for(me)
+  except Exception:
+    return False, "⚙️ ما أقدر أتحقق من صلاحياتي في هذه القناة."
+  if not getattr(bot_perms, "manage_channels", False):
+    return False, "⚙️ ما أملك صلاحية إدارة هذه القناة."
+  return True, ""
+
+
 def has_perm_or_mistress(**perms: bool):
   async def predicate(interaction: discord.Interaction) -> bool:
     if is_mistress(interaction.user):
