@@ -52,14 +52,14 @@
 
 ## البنية
 
-![نظرة على البنية](docs/screenshots/architecture.png)
+![نظرة على البنية](docs/screenshots/architecture.svg)
 
 تدخل أحداث ديسكورد عبر `bot.py`، ثم يتولّاها `angel/client.py`، ويوجّهها `angel/nl_router.py`. يقرأ
 الموجّه الشخصية والذاكرة، ويستدعي سلسلة النماذج عند الحاجة إلى رد مولّد، أو يسلّم إجراءً طلبه النموذج
 إلى بوابة الإجراءات. وتتحقق البوابة من معرّف ديسكورد الثابت للفاعل، ومن الصلاحية المطلوبة، ومن كلمة
 تدل على النية، قبل أن يصل أي شيء إلى Discord API.
 
-![مسار الرسالة](docs/screenshots/message-pipeline.png)
+![مسار الرسالة](docs/screenshots/message-pipeline.svg)
 
 <p align="center"><sub>مسار الرسالة داخل البوت: كل رسالة يراها البوت تُؤرشف، والرد يمرّ بسلسلة النماذج ثم فلتر المخرجات.</sub></p>
 
@@ -233,7 +233,7 @@ powershell -ExecutionPolicy Bypass -File scripts/run_windows.ps1
 البيانات ويشغّل البوت. يلزم FFmpeg للموسيقى والفيديو، ويمكن تثبيته بالأمر
 `winget install Gyan.FFmpeg`.
 
-<p align="center"><img src="docs/screenshots/deploy-gate.png" alt="مخرجات بوابة الفحص" width="820"></p>
+<p align="center"><img src="docs/screenshots/deploy-gate.svg" alt="مخرجات بوابة الفحص" width="820"></p>
 <p align="center"><sub>بوابة الفحص: 50/50 فحصًا قبل بدء الخدمة.</sub></p>
 
 ### المؤقتات
@@ -280,7 +280,7 @@ journalctl -u angelbot -n 30 --no-pager
 | `tools/gate_checks.py` | فحوص ثابتة تستخدمها البوابة، بما فيها قاعدة منع shell. |
 | `npx playwright test` (داخل `website/`) | 67 اختبار متصفح على الموقع المبني: الصفحات، الأوامر، التجاوب، الثيم، الروابط والخصوصية. |
 
-![فحص الاستدعاء](docs/screenshots/recall-probe.png)
+![فحص الاستدعاء](docs/screenshots/recall-probe.svg)
 
 <p align="center"><sub>أداة فحص الاستدعاء: عشر حقائق تجريبية على قاعدة بيانات مؤقتة، وعشر أسئلة بكلمات مختلفة، تُحذف بعد الفحص.</sub></p>
 

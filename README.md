@@ -64,7 +64,7 @@ what someone says.
 
 ## Architecture
 
-![Architecture overview](docs/screenshots/architecture.png)
+![Architecture overview](docs/screenshots/architecture.svg)
 
 A Discord event enters through `bot.py`, is handled by `angel/client.py`, and is routed by
 `angel/nl_router.py`. The router reads persona and memory, calls the model chain when a generated
@@ -72,7 +72,7 @@ answer is needed, or hands a declared action to the action gate. The gate checks
 immutable Discord ID, the required permission and an intent keyword before anything reaches the
 Discord API.
 
-![Message pipeline](docs/screenshots/message-pipeline.png)
+![Message pipeline](docs/screenshots/message-pipeline.svg)
 
 <p align="center"><sub>One message through the pipeline. Every message the bot can see is archived; a reply goes through the model chain and the output filter.</sub></p>
 
@@ -258,7 +258,7 @@ The script creates `.venv`, installs the requirements, copies `.env.example` to 
 checkpoints the database and starts the bot. FFmpeg is needed for music and video; install it with
 `winget install Gyan.FFmpeg`.
 
-<p align="center"><img src="docs/screenshots/deploy-gate.png" alt="Deploy gate output" width="820"></p>
+<p align="center"><img src="docs/screenshots/deploy-gate.svg" alt="Deploy gate output" width="820"></p>
 <p align="center"><sub>The deploy gate: 50/50 checks before the service starts.</sub></p>
 
 ### Timers
@@ -318,7 +318,7 @@ journalctl -u angelbot -n 30 --no-pager
 | `tools/gate_checks.py` | Static checks used by the gate, including the no-shell subprocess rule. |
 | `npx playwright test` (in `website/`) | 67 browser tests over the built site: pages, commands, responsive layouts, theme, links and privacy. |
 
-![Recall probe](docs/screenshots/recall-probe.png)
+![Recall probe](docs/screenshots/recall-probe.svg)
 
 <p align="center"><sub>The recall probe: ten synthetic facts, ten paraphrased questions, all removed after the run.</sub></p>
 

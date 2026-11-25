@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 696" width="920" height="696" role="img">
+  <title>angelbot · deploy gate</title>
+  <desc>Captured output of the deploy gate: every check passes before the service starts.</desc>
+  <rect width="920" height="696" rx="14" fill="#0E1320" stroke="#2A3247"/>
+  <path d="M0 14a14 14 0 0 1 14-14h892a14 14 0 0 1 14 14v30H0Z" fill="#161D2B"/>
+  <circle cx="24" cy="22" r="5" fill="#E06C75"/><circle cx="42" cy="22" r="5" fill="#E5C07B"/>
+  <circle cx="60" cy="22" r="5" fill="#98C379"/>
+  <text x="460.0" y="27" text-anchor="middle" fill="#8E8778" font-family="ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace" font-size="12">angelbot · deploy gate</text>
+  <g font-family="ui-monospace, SFMono-Regular, 'JetBrains Mono', Menlo, monospace" font-size="13">
+    <text x="26" y="84" fill="#E9E4D6" xml:space="preserve">2026-11-25 15:27:21 | INFO     | Database initialized.</text>
+    <text x="26" y="104" fill="#E9E4D6" xml:space="preserve">2026-11-25 15:27:21 | INFO     | Romantic GIF 'kiss' blocked (non-harem member).</text>
+    <text x="26" y="124" fill="#E9E4D6" xml:space="preserve">2026-11-25 15:27:21 | INFO     | Romantic GIF 'hug' blocked (non-harem member).</text>
+    <text x="26" y="144" fill="#E9E4D6" xml:space="preserve">2026-11-25 15:27:21 | INFO     | Romantic GIF 'cheek_kiss' blocked (non-harem member).</text>
+    <text x="26" y="164" fill="#E9E4D6" xml:space="preserve">2026-11-25 15:27:21 | INFO     | Romantic GIF 'cuddle' blocked (non-harem member).</text>
+    <text x="26" y="184" fill="#E9E4D6" xml:space="preserve">2026-11-25 15:27:21 | INFO     | Romantic GIF 'handhold' blocked (non-harem member).</text>
+    <text x="26" y="204" fill="#8E8778" xml:space="preserve">…</text>
+    <text x="26" y="224" fill="#D4AF37" xml:space="preserve">[PASS] router-injection 4 router entry points take the client explicitly; no global lookups</text>
+    <text x="26" y="244" fill="#D4AF37" xml:space="preserve">[PASS] cost-owner-override stop_at=$inf: owner admitted, stranger refused, owner reply='ok'</text>
+    <text x="26" y="264" fill="#D4AF37" xml:space="preserve">[PASS] requirements     11 pins match the venv (voice stack + yt-dlp included)</text>
+    <text x="26" y="284" fill="#D4AF37" xml:space="preserve">[PASS] owner-id         skipped: no real 64-bit ANGEL_OWNER_ID in .env or environment to search for</text>
+    <text x="26" y="304" fill="#D4AF37" xml:space="preserve">[PASS] error-correlation reply+log share corr_id=f2e5f4a6222c; no internals leaked</text>
+    <text x="26" y="324" fill="#D4AF37" xml:space="preserve">[PASS] music-disabled   disabled -&gt; 🔇 ميزة الموسيقى معطّلة مؤقتا…</text>
+    <text x="26" y="344" fill="#D4AF37" xml:space="preserve">[PASS] resolve-errors   parser noise collapsed -&gt; SoundCloud: no usable result · YouTube: no usa…</text>
+    <text x="26" y="364" fill="#D4AF37" xml:space="preserve">[PASS] archive-scope    ticket/other-guild rows never reach a member's recall</text>
+    <text x="26" y="384" fill="#D4AF37" xml:space="preserve">[PASS] forget-memory    clear + forget remove profile facts and member file</text>
+    <text x="26" y="404" fill="#D4AF37" xml:space="preserve">[PASS] trigger-owner-only owner/admin only; manage_guild refused</text>
+    <text x="26" y="424" fill="#D4AF37" xml:space="preserve">[PASS] exec-confirm     BAN queued for تأكيد; confirmed path executes</text>
+    <text x="26" y="444" fill="#D4AF37" xml:space="preserve">[PASS] exec-confirm-word تأكيد executes in-channel, another channel is refused, إلغاء cancels</text>
+    <text x="26" y="464" fill="#D4AF37" xml:space="preserve">[PASS] member-file-sanitized member-file/culture tags and directives stripped</text>
+    <text x="26" y="484" fill="#D4AF37" xml:space="preserve">[PASS] reply-call-signature 3 call site(s) match their signatures</text>
+    <text x="26" y="504" fill="#D4AF37" xml:space="preserve">[PASS] music-search     trigger + ranking ok (good=132 junk=-92)</text>
+    <text x="26" y="524" fill="#D4AF37" xml:space="preserve">[PASS] metrics-fixture  gate block ignored, real reply counted</text>
+    <text x="26" y="544" fill="#D4AF37" xml:space="preserve">[PASS] social-url-cleanup 4 tracking params stripped, meaningful query kept</text>
+    <text x="26" y="564" fill="#D4AF37" xml:space="preserve">[PASS] memory-intent    6 intent routes, unrelated text routes nowhere</text>
+    <text x="26" y="584" fill="#D4AF37" xml:space="preserve">[PASS] caption-hygiene  hashtag wall and links dropped, human line kept</text>
+    <text x="26" y="604" fill="#D4AF37" xml:space="preserve">[PASS] server-log       table created on a fresh DB and the line is stored verbatim</text>
+    <text x="26" y="624" fill="#D4AF37" xml:space="preserve">[PASS] archive-intent   recall detection + no lookup for chat</text>
+    <text x="26" y="644" fill="#D4AF37" xml:space="preserve">[PASS] member-file-absent profiling module, cues and NL branch gone</text>
+    <text x="26" y="664" fill="#D4AF37" xml:space="preserve">50/50 checks passed</text>
+  </g>
+</svg>

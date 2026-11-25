@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" class="pipeline" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-labelledby="pipeline-title pipeline-desc">
+  <title id="pipeline-title">مسار الرسالة في أنجل</title>
+  <desc id="pipeline-desc">خمس مراحل من اليمين إلى اليسار: حدث من ديسكورد، الموجّه اللغوي، الذاكرة والأرشيف،
+  قرار مقترح، ثم بوابة التأكيد قبل التنفيذ. إن لم يُؤكَّد القرار لا يُنفَّذ شيء.</desc>
+  <style>
+  .pipeline {
+    --quartz-400: #6B7280; --surface-card: #141A28; --border-hair-color: #2A3247;
+    --rose-600: #D4AF37; --text-primary: #E9E4D6; --text-muted: #8E8778;
+    --font-mono: ui-monospace, Menlo, monospace;
+    --font-ar-display: 'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif;
+    --font-ar-text: 'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif;
+  }
+  .pipeline .link { fill: none; stroke: var(--quartz-400); stroke-width: 1; }
+  .pipeline .link__head { fill: var(--quartz-400); }
+  .pipeline .stage__ring { fill: none; stroke: var(--quartz-400); stroke-width: 1; opacity: .85; }
+  .pipeline .stage__disc { fill: var(--surface-card); stroke: var(--border-hair-color); }
+  .pipeline .stage__num {
+    font-family: var(--font-mono); font-size: 17px; font-weight: 500;
+    fill: var(--rose-600);
+  }
+  .pipeline .stage__title {
+    font-family: var(--font-ar-display); font-weight: 700; font-size: 20px;
+    fill: var(--text-primary);
+  }
+  .pipeline .stage__module {
+    font-family: var(--font-mono); font-size: 11.5px; fill: var(--text-muted);
+    letter-spacing: .02em;
+  }
+  .pipeline .gate__mark { fill: none; stroke: var(--rose-600); stroke-width: 1.4; }
+  .pipeline .gate__label {
+    font-family: var(--font-ar-text); font-size: 12px; font-weight: 600; fill: var(--rose-600);
+  }
+  .pipeline .return { fill: none; stroke: var(--rose-600); stroke-width: 1;
+    stroke-dasharray: 3 5; opacity: .55; }
+  .pipeline .return__head { fill: var(--rose-600); opacity: .55; }
+  .pipeline .return__label {
+    font-family: var(--font-ar-text); font-size: 11.5px; fill: var(--text-muted);
+  }
+  .pipeline .pipeline__foot {
+    font-family: var(--font-ar-text); font-size: 12px; fill: var(--text-muted);
+  }
+</style>
+
+  <rect width="1200" height="360" fill="#0E1320"/>
+  <g class="pipeline__body">
+      <path class="link" d="M1022 150 H914"/>
+      <path class="link__head" d="M914 150 l14 -7 v14 z"/>
+      <path class="link" d="M782 150 H674"/>
+      <path class="link__head" d="M674 150 l14 -7 v14 z"/>
+      <path class="link" d="M542 150 H434"/>
+      <path class="link__head" d="M434 150 l14 -7 v14 z"/>
+      <path class="link" d="M302 150 H256.0"/>
+      <path class="link" d="M224.0 150 H194"/>
+      <path class="link__head" d="M182 150 l14 -7 v14 z"/>
+      <g class="gate" transform="translate(240.0 150)">
+        <path class="gate__mark" d="M0 -18 L15 0 L0 18 L-15 0 Z"/>
+        <text class="gate__label" y="46" text-anchor="middle" direction="rtl">بوابة التأكيد</text>
+      </g>
+      <path class="return" d="M240.0 172 V300 H360 V206"/>
+      <path class="return__head" d="M360 206 l-6 12 h12 z"/>
+      <text class="return__label" x="300.0" y="320" text-anchor="middle" direction="rtl">بلا تأكيد: لا تنفيذ</text>
+      <g class="stage" transform="translate(1080 150)">
+        <circle class="stage__ring" r="46"/>
+        <circle class="stage__disc" r="30"/>
+        <text class="stage__num" y="1" text-anchor="middle" dominant-baseline="middle">1</text>
+        <g transform="translate(0 80)">
+          <text class="stage__title" text-anchor="middle" direction="rtl">حدث من Discord</text>
+          <text class="stage__module" y="22" text-anchor="middle" direction="ltr">on_message · interaction</text>
+        </g>
+      </g>
+      <g class="stage" transform="translate(840 150)">
+        <circle class="stage__ring" r="46"/>
+        <circle class="stage__disc" r="30"/>
+        <text class="stage__num" y="1" text-anchor="middle" dominant-baseline="middle">2</text>
+        <g transform="translate(0 80)">
+          <text class="stage__title" text-anchor="middle" direction="rtl">الموجّه اللغوي</text>
+          <text class="stage__module" y="22" text-anchor="middle" direction="ltr">angel/nl_router.py</text>
+        </g>
+      </g>
+      <g class="stage" transform="translate(600 150)">
+        <circle class="stage__ring" r="46"/>
+        <circle class="stage__disc" r="30"/>
+        <text class="stage__num" y="1" text-anchor="middle" dominant-baseline="middle">3</text>
+        <g transform="translate(0 80)">
+          <text class="stage__title" text-anchor="middle" direction="rtl">الذاكرة والأرشيف</text>
+          <text class="stage__module" y="22" text-anchor="middle" direction="ltr">angel/database.py</text>
+        </g>
+      </g>
+      <g class="stage" transform="translate(360 150)">
+        <circle class="stage__ring" r="46"/>
+        <circle class="stage__disc" r="30"/>
+        <text class="stage__num" y="1" text-anchor="middle" dominant-baseline="middle">4</text>
+        <g transform="translate(0 80)">
+          <text class="stage__title" text-anchor="middle" direction="rtl">قرار مقترح</text>
+          <text class="stage__module" y="22" text-anchor="middle" direction="ltr">angel/brain.py</text>
+        </g>
+      </g>
+      <g class="stage" transform="translate(120 150)">
+        <circle class="stage__ring" r="46"/>
+        <circle class="stage__disc" r="30"/>
+        <text class="stage__num" y="1" text-anchor="middle" dominant-baseline="middle">5</text>
+        <g transform="translate(0 80)">
+          <text class="stage__title" text-anchor="middle" direction="rtl">تنفيذ بعد التأكيد</text>
+          <text class="stage__module" y="22" text-anchor="middle" direction="ltr">cogs/*</text>
+        </g>
+      </g>
+  </g>
+
+  <text class="pipeline__foot" x="1160" y="346" text-anchor="start" direction="rtl">
+    النموذج يقترح، والبوابة تُقرّر — ولا إجراء إشرافي يُنفَّذ بلا تأكيد.
+  </text>
+</svg>

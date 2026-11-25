@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 596" width="1200" height="596" role="img">
+  <title>بنية أنجل</title>
+  <desc>أربع طبقات من اليمين إلى اليسار: الوارد، ثم القرار، ثم الحالة، ثم الخارج. كل وحدة مكتوبة باسم ملفها.</desc>
+  <rect width="1200" height="596" fill="#0E1320"/>
+  <text x="1160" y="52" text-anchor="start" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="30" font-weight="700">بنية أنجل</text>
+  <text x="1160" y="78" text-anchor="start" direction="rtl" fill="#8E8778" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="14">عملية واحدة، وقاعدة واحدة، ولا وسيط رسائل بينهما</text>
+  <rect x="40" y="104" width="1120" height="96" rx="12" fill="#141A28" stroke="#2A3247"/>
+  <text x="1134" y="144" text-anchor="start" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="18" font-weight="700">الوارد</text>
+  <text x="1134" y="168" text-anchor="end" direction="ltr" fill="#8E8778" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">inbound</text>
+  <rect x="730" y="123.0" width="210" height="58" rx="9" fill="#1B2333" stroke="#2A3247"/>
+  <text x="835.0" y="146.0" text-anchor="middle" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="14">حدث ديسكورد</text>
+  <text x="835.0" y="167.0" text-anchor="middle" direction="ltr" fill="#D4AF37" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5">bot.py</text>
+  <rect x="506" y="123.0" width="210" height="58" rx="9" fill="#1B2333" stroke="#2A3247"/>
+  <text x="611.0" y="146.0" text-anchor="middle" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="14">أوامر السلاش</text>
+  <text x="611.0" y="167.0" text-anchor="middle" direction="ltr" fill="#D4AF37" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5">cogs/*</text>
+  <rect x="282" y="123.0" width="210" height="58" rx="9" fill="#1B2333" stroke="#2A3247"/>
+  <text x="387.0" y="146.0" text-anchor="middle" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="14">الصلاحيات</text>
+  <text x="387.0" y="167.0" text-anchor="middle" direction="ltr" fill="#D4AF37" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5">angel/permissions.py</text>
+  <rect x="40" y="220" width="1120" height="96" rx="12" fill="#141A28" stroke="#2A3247"/>
+  <text x="1134" y="260" text-anchor="start" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="18" font-weight="700">القرار</text>
+  <text x="1134" y="284" text-anchor="end" direction="ltr" fill="#8E8778" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">decision</text>
+  <rect x="730" y="239.0" width="210" height="58" rx="9" fill="#1B2333" stroke="#2A3247"/>
+  <text x="835.0" y="262.0" text-anchor="middle" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="14">الموجّه اللغوي</text>
+  <text x="835.0" y="283.0" text-anchor="middle" direction="ltr" fill="#D4AF37" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5">angel/nl_router.py</text>
+  <rect x="506" y="239.0" width="210" height="58" rx="9" fill="#1B2333" stroke="#2A3247"/>
+  <text x="611.0" y="262.0" text-anchor="middle" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="14">الطابور</text>
+  <text x="611.0" y="283.0" text-anchor="middle" direction="ltr" fill="#D4AF37" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5">angel/work_queue.py</text>
+  <rect x="282" y="239.0" width="210" height="58" rx="9" fill="#1B2333" stroke="#2A3247"/>
+  <text x="387.0" y="262.0" text-anchor="middle" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="14">سلسلة النماذج</text>
+  <text x="387.0" y="283.0" text-anchor="middle" direction="ltr" fill="#D4AF37" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5">angel/brain.py</text>
+  <rect x="40" y="336" width="1120" height="96" rx="12" fill="#141A28" stroke="#2A3247"/>
+  <text x="1134" y="376" text-anchor="start" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="18" font-weight="700">الحالة</text>
+  <text x="1134" y="400" text-anchor="end" direction="ltr" fill="#8E8778" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">state</text>
+  <rect x="730" y="355.0" width="210" height="58" rx="9" fill="#1B2333" stroke="#2A3247"/>
+  <text x="835.0" y="378.0" text-anchor="middle" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="14">الذاكرة والأرشيف</text>
+  <text x="835.0" y="399.0" text-anchor="middle" direction="ltr" fill="#D4AF37" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5">angel/database.py</text>
+  <rect x="506" y="355.0" width="210" height="58" rx="9" fill="#1B2333" stroke="#2A3247"/>
+  <text x="611.0" y="378.0" text-anchor="middle" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="14">الوسائط</text>
+  <text x="611.0" y="399.0" text-anchor="middle" direction="ltr" fill="#D4AF37" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5">angel/media.py</text>
+  <rect x="282" y="355.0" width="210" height="58" rx="9" fill="#1B2333" stroke="#2A3247"/>
+  <text x="387.0" y="378.0" text-anchor="middle" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="14">الشبكة</text>
+  <text x="387.0" y="399.0" text-anchor="middle" direction="ltr" fill="#D4AF37" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5">angel/net.py</text>
+  <rect x="40" y="452" width="1120" height="96" rx="12" fill="#141A28" stroke="#2A3247"/>
+  <text x="1134" y="492" text-anchor="start" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="18" font-weight="700">الخارج</text>
+  <text x="1134" y="516" text-anchor="end" direction="ltr" fill="#8E8778" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">outbound</text>
+  <rect x="730" y="471.0" width="210" height="58" rx="9" fill="#1B2333" stroke="#2A3247"/>
+  <text x="835.0" y="494.0" text-anchor="middle" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="14">بوابة التأكيد</text>
+  <text x="835.0" y="515.0" text-anchor="middle" direction="ltr" fill="#D4AF37" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5">angel/confirmations.py</text>
+  <rect x="506" y="471.0" width="210" height="58" rx="9" fill="#1B2333" stroke="#2A3247"/>
+  <text x="611.0" y="494.0" text-anchor="middle" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="14">واجهة ديسكورد</text>
+  <text x="611.0" y="515.0" text-anchor="middle" direction="ltr" fill="#D4AF37" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11.5">discord.py</text>
+  <path d="M66 200 V218" stroke="#D4AF37" stroke-width="1.4" opacity="0.65"/>
+  <path d="M61 214 l5 7 l5 -7 z" fill="#D4AF37" opacity="0.65"/>
+  <path d="M66 316 V334" stroke="#D4AF37" stroke-width="1.4" opacity="0.65"/>
+  <path d="M61 330 l5 7 l5 -7 z" fill="#D4AF37" opacity="0.65"/>
+  <path d="M66 432 V450" stroke="#D4AF37" stroke-width="1.4" opacity="0.65"/>
+  <path d="M61 446 l5 7 l5 -7 z" fill="#D4AF37" opacity="0.65"/>
+</svg>

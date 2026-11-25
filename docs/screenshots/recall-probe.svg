@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 614" width="920" height="614" role="img">
+  <title>recall probe — 10/10</title>
+  <desc>Ten stored facts are retrieved by a paraphrased question, on a temporary copy of the database.</desc>
+  <rect width="920" height="614" rx="14" fill="#0E1320" stroke="#2A3247"/>
+  <text x="884" y="52" text-anchor="start" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="20" font-weight="700">فحص الاستدعاء: عشرة أسئلة مُعاد صياغتها</text>
+  <text x="884" y="76" text-anchor="start" direction="rtl" fill="#8E8778" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="13">قاعدة مؤقتة، بيانات تجريبية، ولا اتصال بأي مزوّد</text>
+  <g font-size="12" fill="#8E8778" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif">
+    <text x="868" y="116" text-anchor="start" direction="rtl">التصنيف</text>
+    <text x="734" y="116" text-anchor="start" direction="rtl">الحقيقة المخزّنة</text>
+    <text x="434" y="116" text-anchor="start" direction="rtl">السؤال</text>
+    <text x="62" y="116" text-anchor="end" direction="ltr">rows</text>
+  </g>
+  <path d="M36 126 H884" stroke="#2A3247" stroke-width="1"/>
+  <g>
+    <text x="868" y="156" text-anchor="start" direction="rtl" fill="#D4AF37" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">city</text>
+    <text x="734" y="156" text-anchor="start" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="15">مدينة الشمال</text>
+    <text x="434" y="156" text-anchor="start" direction="rtl" fill="#8E8778" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="14">وين ساكن الحين؟</text>
+    <text x="62" y="156" text-anchor="end" direction="ltr" fill="#8E8778" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">n=8</text>
+    <text x="868" y="196" text-anchor="start" direction="rtl" fill="#D4AF37" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">job</text>
+    <text x="734" y="196" text-anchor="start" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="15">مهندس أنظمة</text>
+    <text x="434" y="196" text-anchor="start" direction="rtl" fill="#8E8778" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="14">وش شغلك بالضبط؟</text>
+    <text x="62" y="196" text-anchor="end" direction="ltr" fill="#8E8778" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">n=8</text>
+    <text x="868" y="236" text-anchor="start" direction="rtl" fill="#D4AF37" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">pet</text>
+    <text x="734" y="236" text-anchor="start" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="15">قطة اسمها رملة</text>
+    <text x="434" y="236" text-anchor="start" direction="rtl" fill="#8E8778" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="14">عندك حيوان في البيت؟</text>
+    <text x="62" y="236" text-anchor="end" direction="ltr" fill="#8E8778" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">n=8</text>
+    <text x="868" y="276" text-anchor="start" direction="rtl" fill="#D4AF37" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">drink</text>
+    <text x="734" y="276" text-anchor="start" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="15">شاي بالنعناع</text>
+    <text x="434" y="276" text-anchor="start" direction="rtl" fill="#8E8778" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="14">وش تحب تشرب الصبح؟</text>
+    <text x="62" y="276" text-anchor="end" direction="ltr" fill="#8E8778" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">n=8</text>
+    <text x="868" y="316" text-anchor="start" direction="rtl" fill="#D4AF37" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">car</text>
+    <text x="734" y="316" text-anchor="start" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="15">سيارة صغيرة</text>
+    <text x="434" y="316" text-anchor="start" direction="rtl" fill="#8E8778" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="14">وش نوع سيارتك؟</text>
+    <text x="62" y="316" text-anchor="end" direction="ltr" fill="#8E8778" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">n=8</text>
+    <text x="868" y="356" text-anchor="start" direction="rtl" fill="#D4AF37" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">study</text>
+    <text x="734" y="356" text-anchor="start" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="15">علوم حاسب</text>
+    <text x="434" y="356" text-anchor="start" direction="rtl" fill="#8E8778" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="14">وش درست في الجامعة؟</text>
+    <text x="62" y="356" text-anchor="end" direction="ltr" fill="#8E8778" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">n=8</text>
+    <text x="868" y="396" text-anchor="start" direction="rtl" fill="#D4AF37" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">sport</text>
+    <text x="734" y="396" text-anchor="start" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="15">سباحة أسبوعياً</text>
+    <text x="434" y="396" text-anchor="start" direction="rtl" fill="#8E8778" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="14">تلعب رياضة؟</text>
+    <text x="62" y="396" text-anchor="end" direction="ltr" fill="#8E8778" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">n=8</text>
+    <text x="868" y="436" text-anchor="start" direction="rtl" fill="#D4AF37" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">food</text>
+    <text x="734" y="436" text-anchor="start" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="15">أرز بالخضار</text>
+    <text x="434" y="436" text-anchor="start" direction="rtl" fill="#8E8778" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="14">وش أكلتك المفضلة؟</text>
+    <text x="62" y="436" text-anchor="end" direction="ltr" fill="#8E8778" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">n=8</text>
+    <text x="868" y="476" text-anchor="start" direction="rtl" fill="#D4AF37" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">travel</text>
+    <text x="734" y="476" text-anchor="start" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="15">مدينة الساحل</text>
+    <text x="434" y="476" text-anchor="start" direction="rtl" fill="#8E8778" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="14">وين رحت آخر سفرة؟</text>
+    <text x="62" y="476" text-anchor="end" direction="ltr" fill="#8E8778" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">n=8</text>
+    <text x="868" y="516" text-anchor="start" direction="rtl" fill="#D4AF37" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">family</text>
+    <text x="734" y="516" text-anchor="start" direction="rtl" fill="#E9E4D6" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="15">أخي الأكبر</text>
+    <text x="434" y="516" text-anchor="start" direction="rtl" fill="#8E8778" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="14">عندك إخوة؟</text>
+    <text x="62" y="516" text-anchor="end" direction="ltr" fill="#8E8778" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">n=8</text>
+  </g>
+  <text x="884" y="594" text-anchor="start" direction="rtl" fill="#D4AF37" font-family="'Cairo', 'Noto Kufi Arabic', system-ui, sans-serif" font-size="15" font-weight="700">النتيجة 10/10 — كل حقيقة عادت من سؤال مُعاد صياغته</text>
+</svg>
