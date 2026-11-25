@@ -84,6 +84,24 @@ def database_path() -> str:
     return dbpath.resolve()
 
 
+def insert_message(db: sqlite3.Connection, guild_id: int, channel_id: int, user_id: int,
+                   display_name: str, content: str, created_at: str, message_id: str) -> int:
+    """Insert one archived message and return how many rows the statement actually wrote.
+
+    `INSERT OR IGNORE` reports nothing to the caller, so the old counter treated a duplicate
+    snowflake or an opted-out member as saved work: a capped run stopped early while real rows
+    were still missing (finding 20b). `rowcount` is the honest number.
+    """
+    cur = db.execute(
+        "INSERT OR IGNORE INTO server_messages "
+        "(guild_id, channel_id, user_id, display_name, content, created_at, message_id) "
+        "SELECT ?,?,?,?,?,?,? WHERE NOT EXISTS ("
+        "SELECT 1 FROM user_preferences WHERE user_id = ? AND opt_out = 1)",
+        (guild_id, channel_id, user_id, display_name, content, created_at, message_id, user_id),
+    )
+    return cur.rowcount
+
+
 def main() -> None:
     tok = token()
     db = sqlite3.connect(database_path(), timeout=30)
@@ -129,17 +147,12 @@ def main() -> None:
                     try:
                         # Never re-import a member who ran /data delete (C-005).
                         ts = datetime.fromisoformat(m["timestamp"].replace("Z", "+00:00")).astimezone(timezone.utc)
-                        db.execute(
-                            "INSERT OR IGNORE INTO server_messages "
-                            "(guild_id, channel_id, user_id, display_name, content, created_at, message_id) "
-                            "SELECT ?,?,?,?,?,?,? WHERE NOT EXISTS ("
-                            "SELECT 1 FROM user_preferences WHERE user_id = ? AND opt_out = 1)",
-                            (int(guild["id"]), cid, int(a["id"]),
-                             (a.get("global_name") or a.get("username") or "")[:80],
-                             m["content"].strip()[:1500], ts.isoformat(timespec="seconds"),
-                             m["id"], int(a["id"])),
+                        added += insert_message(
+                            db, int(guild["id"]), cid, int(a["id"]),
+                            (a.get("global_name") or a.get("username") or "")[:80],
+                            m["content"].strip()[:1500], ts.isoformat(timespec="seconds"),
+                            m["id"],
                         )
-                        added += 1
                     except (sqlite3.Error, ValueError) as exc:
                         # A failed row (insert error or malformed timestamp) must not be
                         # swallowed: the page is not marked done, so a rerun retries
