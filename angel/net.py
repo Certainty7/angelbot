@@ -382,8 +382,11 @@ async def read_bounded_stream(
     max_bytes: int = 10 * 1024 * 1024,
     min_bytes: int = 1,
     budget: Optional[SharedByteBudget] = None,
-) -> Optional[bytes]:
+) -> Optional[bytearray]:
   """Read a response body, refusing to buffer more than max_bytes.
+
+  Returns the mutable buffer on purpose: converting it to `bytes` doubles the peak for
+  the lifetime of the copy (finding 19b). Callers treat it as bytes-like.
 
   With `budget`, every chunk is claimed from the shared ceiling *before* it is
   buffered; a grant smaller than the chunk means the job's budget is exhausted and
@@ -395,6 +398,7 @@ async def read_bounded_stream(
   claimed = 0
   kept = False
   try:
+    cl_val: Optional[int] = None
     cl_header = resp.headers.get("Content-Length")
     if cl_header and cl_header.isdigit():
       cl_val = int(cl_header)
@@ -404,7 +408,10 @@ async def read_bounded_stream(
         # The transfer cannot fit the remaining job budget; refuse it before
         # buffering the first chunk.
         return None
-    buf = bytearray()
+    # One exact buffer when the length is declared: filling it in place avoids the
+    # `bytes(buf)` copy that made an N-byte body peak at 2N (finding 19b).
+    buf = bytearray(cl_val) if cl_val else bytearray()
+    pos = 0
     async for chunk in resp.content.iter_chunked(65536):
       if len(buf) + len(chunk) > max_bytes:
         return None
@@ -413,11 +420,18 @@ async def read_bounded_stream(
         claimed += granted
         if granted < len(chunk):
           return None  # job budget exhausted mid-read
-      buf.extend(chunk)
-    if len(buf) < min_bytes:
+      end = pos + len(chunk)
+      if end > len(buf):
+        buf.extend(chunk)  # the server understated Content-Length
+      else:
+        buf[pos:end] = chunk
+      pos = end
+    if pos < min_bytes:
       return None
     kept = True
-    return bytes(buf)
+    if pos < len(buf):
+      del buf[pos:]
+    return buf
   except Exception as exc:
     logger.debug("bounded stream read failed: %s: %s", type(exc).__name__, exc)
     return None
