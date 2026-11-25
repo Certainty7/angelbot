@@ -102,6 +102,97 @@ class _ActionBlocked(Exception):
   """A hierarchy or resolution check refused the action; nothing was executed."""
 
 
+# Finding 17: a pending action must carry the identity it was queued for. These sets decide
+# which target each action class freezes; an action with no target records that explicitly.
+_MEMBER_TARGETED = {
+    "KICK", "BAN", "TIMEOUT", "UNTIMEOUT", "WARN", "CLEAR_WARNINGS", "NICKNAME",
+    "ADD_ROLE", "REMOVE_ROLE", "MOVE_TO_ME", "DISCONNECT_VOICE", "VOICE_MUTE",
+    "VOICE_UNMUTE", "VOICE_DEAFEN", "VOICE_UNDEAFEN",
+}
+_ROLE_TARGETED = {"ADD_ROLE", "REMOVE_ROLE", "AUTOROLE"}
+_CHANNEL_TARGETED = {
+    "RENAME_CHANNEL", "DELETE_CHANNEL", "SET_TOPIC", "SET_MODLOG",
+    "LOCK", "UNLOCK", "HIDE", "UNHIDE", "SLOWMODE", "PURGE",
+}
+
+
+async def _freeze_action_targets(bot, guild, message, action_name: str, params: Dict[str, str]) -> Dict[str, int]:
+  """Resolve every target once, at queue time, and keep only its immutable id.
+
+  Confirmation re-resolves *by id*; it never re-reads `last_target_channel`, mentions or any
+  other mutable state, so the human approves exactly the object that was described.
+  """
+  frozen: Dict[str, int] = {}
+  if action_name in _MEMBER_TARGETED:
+    member = await resolve_natural_target_member(
+        bot, message, message.content or "", strict_target=action_name in ("KICK", "BAN")
+    )
+    if member is not None:
+      frozen["member"] = member.id
+  if action_name in _ROLE_TARGETED:
+    role = resolve_natural_role(guild, message, params.get("role", ""))
+    if role is not None:
+      frozen["role"] = role.id
+  if action_name in _CHANNEL_TARGETED:
+    channel = resolve_natural_text_channel(guild, message, params.get("name", ""))
+    if channel is None and action_name in ("RENAME_CHANNEL", "DELETE_CHANNEL"):
+      cached = bot.last_target_channel.get(guild.id)
+      channel = guild.get_channel(cached) if cached else None
+    if channel is None and action_name in ("SET_MODLOG", "SET_TOPIC", "LOCK", "UNLOCK", "HIDE", "UNHIDE", "SLOWMODE", "PURGE"):
+      channel = message.channel
+    if channel is not None:
+      frozen["channel"] = channel.id
+  if action_name == "UNBAN":
+    uid = params.get("user_id") or ""
+    if not uid.isdigit():
+      match = re.search(r"\b(\d{17,20})\b", message.content or "")
+      uid = match.group(1) if match else ""
+    if uid.isdigit():
+      frozen["user"] = int(uid)
+  return frozen
+
+
+def _frozen_channel(guild, frozen, params, message, *, fallback=None):
+  """Resolve the frozen channel id; None when it disappeared (the caller refuses)."""
+  if frozen is not None:
+    cid = frozen.get("channel")
+    return guild.get_channel(cid) if cid else None
+  return resolve_natural_text_channel(guild, message, params.get("name", "")) or fallback
+
+
+def _frozen_role(guild, frozen, params, message):
+  if frozen is not None:
+    rid = frozen.get("role")
+    return guild.get_role(rid) if rid else None
+  return resolve_natural_role(guild, message, params.get("role", ""))
+
+
+async def _frozen_member(guild, frozen):
+  mid = frozen.get("member") if frozen else None
+  if not mid:
+    return None
+  member = guild.get_member(mid)
+  if member is not None:
+    return member
+  try:
+    return await guild.fetch_member(mid)
+  except discord.HTTPException:
+    return None
+
+
+def _missing_frozen_target(guild, frozen) -> bool:
+  """True when a queued target no longer exists, so the confirmation must fail closed."""
+  if not isinstance(frozen, dict):
+    return False
+  if frozen.get("member") and guild.get_member(frozen["member"]) is None:
+    return True
+  if frozen.get("role") and guild.get_role(frozen["role"]) is None:
+    return True
+  if frozen.get("channel") and guild.get_channel(frozen["channel"]) is None:
+    return True
+  return False
+
+
 async def _fresh_target(guild, member_id: int):
   """Re-resolve the target when the confirmation arrives, so a stale snapshot cannot act."""
   member = guild.get_member(member_id)
@@ -237,7 +328,8 @@ def resolve_natural_text_channel(
 
 
 async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str, confirmed: bool = False,
-                                     actor: Optional[discord.Member] = None):
+                                     actor: Optional[discord.Member] = None,
+                                     frozen_targets: Optional[Dict[str, int]] = None):
   """Run one model-proposed action.
 
   `actor` is the member whose CURRENT authority authorizes the mutation. The default
@@ -302,6 +394,7 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
         "message": message,
         "channel_id": message.channel.id,
         "ts": time.monotonic(),
+        "targets": await _freeze_action_targets(bot, guild, message, action_name, params),
     }
     await safe_reply(
         message,
@@ -309,11 +402,16 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
     )
     return "queued"
 
-  target_member = await resolve_natural_target_member(bot, message, message.content or "")
+  if frozen_targets is not None:
+    target_member = await _frozen_member(guild, frozen_targets)
+  else:
+    target_member = await resolve_natural_target_member(bot, message, message.content or "")
 
   try:
     if action_name == "SET_MODLOG":
-      target_ch = resolve_natural_text_channel(guild, message) or message.channel
+      target_ch = _frozen_channel(guild, frozen_targets, params, message, fallback=message.channel)
+      if target_ch is None:
+        raise _ActionBlocked
       await bot.db.set_modlog_channel(guild.id, target_ch.id)
       bot.modlog_cache[guild.id] = target_ch.id
     elif action_name == "GUARD_MODE":
@@ -360,10 +458,12 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
         m_id = re.search(r"\b(\d{17,20})\b", message.content or "")
         if m_id:
           uid_str = m_id.group(1)
+      if frozen_targets is not None and frozen_targets.get("user"):
+        uid_str = str(frozen_targets["user"])
       if uid_str.isdigit():
         await guild.unban(discord.Object(id=int(uid_str)), reason=f"AI Order by {author}")
     elif action_name == "AUTOROLE":
-      r_obj = resolve_natural_role(guild, message, params.get("role", ""))
+      r_obj = _frozen_role(guild, frozen_targets, params, message)
       if not (r_obj and can_assign_role(actor, r_obj, guild)[0]):
         raise _ActionBlocked
       await bot.db.set_autorole(guild.id, r_obj.id)
@@ -375,19 +475,21 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
     elif action_name == "RENAME_CHANNEL":
       new_name = params.get("name")
       if new_name:
-        target_ch = resolve_natural_text_channel(guild, message)
-        if not target_ch and guild.id in bot.last_target_channel:
-          target_ch = guild.get_channel(bot.last_target_channel[guild.id])
-        target_ch = target_ch or message.channel
+        target_ch = _frozen_channel(guild, frozen_targets, params, message, fallback=message.channel)
+        if target_ch is None:
+          raise _ActionBlocked
         await target_ch.edit(name=new_name)
     elif action_name == "CLONE_CHANNEL":
-      target_ch = resolve_natural_text_channel(guild, message) or message.channel
+      target_ch = _frozen_channel(guild, frozen_targets, params, message, fallback=message.channel)
+      if target_ch is None:
+        raise _ActionBlocked
       cloned = await target_ch.clone(reason=f"Cloned by {author}")
       bot.last_target_channel[guild.id] = cloned.id
     elif action_name == "SET_TOPIC":
       topic_txt = params.get("topic") or params.get("name")
-      if topic_txt and isinstance(message.channel, discord.TextChannel):
-        await message.channel.edit(topic=topic_txt[:1024])
+      topic_ch = _frozen_channel(guild, frozen_targets, params, message, fallback=message.channel)
+      if topic_txt and topic_ch is not None and isinstance(topic_ch, discord.TextChannel):
+        await topic_ch.edit(topic=topic_txt[:1024])
     elif action_name == "CREATE_TEXT":
       name = params.get("name")
       if name:
@@ -399,13 +501,13 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
         ch = await guild.create_voice_channel(name=name)
         bot.last_target_channel[guild.id] = ch.id
     elif action_name == "ADD_ROLE":
-      r_obj = resolve_natural_role(guild, message, params.get("role", ""))
+      r_obj = _frozen_role(guild, frozen_targets, params, message)
       if not (r_obj and target_member and can_assign_role(actor, r_obj, guild)[0]
               and can_moderate_member(actor, target_member, guild)[0]):
         raise _ActionBlocked
       await target_member.add_roles(r_obj)
     elif action_name == "REMOVE_ROLE":
-      r_obj = resolve_natural_role(guild, message, params.get("role", ""))
+      r_obj = _frozen_role(guild, frozen_targets, params, message)
       if not (r_obj and target_member and can_assign_role(actor, r_obj, guild)[0]
               and can_moderate_member(actor, target_member, guild)[0]):
         raise _ActionBlocked
@@ -421,7 +523,9 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
         raise _ActionBlocked
       await t_mem.edit(nick=new_nick)
     elif action_name == "LOCK":
-      target_ch = resolve_natural_text_channel(guild, message) or message.channel
+      target_ch = _frozen_channel(guild, frozen_targets, params, message, fallback=message.channel)
+      if target_ch is None:
+        raise _ActionBlocked
       ok_ch, deny_ch = can_manage_channel(author, target_ch, guild)
       if not ok_ch:
         await safe_reply(message, deny_ch)
@@ -430,7 +534,9 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
       overwrite.send_messages = False
       await target_ch.set_permissions(guild.default_role, overwrite=overwrite)
     elif action_name == "UNLOCK":
-      target_ch = resolve_natural_text_channel(guild, message) or message.channel
+      target_ch = _frozen_channel(guild, frozen_targets, params, message, fallback=message.channel)
+      if target_ch is None:
+        raise _ActionBlocked
       ok_ch, deny_ch = can_manage_channel(author, target_ch, guild)
       if not ok_ch:
         await safe_reply(message, deny_ch)
@@ -439,7 +545,9 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
       overwrite.send_messages = None
       await target_ch.set_permissions(guild.default_role, overwrite=overwrite)
     elif action_name == "HIDE":
-      target_ch = resolve_natural_text_channel(guild, message) or message.channel
+      target_ch = _frozen_channel(guild, frozen_targets, params, message, fallback=message.channel)
+      if target_ch is None:
+        raise _ActionBlocked
       ok_ch, deny_ch = can_manage_channel(author, target_ch, guild)
       if not ok_ch:
         await safe_reply(message, deny_ch)
@@ -448,7 +556,9 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
       overwrite.view_channel = False
       await target_ch.set_permissions(guild.default_role, overwrite=overwrite)
     elif action_name == "UNHIDE":
-      target_ch = resolve_natural_text_channel(guild, message) or message.channel
+      target_ch = _frozen_channel(guild, frozen_targets, params, message, fallback=message.channel)
+      if target_ch is None:
+        raise _ActionBlocked
       ok_ch, deny_ch = can_manage_channel(author, target_ch, guild)
       if not ok_ch:
         await safe_reply(message, deny_ch)
@@ -457,15 +567,19 @@ async def execute_ai_inferred_action(bot, message: discord.Message, cmd_str: str
       overwrite.view_channel = None
       await target_ch.set_permissions(guild.default_role, overwrite=overwrite)
     elif action_name == "SLOWMODE":
-      ok_ch, deny_ch = can_manage_channel(author, message.channel, guild)
+      slow_ch = _frozen_channel(guild, frozen_targets, params, message, fallback=message.channel)
+      ok_ch, deny_ch = can_manage_channel(author, slow_ch, guild)
       if not ok_ch:
         await safe_reply(message, deny_ch)
         return "blocked"
       sec = max(0, min(21600, int(params.get("seconds", "5"))))
-      await message.channel.edit(slowmode_delay=sec)
+      await slow_ch.edit(slowmode_delay=sec)
     elif action_name == "PURGE":
       val = max(1, min(100, int(params.get("value", "15"))))
-      await message.channel.purge(limit=val + 1)
+      purge_ch = _frozen_channel(guild, frozen_targets, params, message, fallback=message.channel)
+      if purge_ch is None:
+        raise _ActionBlocked
+      await purge_ch.purge(limit=val + 1)
     else:
       # An action the model named but this dispatcher has no branch for (MOVE_TO_ME,
       # VOICE_MUTE, PIN_MSG, ...) did nothing; reporting "executed" would be a false success.
@@ -787,8 +901,14 @@ async def try_execute_natural_command(
             confirm_actor = fetched_actor
         except discord.HTTPException:
           pass  # fall back to the confirmation message's member payload
+      frozen = pending.get("targets")
+      if _missing_frozen_target(guild, frozen):
+        bot.pending_confirm.pop((guild.id, author.id), None)
+        await safe_reply(message, "⚠️ الهدف المحدد لم يعد موجوداً، ألغيت الإجراء ولم أمسّ شيئاً.")
+        return True
       outcome = await execute_ai_inferred_action(
-          bot, pending["message"], pending["cmd"], confirmed=True, actor=confirm_actor
+          bot, pending["message"], pending["cmd"], confirmed=True, actor=confirm_actor,
+          frozen_targets=frozen,
       )
       if outcome == "executed":
         await safe_reply(message, "✅ تم تنفيذ الإجراء المؤكد.")
