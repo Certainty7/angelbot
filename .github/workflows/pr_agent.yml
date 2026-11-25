@@ -1,36 +1,26 @@
-name: PR-Agent
+name: PR-Agent (disabled)
+
+# Audit finding 09: this workflow used `the-pr-agent/pr-agent@main`, and that action builds a
+# rolling runtime image, so an upstream change or compromise could read the write-capable
+# GITHUB_TOKEN and the Gemini key without a commit here.
+#
+# Re-enabling requires, in one reviewed change:
+#   1. a full 40-character commit SHA for the action, approved by the owner in the PR;
+#   2. a digest-pinned runtime image (a `docker://…@sha256:…` step) instead of a rolling tag;
+#   3. the automatic triggers restored deliberately, not by copying this stub back.
+#
+# `tests/test_ops_and_gates.py::WorkflowPinningTest` fails on any mutable `uses:` ref, so an
+# unpinned re-enable cannot merge.
+
 on:
-  pull_request:
-    types: [opened, reopened, ready_for_review]
-  issue_comment:
-    types: [created]
+  workflow_dispatch:
 
 permissions:
   contents: read
-  issues: write
-  pull-requests: write
 
 jobs:
-  pr_agent:
-    # only the repo owner/members/collaborators can trigger it, and never a bot
-    if: |
-      github.event.sender.type != 'Bot' &&
-      (github.event_name != 'issue_comment' ||
-       (github.event.issue.pull_request != null &&
-        contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)))
+  disabled:
+    if: ${{ false }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     steps:
-      - name: PR-Agent (on demand)
-        uses: the-pr-agent/pr-agent@main
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GOOGLE_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          config.model: "gemini/gemini-4-hydrogen"
-          config.fallback_models: '["gemini/gemini-3.6-flash","gemini/gemini-3.5-flash"]'
-          config.ai_timeout: "600"
-          config.custom_model_max_tokens: "1000000"
-          github_action_config.auto_review: "false"
-          github_action_config.auto_describe: "false"
-          github_action_config.auto_improve: "false"
+      - run: echo "PR-Agent is disabled pending an immutable action ref and runtime digest."
