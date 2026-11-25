@@ -16,6 +16,7 @@ from . import cost
 from .config import (ARABIC_GIF_KEYWORDS, GEMINI_API_KEYS, GIF_ACTION_ENDPOINT, GIF_USER_AGENT, IMAGE_GEN_MODELS,
                      SUPPORTED_GIF_ACTIONS, YURI_ANIME_WHITELIST, _safe_gc_collect, is_mistress,
                      is_romantic_gif, logger)
+from .media import is_gif_payload
 from .net import get_shared_http_session, read_bounded_stream, safe_fetch_response
 from .persona import (PROBE_PATTERNS, build_angel_system_prompt, normalize_arabic_text,
                       sanitize_untrusted_context)
@@ -61,6 +62,27 @@ def _seconds_until_pacific_midnight() -> float:
     now = datetime.now(timezone(timedelta(hours=-8)))
   tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
   return max(60.0, (tomorrow - now).total_seconds())
+
+
+async def load_gif_candidate(session, gif_url: str, timeout) -> Optional[bytes]:
+  """Fetch one reaction-GIF candidate and return it only when it really is a GIF.
+
+  A 200 with a body is not enough: the endpoint can answer with an HTML page or an SVG, which
+  would then be uploaded to Discord as `angel_reaction.gif` (finding 19d).
+  """
+  try:
+    _final, status, ctype, data = await safe_fetch_response(
+        gif_url,
+        headers={"User-Agent": GIF_USER_AGENT},
+        max_bytes=3 * 1024 * 1024,
+        session=session,
+        timeout=timeout,
+    )
+  except Exception:
+    return None
+  if status != 200 or not data or len(data) < 500:
+    return None
+  return data if is_gif_payload(data, ctype) else None
 
 
 class AngelBrainService:
@@ -695,19 +717,10 @@ class AngelBrainService:
     session = await get_shared_http_session()
     dl_timeout = aiohttp.ClientTimeout(total=3.5)
     for gif_url in chosen_pool[:3]:
-      try:
-        _final, status, _ctype, gif_bytes = await safe_fetch_response(
-            gif_url,
-            headers={"User-Agent": GIF_USER_AGENT},
-            max_bytes=3 * 1024 * 1024,
-            session=session,
-            timeout=dl_timeout,
-        )
-        if status == 200 and gif_bytes and len(gif_bytes) >= 500:
-          self._recent_gif_urls.append(gif_url)
-          return gif_bytes, gif_url
-      except Exception:
-        continue
+      gif_bytes = await load_gif_candidate(session, gif_url, dl_timeout)
+      if gif_bytes:
+        self._recent_gif_urls.append(gif_url)
+        return gif_bytes, gif_url
 
     chosen_fallback = chosen_pool[0]
     self._recent_gif_urls.append(chosen_fallback)
