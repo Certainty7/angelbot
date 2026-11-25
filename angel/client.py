@@ -480,13 +480,16 @@ class AngelDiscordBot(commands.Bot):
       cmd: str = "message",
   ) -> Tuple[str, Optional[bytes], Optional[str], Optional[bytes], bool]:
     harem_title = self.get_harem_title(user.id)
+    # Rolling memory follows the conversation, so a DM line can never be quoted into a guild
+    # prompt. Without a message object (interaction in a DM) the member id is a stable key.
+    channel_id = int(getattr(getattr(message_Context, "channel", None), "id", 0) or user.id)
     allowed, deny_reason = self.quota.check_user_allowed(user, is_harem=(harem_title is not None))
     if not allowed:
       raise AIServiceError(deny_reason)
 
     async with self.user_locks[user.id]:
-      session_expired = await self.db.check_and_expire_old_session(user.id, SESSION_TIMEOUT_HOURS)
-      summary, messages = await self.db.get_context_data(user.id)
+      session_expired = await self.db.check_and_expire_old_session(channel_id, user.id, SESSION_TIMEOUT_HOURS)
+      summary, messages = await self.db.get_context_data(channel_id, user.id)
       prefs = await self.db.get_user_prefs(user.id)
 
       # Archive recall is scoped to this guild and to the channels this member can read;
@@ -561,7 +564,7 @@ class AngelDiscordBot(commands.Bot):
       clean_reply = filter_outgoing(clean_reply, action_status=action_status)
 
       if not prefs.get("opt_out"):
-        await self.db.add_exchange(user.id, prompt or "[صورة]", clean_reply)
+        await self.db.add_exchange(channel_id, user.id, prompt or "[صورة]", clean_reply)
         if message_Context and message_Context.guild:
           self.angel_last_spoke[message_Context.channel.id] = time.monotonic()
 
@@ -582,21 +585,21 @@ class AngelDiscordBot(commands.Bot):
 
       # Non-blocking background summarization with strong task reference so GC never drops it
       if len(messages) + 2 >= SUMMARIZE_THRESHOLD:
-        bg_t = asyncio.create_task(self._background_summarize_user(user.id))
+        bg_t = asyncio.create_task(self._background_summarize_user(user.id, channel_id))
         self._bg_tasks.add(bg_t)
         bg_t.add_done_callback(self._bg_tasks.discard)
 
       return clean_reply, gif_bytes, gif_url, gen_image_bytes, session_expired
 
-  async def _background_summarize_user(self, user_id: int):
+  async def _background_summarize_user(self, user_id: int, channel_id: int):
     try:
       async with self.user_locks[user_id]:
-        summary, updated_messages = await self.db.get_context_data(user_id)
+        summary, updated_messages = await self.db.get_context_data(channel_id, user_id)
         if len(updated_messages) >= SUMMARIZE_THRESHOLD:
           to_summarize = updated_messages[:-KEEP_RECENT_MESSAGES]
           if to_summarize:
             new_summary = await self.ai.summarize_messages(summary, to_summarize)
-            max_id = to_summarize[-1]["id"]
-            await self.db.apply_summary_and_prune(user_id, new_summary, max_id)
+            max_id = int(to_summarize[-1]["id"])
+            await self.db.apply_summary_and_prune(channel_id, user_id, new_summary, max_id)
     except Exception as exc:
       logger.debug("background summarize skipped: %s: %s", type(exc).__name__, exc)

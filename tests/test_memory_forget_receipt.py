@@ -26,7 +26,7 @@ async def _seeded() -> BotDatabase:
     db = BotDatabase(_fresh_path())
     await db.initialize()
     await db.log_server_message(1, 2, 42, "member", "the secret token")
-    await db.add_exchange(42, "the secret token", "noted")
+    await db.add_exchange(1, 42, "the secret token", "noted")
     return db
 
 

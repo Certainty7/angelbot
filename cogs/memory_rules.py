@@ -57,7 +57,7 @@ class MemoryRules(commands.Cog):
     harem_title = self.bot.get_harem_title(uid)
 
     if action == "view":
-      summary, _ = await self.bot.db.get_context_data(uid)
+      summary, _ = await self.bot.db.get_context_data(interaction.channel_id, uid)
       prefs = await self.bot.db.get_user_prefs(uid)
       embed = discord.Embed(
           title="🧠 خزنة الذاكرة (Angel Memory Vault)",
@@ -113,14 +113,15 @@ class MemoryRules(commands.Cog):
       await self.bot.db.set_user_style(uid, chosen)
       await interaction.response.send_message(f"🎭 تم ضبط أسلوب حديث أنجل معك على: **`{chosen}`**.", ephemeral=True)
     elif action == "clear":
-      await self.bot.db.clear_user_memory(uid)
-      await interaction.response.send_message("✅ تم مسح سجل الجلسة المؤقتة (مع الاحتفاظ بتفضيلاتك المثبتة).", ephemeral=True)
+      await self.bot.db.clear_user_memory(interaction.channel_id, uid)
+      await interaction.response.send_message(
+          "✅ تم مسح سجل هذه المحادثة فقط (مع الاحتفاظ بتفضيلاتك المثبتة).", ephemeral=True)
 
 
   @app_commands.command(name="clear_history", description="مسح سجل المحادثة السابقة")
   async def clear_cmd(self, interaction: discord.Interaction):
-    await self.bot.db.clear_user_memory(interaction.user.id)
-    await interaction.response.send_message("✅ تم مسح سجل المحادثة السابقة.", ephemeral=True)
+    await self.bot.db.clear_user_memory(interaction.channel_id, interaction.user.id)
+    await interaction.response.send_message("✅ تم مسح سجل هذه المحادثة فقط.", ephemeral=True)
 
   @app_commands.command(name="data", description="بياناتك عند أنجل: اعرض ما يُخزَّن عنك أو احذفه بالكامل")
   @app_commands.allowed_installs(guilds=True, users=True)
