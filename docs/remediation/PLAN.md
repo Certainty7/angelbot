@@ -16,7 +16,7 @@ the bot's observable behaviour unchanged except where a finding requires otherwi
 
 ## Invariants
 
-1. `pytest` stays green: baseline at `eb09d2e` was **225 passed + 322 subtests**.
+1. `pytest -q -p no:asyncio` stays green: baseline at `eb09d2e` was **225 passed + 322 subtests**. CI installs `pytest` without `pytest-asyncio`, so a local venv that has the plugin can hide a red run (#16).
 2. Every fix ships a regression test that **fails on the parent commit** and passes with the fix.
    A test that passes both ways is not evidence.
 3. A guarded resource is never double-counted: when a fetch is rejected, its byte budget is released.

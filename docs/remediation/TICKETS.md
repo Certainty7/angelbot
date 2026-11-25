@@ -11,17 +11,17 @@ Evidence and fix sketches live there; this file tracks order and status only.
 
 ### 01 · 1. Direct HTTP calls can reach private and metadata addresses
 
-- **Status:** in review — PR #12
+- **Status:** done — PR #12
 - **Done when:** loopback literals and redirects are refused before the local server records a hit, including direct POST paths.
 
 ### 02 · 2. A small SnapSave response can freeze the whole bot
 
-- **Status:** todo
+- **Status:** done — PR #14
 - **Done when:** the 20k/20k fixture fails closed or completes well under one second, and oversized fields are rejected before decoding.
 
 ### 03 · 3. Tiny compressed images can exhaust memory
 
-- **Status:** todo
+- **Status:** done — PR #15
 - **Done when:** a four-way high-pixel fixture stays within a numeric memory assertion and oversized dimensions are rejected before allocation.
 
 ### 04 · 4. Cancellation can leave a partial database transaction for another request to commit
