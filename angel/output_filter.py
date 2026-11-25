@@ -74,7 +74,8 @@ def filter_outgoing(text: str, action_status: str = "none") -> str:
   """Return the text with cheap unsafe classes removed or corrected.
 
   action_status is the aggregate result of execute_ai_inferred_action for this turn:
-  executed / queued / blocked / failed / none.
+  executed / queued / blocked / failed / none. `pending` means the action gate has not run
+  yet because it waits for delivery: the claim becomes a promise, never a success
   """
   if not text:
     return text
@@ -113,6 +114,8 @@ def filter_outgoing(text: str, action_status: str = "none") -> str:
   if action_status != "executed" and _CLAIM.search(out):
     if action_status == "queued":
       out = "⚠️ الإجراء جاهز لكنه **لم يُنفَّذ بعد** — اكتب «تأكيد» خلال 60 ثانية."
+    elif action_status == "pending":
+      out = "⏳ أنفّذ طلبك الآن وأخبرك بالنتيجة."
     else:
       out = "ما نفّذت أي إجراء إداري الآن. لو تقصد حظر/طرد/مسح، اطلبه صراحةً."
     reasons.append(f"claim-without-exec({action_status})")
