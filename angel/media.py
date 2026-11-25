@@ -1229,16 +1229,22 @@ async def extract_tiktok_media_items(
                 or (res_obj.get("video") if isinstance(res_obj.get("video"), str) else None)
             )
             if isinstance(v_cand, str) and v_cand.startswith("http"):
-              async with session.get(v_cand, headers={"User-Agent": "Mozilla/5.0"}, timeout=timeout) as vresp:
-                if vresp.status == 200:
-                  v_ctype = (vresp.headers.get("Content-Type") or "").lower()
-                  v_bytes = await read_bounded_stream(vresp, max_bytes=max_bytes, min_bytes=4096, budget=job_budget)
-                  if _is_valid_mp4_video_bytes(v_bytes, v_ctype):
-                    clean_vid = await _ensure_discord_playable_mp4(v_bytes, max_bytes=max_bytes)
-                    _safe_gc_collect()
-                    cap = f"🎬 **{t_author}**" + (f" — {t_title}" if t_title else "")
-                    return [(clean_vid, "video.mp4")], None, cap
-                  job_budget.release(len(v_bytes or b""))
+              _final, v_status, v_ctype, v_bytes = await safe_fetch_response(
+                  v_cand,
+                  headers={"User-Agent": "Mozilla/5.0"},
+                  max_bytes=max_bytes,
+                  budget=job_budget,
+                  timeout=timeout,
+              )
+              if v_status == 200 and v_bytes and len(v_bytes) >= 4096:
+                if _is_valid_mp4_video_bytes(v_bytes, (v_ctype or "").lower()):
+                  clean_vid = await _ensure_discord_playable_mp4(v_bytes, max_bytes=max_bytes)
+                  _safe_gc_collect()
+                  cap = f"🎬 **{t_author}**" + (f" — {t_title}" if t_title else "")
+                  return [(clean_vid, "video.mp4")], None, cap
+                job_budget.release(len(v_bytes or b""))
+              elif v_bytes:
+                job_budget.release(len(v_bytes))
     except Exception:
       continue
 
@@ -1315,13 +1321,20 @@ async def extract_tiktok_media_items(
         v_hdrs = info.get("http_headers") or {}
         v_title = (info.get("title") or "").strip()[:140]
         if isinstance(v_u, str) and v_u.startswith("http"):
-          async with session.get(v_u, headers=v_hdrs, timeout=timeout) as vresp:
-            if vresp.status == 200:
-              v_bytes = await read_bounded_stream(vresp, max_bytes=max_bytes, min_bytes=4096, budget=job_budget)
-              if _is_valid_mp4_video_bytes(v_bytes, vresp.headers.get("Content-Type", "")):
-                clean_vid = await _ensure_discord_playable_mp4(v_bytes, max_bytes=max_bytes)
-                return [(clean_vid, "video.mp4")], None, "🎬 **TikTok**" + (f" — {v_title}" if v_title else "")
-              job_budget.release(len(v_bytes or b""))
+          _final, v_status, v_ctype, v_bytes = await safe_fetch_response(
+              v_u,
+              headers=v_hdrs,
+              max_bytes=max_bytes,
+              budget=job_budget,
+              timeout=timeout,
+          )
+          if v_status == 200 and v_bytes and len(v_bytes) >= 4096:
+            if _is_valid_mp4_video_bytes(v_bytes, v_ctype or ""):
+              clean_vid = await _ensure_discord_playable_mp4(v_bytes, max_bytes=max_bytes)
+              return [(clean_vid, "video.mp4")], None, "🎬 **TikTok**" + (f" — {v_title}" if v_title else "")
+            job_budget.release(len(v_bytes or b""))
+          elif v_bytes:
+            job_budget.release(len(v_bytes))
     except Exception:
       pass
 
@@ -1362,9 +1375,9 @@ async def _download_photo_slides(img_urls: List[str], max_bytes: int, prefix: st
   Same shape as the TikTok photo downloader (`_download_photo_list`) without the
   re-quote step: photo CDNs behind X do not rotate per-burst signatures.
   """
-  session = await get_shared_http_session()
   sem = asyncio.Semaphore(4)
   img_urls = list(img_urls)[:10]
+  session = await get_shared_http_session()
 
   async def _one(idx: int, target: str) -> Optional[Tuple[int, bytes, str]]:
     if budget is not None and budget.remaining <= 0:
@@ -1374,16 +1387,24 @@ async def _download_photo_slides(img_urls: List[str], max_bytes: int, prefix: st
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
         if referer:
           headers["Referer"] = referer
-        async with session.get(target, headers=headers, timeout=aiohttp.ClientTimeout(total=12)) as resp:
-          if resp.status != 200:
-            return None
-          raw = await read_bounded_stream(resp, max_bytes=max_bytes, min_bytes=400, budget=budget)
-          norm = await _normalize_image_bytes(raw)
-          if norm:
-            ext = "png" if norm.startswith(b"\x89PNG") else "jpg"
-            return (idx, norm, f"{prefix}_{idx}.{ext}")
-          if budget is not None:
-            budget.release(len(raw or b""))
+        _final, status, _ctype, raw = await safe_fetch_response(
+            target,
+            headers=headers,
+            max_bytes=max_bytes,
+            budget=budget,
+            session=session,
+            timeout=aiohttp.ClientTimeout(total=12),
+        )
+        if status != 200 or not raw or len(raw) < 400:
+          if budget is not None and raw:
+            budget.release(len(raw))
+          return None
+        norm = await _normalize_image_bytes(raw)
+        if norm:
+          ext = "png" if norm.startswith(b"\x89PNG") else "jpg"
+          return (idx, norm, f"{prefix}_{idx}.{ext}")
+        if budget is not None:
+          budget.release(len(raw or b""))
       except Exception:
         pass
       return None
@@ -1398,16 +1419,24 @@ async def _download_one_video(video_url: str, headers: Dict[str, str], max_bytes
                               budget: Optional[SharedByteBudget] = None) -> Optional[Tuple[bytes, str]]:
   session = await get_shared_http_session()
   try:
-    async with session.get(video_url, headers=headers, timeout=aiohttp.ClientTimeout(total=25)) as resp:
-      if resp.status != 200:
-        return None
-      body = await read_bounded_stream(resp, max_bytes=max_bytes, min_bytes=4096, budget=budget)
-      if not _is_valid_mp4_video_bytes(body, resp.headers.get("Content-Type", "")):
-        if budget is not None:
-          budget.release(len(body or b""))
-        return None
-      clean = await _ensure_discord_playable_mp4(body, max_bytes=max_bytes)
-      return clean, name
+    _final, status, ctype, body = await safe_fetch_response(
+        video_url,
+        headers=headers,
+        max_bytes=max_bytes,
+        budget=budget,
+        session=session,
+        timeout=aiohttp.ClientTimeout(total=25),
+    )
+    if status != 200 or not body or len(body) < 4096:
+      if budget is not None and body:
+        budget.release(len(body))
+      return None
+    if not _is_valid_mp4_video_bytes(body, ctype or ""):
+      if budget is not None:
+        budget.release(len(body or b""))
+      return None
+    clean = await _ensure_discord_playable_mp4(body, max_bytes=max_bytes)
+    return clean, name
   except Exception:
     return None
 
@@ -1438,6 +1467,7 @@ async def extract_x_media_items(
         api_url,
         headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"},
         timeout=aiohttp.ClientTimeout(total=10),
+        allow_redirects=False,
     ) as resp:
       if resp.status == 200:
         _x_bytes = await read_bounded_stream(resp, max_bytes=2 * 1024 * 1024)
