@@ -21,6 +21,7 @@ from angel.config import (
     can_read_history,
     check_staff_action_permission,
     get_or_fetch_member,
+    has_effective_perm,
     is_mistress,
     is_romantic_gif,
     is_server_staff,
@@ -1086,6 +1087,11 @@ async def try_execute_natural_command(
   # 4.5 Universal Community & Utility Lookups via Natural Words (Snipe, EditSnipe, Avatar, UserInfo, ServerInfo, Rank, Leaderboard, Rep, Ping)
   if guild:
     if any(k in cmd_lower for k in ("سنايب", "وش انحذف", "ايش انحذف", "من مسح رسالته", "مين حذف رسالته", "اخر رسالة محذوفة", "snipe")):
+      # `/snipe` is staff-only. The cache holds other members' deleted text, so the NL twin
+      # must apply the same effective-channel rule instead of trusting the phrase alone.
+      if not has_effective_perm(message.channel, author, manage_messages=True):
+        await safe_reply(message, "🔒 كشف الرسائل المحذوفة متاح للمشرفين فقط.")
+        return True
       data = bot.snipe_cache.get(message.channel.id)
       if not data:
         await safe_reply(message, "🔍 ما فيه أي رسالة انحذفت قريب في هالروم.")
@@ -1098,6 +1104,9 @@ async def try_execute_natural_command(
       return True
 
     if any(k in cmd_lower for k in ("وش تعدل", "ايش تعدل", "من عدل رسالته", "مين عدل رسالته", "اخر رسالة معدلة", "editsnipe")):
+      if not has_effective_perm(message.channel, author, manage_messages=True):
+        await safe_reply(message, "🔒 كشف الرسائل المعدلة متاح للمشرفين فقط.")
+        return True
       data = bot.editsnipe_cache.get(message.channel.id)
       if not data:
         await safe_reply(message, "🔍 ما فيه أي رسالة تعدلت قريب هنا.")

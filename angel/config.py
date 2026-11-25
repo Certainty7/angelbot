@@ -499,6 +499,27 @@ async def get_or_fetch_member(guild: discord.Guild, user_id: int) -> Optional[di
     return None
 
 
+def has_effective_perm(channel, member, **perms: bool) -> bool:
+  """True when `member` holds every requested permission in *this* channel.
+
+  One helper for both the slash checks and their natural-language twins: the guild-level
+  flag can be granted while the channel overwrites it, and the NL twin of a staff-only
+  command must apply the same rule (finding 07).
+  """
+  if is_mistress(member):
+    return True
+  if channel is None or member is None:
+    return False
+  guild = getattr(channel, "guild", None)
+  if guild is None or not isinstance(member, discord.Member):
+    return False
+  try:
+    user_perms = channel.permissions_for(member)
+  except Exception:
+    return False
+  return all(bool(getattr(user_perms, p, False)) == req for p, req in perms.items())
+
+
 def has_perm_or_mistress(**perms: bool):
   async def predicate(interaction: discord.Interaction) -> bool:
     if is_mistress(interaction.user):
@@ -506,12 +527,15 @@ def has_perm_or_mistress(**perms: bool):
     if not interaction.guild or not isinstance(interaction.user, discord.Member):
       return False
     if interaction.channel is None:
-      user_perms = interaction.user.guild_permissions
+      granted = all(
+          bool(getattr(interaction.user.guild_permissions, p, False)) == req
+          for p, req in perms.items()
+      )
     else:
-      user_perms = interaction.channel.permissions_for(interaction.user)
-    missing = [p for p, req in perms.items() if getattr(user_perms, p, False) != req]
-    if missing:
-      raise app_commands.MissingPermissions(missing)
+      granted = has_effective_perm(interaction.channel, interaction.user, **perms)
+    if not granted:
+      missing = [p for p, req in perms.items() if getattr(interaction.user.guild_permissions, p, False) != req]
+      raise app_commands.MissingPermissions(missing or list(perms))
     return True
 
   return app_commands.check(predicate)
