@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.1.1 — 2026-11-25
+
+A review of 1.1.0, not a feature release. Three defects, all of them in the machinery that exists to
+prove things.
+
+### The secret scan read one version of each file
+
+- `scripts/scan_secrets.py` kept one blob per *path*, so a token that a later commit deleted was invisible.
+- The gate could report "no secrets found" over history it had never opened.
+- It keys by object id now; a test plants a token, deletes it in a second commit, and requires the scanner to catch it.
+- The full history is still clean — that sentence is a measurement now, not a hope.
+
+### The offline gate was reading the virtualenv
+
+- `late-binding-free` skipped `{"venv", ".git", ...}` while the environment on this machine is `.venv`.
+- A dependency's own `globals().get()` failed the gate, and 50/50 had quietly become 49/50.
+- Our own late binding could have hidden in that noise; dotted directories are skipped now.
+
+### Two plan files carried this machine's address
+
+- The v1.1.0 plan was committed with the production address, the SSH key path and the operator's home directory.
+- The text is redacted, and `tests/test_no_infra_in_docs.py` fails on any of them in tracked Markdown.
+- The commits that carried the text remain in history; rewriting them is an owner decision, recorded rather than assumed.
+
+### Counts at this tag
+
+- `pytest -q`: 371 tests and 339 subtests.
+- `selftest`: 50/50.
+- `npx playwright test`: 67.
+
 ## 1.1.0 — 2026-11-25
 
 A truth and proof release: the repository now states only the numbers it can prove, and checks the two

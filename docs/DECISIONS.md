@@ -279,7 +279,7 @@ command re-sync — a separate card, out of scope here.
 `tests/website/test_command_catalog.py` (census oracle on `description_discord`, editorial-copy pin,
 `owner_only` oracle), `generate.py --check` clean after regeneration.
 
-**Current count (v1.1.0):** the catalogue has **71** entries — 68 slash commands and 3 context
+**Current count (v1.1.1):** the catalogue has **71** entries — 68 slash commands and 3 context
 menus; 67 load eagerly and the 4 music commands load lazily. The historical measurements above
 refer to the 68-entry census captured on 2026-11-14.
 

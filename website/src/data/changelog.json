@@ -6,6 +6,100 @@
   ],
   "releases": [
     {
+      "version": "1.1.1",
+      "date": "2026-11-25",
+      "summary": {
+        "en": "A review of 1.1.0, not a feature release. Three defects, all of them in the machinery that exists to prove things.",
+        "ar": "مراجعة للإصدار 1.1.0، لا إصدار ميزات. ثلاثة عيوب، كلها في آلات وُضعت لتُثبت الأشياء."
+      },
+      "sections": [
+        {
+          "title": {
+            "en": "The secret scan read one version of each file",
+            "ar": "فاحص الأسرار كان يقرأ نسخة واحدة من كل ملف"
+          },
+          "items": [
+            {
+              "en": "`scripts/scan_secrets.py` kept one blob per *path*, so a token that a later commit deleted was invisible.",
+              "ar": "كان `scripts/scan_secrets.py` يحتفظ بـ`blob` واحد لكل مسار، فالـ`token` الذي يحذفه `commit` لاحق يصبح غير مرئي."
+            },
+            {
+              "en": "The gate could report \"no secrets found\" over history it had never opened.",
+              "ar": "كانت البوابة تستطيع أن تقول «لا أسرار» عن تاريخ لم تفتحه قط."
+            },
+            {
+              "en": "It keys by object id now; a test plants a token, deletes it in a second commit, and requires the scanner to catch it.",
+              "ar": "صار يفتح بالمُعرّف، وأُضيف اختبار يزرع `token` ثم يحذفه في `commit` ثانٍ ويشترط أن يجده الفاحص."
+            },
+            {
+              "en": "The full history is still clean — that sentence is a measurement now, not a hope.",
+              "ar": "والتاريخ كله ما زال نظيفًا؛ لكن الجملة صارت قياسًا لا أملًا."
+            }
+          ]
+        },
+        {
+          "title": {
+            "en": "The offline gate was reading the virtualenv",
+            "ar": "بوابة الفحص المحلي كانت تقرأ البيئة الافتراضية"
+          },
+          "items": [
+            {
+              "en": "`late-binding-free` skipped `{\"venv\", \".git\", ...}` while the environment on this machine is `.venv`.",
+              "ar": "كانت `late-binding-free` تتخطى `{\"venv\", \".git\", ...}` بينما اسم البيئة على هذا الجهاز `.venv`."
+            },
+            {
+              "en": "A dependency's own `globals().get()` failed the gate, and 50/50 had quietly become 49/50.",
+              "ar": "فكان `globals().get()` داخل حزمة تابعة يُفشل البوابة، وكانت 50/50 قد صارت 49/50 بهدوء."
+            },
+            {
+              "en": "Our own late binding could have hidden in that noise; dotted directories are skipped now.",
+              "ar": "أي أن الربط المتأخر في كودنا كان يمكن أن يختفي في الضجيج؛ وصارت المجلدات المبدوءة بنقطة تُتخطى."
+            }
+          ]
+        },
+        {
+          "title": {
+            "en": "Two plan files carried this machine's address",
+            "ar": "ملفّا خطة حملَا عنوان هذا الجهاز"
+          },
+          "items": [
+            {
+              "en": "The v1.1.0 plan was committed with the production address, the SSH key path and the operator's home directory.",
+              "ar": "وُضعت خطة 1.1.0 في المستودع وفيها عنوان الإنتاج ومسار مفتاح `SSH` ومجلد المستخدم."
+            },
+            {
+              "en": "The text is redacted, and `tests/test_no_infra_in_docs.py` fails on any of them in tracked Markdown.",
+              "ar": "حُجب النص، وأضيف `tests/test_no_infra_in_docs.py` الذي يفشل عند ظهور أي منها في ملف `Markdown` متتبَّع."
+            },
+            {
+              "en": "The commits that carried the text remain in history; rewriting them is an owner decision, recorded rather than assumed.",
+              "ar": "أما الـ`commits` التي حملتها فما زالت في التاريخ؛ وإعادة كتابتها قرار للمالك، مسجَّل لا مفترض."
+            }
+          ]
+        },
+        {
+          "title": {
+            "en": "Counts at this tag",
+            "ar": "الأعداد عند هذا الوسم"
+          },
+          "items": [
+            {
+              "en": "`pytest -q`: 371 tests and 339 subtests.",
+              "ar": "`pytest -q`: 371 اختبارًا و339 `subtest`."
+            },
+            {
+              "en": "`selftest`: 50/50.",
+              "ar": "`selftest`: 50/50."
+            },
+            {
+              "en": "`npx playwright test`: 67.",
+              "ar": "`npx playwright test`: 67."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.1.0",
       "date": "2026-11-25",
       "summary": {
