@@ -151,9 +151,15 @@ class Music(commands.Cog):
     if skipped is None:
       await interaction.followup.send("🔇 القائمة فارغة.", ephemeral=True)
     elif nxt is None:
-      await interaction.followup.send(f"⏭️ تخطيت **{skipped.title}** — لا شيء بعدها.")
+      await interaction.followup.send(
+          f"⏭️ تخطيت **{skipped.title}** — لا شيء بعدها.",
+          allowed_mentions=discord.AllowedMentions.none(),
+      )
     else:
-      await interaction.followup.send(f"⏭️ تخطيت **{skipped.title}** → **{nxt.title}**")
+      await interaction.followup.send(
+          f"⏭️ تخطيت **{skipped.title}** → **{nxt.title}**",
+          allowed_mentions=discord.AllowedMentions.none(),
+      )
 
   @app_commands.command(name="queue", description="عرض قائمة التشغيل الحالية")
   @app_commands.guild_only()
