@@ -61,6 +61,8 @@ def ensure_schema(db: sqlite3.Connection) -> None:
     if "message_id" not in cols:
         db.execute("ALTER TABLE server_messages ADD COLUMN message_id TEXT")
     db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_srv_msg_mid ON server_messages (message_id)")
+    # Same agreement as the runtime schema: identity is the snowflake alone (finding 20c).
+    db.execute("DROP INDEX IF EXISTS idx_srv_msg_unique")
     db.execute("CREATE INDEX IF NOT EXISTS idx_srv_msg_user_time ON server_messages (user_id, created_at)")
     db.execute(
         "CREATE TABLE IF NOT EXISTS fetch_state ("
@@ -93,10 +95,11 @@ def insert_message(db: sqlite3.Connection, guild_id: int, channel_id: int, user_
     were still missing (finding 20b). `rowcount` is the honest number.
     """
     cur = db.execute(
-        "INSERT OR IGNORE INTO server_messages "
+        "INSERT INTO server_messages "
         "(guild_id, channel_id, user_id, display_name, content, created_at, message_id) "
         "SELECT ?,?,?,?,?,?,? WHERE NOT EXISTS ("
-        "SELECT 1 FROM user_preferences WHERE user_id = ? AND opt_out = 1)",
+        "SELECT 1 FROM user_preferences WHERE user_id = ? AND opt_out = 1) "
+        "ON CONFLICT(message_id) DO NOTHING",
         (guild_id, channel_id, user_id, display_name, content, created_at, message_id, user_id),
     )
     return cur.rowcount

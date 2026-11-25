@@ -80,7 +80,10 @@ def ensure_schema(db: sqlite3.Connection) -> None:
     except sqlite3.Error:
         pass  # already present
     db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_srv_msg_mid ON server_messages (message_id)")
-    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_srv_msg_unique ON server_messages (channel_id, user_id, created_at, content)")
+    # The legacy (channel_id, user_id, created_at, content) index collapsed distinct
+    # messages that shared a second and a body (two "👍"s), so identity is the snowflake
+    # alone (finding 20c).
+    db.execute("DROP INDEX IF EXISTS idx_srv_msg_unique")
     # The opt-out predicate below reads user_preferences; without this DDL a fresh
     # database made every insert fail with "no such table" and each message was
     # silently counted as skipped (C-005).
@@ -102,10 +105,11 @@ def insert_message(db: sqlite3.Connection, guild_id: int, channel_id: int, user_
     were still missing (finding 20b). `rowcount` is the honest number.
     """
     cur = db.execute(
-        "INSERT OR IGNORE INTO server_messages "
+        "INSERT INTO server_messages "
         "(guild_id, channel_id, user_id, display_name, content, created_at, message_id) "
         "SELECT ?,?,?,?,?,?,? WHERE NOT EXISTS ("
-        "SELECT 1 FROM user_preferences WHERE user_id = ? AND opt_out = 1)",
+        "SELECT 1 FROM user_preferences WHERE user_id = ? AND opt_out = 1) "
+        "ON CONFLICT(message_id) DO NOTHING",
         (guild_id, channel_id, user_id, display_name, content, created_at, message_id, user_id),
     )
     return cur.rowcount
