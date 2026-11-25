@@ -343,15 +343,18 @@ async def on_message(message: discord.Message):
 
   # 0.05 Durable server log: every human line is kept for learning (bounded to one year).
   # Runs before the music shortcut so a play request is not the one message class missing
-  # from the archive. Fire-and-forget must hold a reference or the task can be GC'd.
+  # from the archive. The bounded queue owns admission: when it is saturated the message is
+  # rejected and logged, and this pipeline keeps going (C-010).
   if message.guild and message.content.strip() and not _opted_out:
+    _guild, _channel, _author = message.guild, message.channel, message.author
     try:
-      _log_t = asyncio.create_task(bot.db.log_server_message(
-          message.guild.id, message.channel.id, message.author.id,
-          getattr(message.author, "display_name", "") or "", message.content,
-          message_id=message.id))
-      bot._bg_tasks.add(_log_t)
-      _log_t.add_done_callback(bot._bg_tasks.discard)
+      bot.work_queue.submit(
+          message.id,
+          lambda: bot.db.log_server_message(
+              _guild.id, _channel.id, _author.id,
+              getattr(_author, "display_name", "") or "", message.content,
+              message_id=message.id),
+      )
     except Exception as _log_err:  # noqa: BLE001 - logging must never break the pipeline
       logger.debug(f"server-log skip: {_log_err}")
 
@@ -376,10 +379,12 @@ async def on_message(message: discord.Message):
         "bot": message.author.bot,
     })
     if len(message.content) > 12 and not _opted_out:
-      _touch_t = asyncio.create_task(memory.touch(
-          message.guild.id, message.author.id, message.author.display_name, message.content))
-      bot._bg_tasks.add(_touch_t)
-      _touch_t.add_done_callback(bot._bg_tasks.discard)
+      _m_guild, _m_author = message.guild, message.author
+      bot.work_queue.submit(
+          f"member:{message.id}",
+          lambda: memory.touch(
+              _m_guild.id, _m_author.id, _m_author.display_name, message.content),
+      )
 
   if message.content.strip().lower() == "!sync" and is_mistress(message.author):
     await bot.sync_all_commands_cleanly()
