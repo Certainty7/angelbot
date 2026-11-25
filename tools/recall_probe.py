@@ -8,6 +8,8 @@ It works on a TEMP COPY of the database: the production file is never opened for
 import asyncio
 import os
 import sqlite3
+
+from tools import dbpath
 import sys
 import tempfile
 from pathlib import Path
@@ -38,9 +40,14 @@ class _Stub:
         self.db = db
 
 
+def source_db_path() -> str:
+    """The database the bot actually writes, not a hardcoded repo-root file."""
+    return dbpath.resolve()
+
+
 async def run() -> int:
     tmp = os.path.join(tempfile.gettempdir(), "angel-recall-probe.db")
-    src_path = "chat_history.db"
+    src_path = source_db_path()
     if os.path.isfile(src_path):
         # A WAL database copied with shutil is a torn snapshot; `.backup` reads a consistent one.
         src = sqlite3.connect(src_path)
