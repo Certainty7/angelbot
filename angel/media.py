@@ -20,6 +20,7 @@ from .config import BASE_DIR, FFMPEG_EXE, Image, _safe_gc_collect, logger, yt_dl
 from .images import _is_safe_public_http_url
 from .net import (
     SharedByteBudget,
+    get_image_proc_semaphore,
     get_shared_http_session,
     is_allowed_hostname,
     read_bounded_stream,
@@ -50,11 +51,14 @@ def _allowed_social_host(url: str) -> bool:
 
 
 _FFMPEG_SEMS: Dict[int, asyncio.Semaphore] = {}
-
 # One media job may hold at most this much image/video data in RAM. The container is capped
 # at 1 GB and also runs Python, Pillow and the Discord client; 20 carousel slides at the
 # 25 MB upload ceiling would be 500 MB for a single job (C-007).
 MAX_JOB_BYTES = 50 * 1024 * 1024
+
+# A decoded RGB buffer costs width*height*3 bytes, so a compressed handful of KiB can
+# claim hundreds of MiB. 12 MP is the largest photo the bot normalizes.
+_MAX_NORMALIZED_PIXELS = 12_000_000
 
 
 def _fit_byte_budget(
@@ -286,6 +290,10 @@ def _normalize_image_bytes_sync(data: bytes) -> Optional[bytes]:
   if Image is not None:
     try:
       with Image.open(io.BytesIO(data)) as im:
+        width, height = im.size
+        if width * height > _MAX_NORMALIZED_PIXELS:
+          # Refuse before `convert("RGB")` allocates width*height*3 bytes.
+          return None
         rgb = im.convert("RGB")
         out = io.BytesIO()
         rgb.save(out, format="JPEG", quality=92)
@@ -297,13 +305,29 @@ def _normalize_image_bytes_sync(data: bytes) -> Optional[bytes]:
   return None
 
 
-async def _normalize_image_bytes(data: Optional[bytes]) -> Optional[bytes]:
+async def _normalize_image_bytes(data: Optional[bytes],
+                                 budget: Optional[SharedByteBudget] = None) -> Optional[bytes]:
   if not data:
     return None
   if data.startswith(b"\xff\xd8\xff") or data.startswith(b"\x89PNG\r\n\x1a\n"):
     return data
   loop = asyncio.get_running_loop()
-  return await loop.run_in_executor(None, _normalize_image_bytes_sync, data)
+  async with get_image_proc_semaphore():
+    out = await loop.run_in_executor(None, _normalize_image_bytes_sync, data)
+  if out is None:
+    return None
+  if budget is not None:
+    # The caller already claimed the compressed bytes; swap that claim for the
+    # normalized payload so the job's ceiling tracks what is actually retained.
+    delta = len(out) - len(data)
+    if delta > 0:
+      granted = budget.claim(delta)
+      if granted < delta:
+        budget.release(granted)
+        return None
+    elif delta < 0:
+      budget.release(-delta)
+  return out
 
 
 async def _ensure_discord_playable_mp4(video_bytes: bytes, max_bytes: int = 10 * 1024 * 1024) -> bytes:
@@ -896,7 +920,7 @@ async def extract_instagram_media_items(
           if not _is_valid_mp4_video_bytes(raw_bytes, m_ctype):
             # If a photo slide was mislabeled as video, check if it is actually a valid image
             if not is_reel_url:
-              norm_img = await _normalize_image_bytes(raw_bytes)
+              norm_img = await _normalize_image_bytes(raw_bytes, budget=job_budget)
               if norm_img:
                 return (idx, norm_img, f"ig_{idx}.jpg")
             job_budget.release(len(raw_bytes))
@@ -904,7 +928,7 @@ async def extract_instagram_media_items(
           clean_vid = await _ensure_discord_playable_mp4(raw_bytes, max_bytes=max_bytes)
           return (idx, clean_vid, f"ig_{idx}.mp4")
         else:
-          norm_img = await _normalize_image_bytes(raw_bytes)
+          norm_img = await _normalize_image_bytes(raw_bytes, budget=job_budget)
           if not norm_img:
             job_budget.release(len(raw_bytes))
             return None
@@ -1088,7 +1112,7 @@ async def extract_tiktok_media_items(
           if istatus != 200 or not raw or len(raw) < 400:
             job_budget.release(len(raw or b""))
             return None
-          norm = await _normalize_image_bytes(raw)
+          norm = await _normalize_image_bytes(raw, budget=job_budget)
           if norm:
             ext = "png" if norm.startswith(b"\x89PNG") else "jpg"
             return (idx, norm, f"tiktok_{idx}.{ext}")
@@ -1418,7 +1442,7 @@ async def _download_photo_slides(img_urls: List[str], max_bytes: int, prefix: st
           if budget is not None and raw:
             budget.release(len(raw))
           return None
-        norm = await _normalize_image_bytes(raw)
+        norm = await _normalize_image_bytes(raw, budget=budget)
         if norm:
           ext = "png" if norm.startswith(b"\x89PNG") else "jpg"
           return (idx, norm, f"{prefix}_{idx}.{ext}")
