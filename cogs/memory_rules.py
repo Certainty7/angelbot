@@ -93,8 +93,21 @@ class MemoryRules(commands.Cog):
             ephemeral=True,
         )
         return
-      await self.bot.db.forget_user_keyword(uid, text)
-      await interaction.response.send_message(f"🗑️ تم حذف أي إشارة إلى **({text})** من ذاكرتكِ.", ephemeral=True)
+      # Defer first: the archive delete can fail, and the receipt has to be sendable after
+      # the database work (an expired interaction could no longer answer).
+      await interaction.response.defer(ephemeral=True, thinking=True)
+      try:
+        await self.bot.db.forget_user_keyword(uid, text)
+      except Exception as exc:
+        logger.warning("memory forget failed for %s: %s: %s", uid, type(exc).__name__, exc)
+        await interaction.followup.send(
+            f"⚠️ لم يُحذف شيء: تعذّر الوصول إلى أرشيف المحادثات، فبقيت الكلمة **({text[:60]})** "
+            "قابلة للاسترجاع. أعد المحاولة لاحقاً.",
+            ephemeral=True,
+        )
+        return
+      await interaction.followup.send(
+          f"🗑️ تم حذف أي إشارة إلى **({text})** من ذاكرتكِ.", ephemeral=True)
     elif action == "style":
       chosen = style or "realistic"
       await self.bot.db.set_user_style(uid, chosen)

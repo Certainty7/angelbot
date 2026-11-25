@@ -692,14 +692,12 @@ class BotDatabase:
           (user_id, f"%{_like_escape(kw_lower)}%"),
       )
       # The archive is what recall quotes back into a later prompt, so a "forgotten" word
-      # that survives there has not really been forgotten. The delete trigger keeps FTS in sync.
-      try:
-        await db.execute(
-            "DELETE FROM server_messages WHERE user_id = ? AND LOWER(content) LIKE ? ESCAPE '\\'",
-            (user_id, f"%{_like_escape(kw_lower)}%"),
-        )
-      except Exception as exc:
-        logger.debug("archive forget skipped: %s", exc)
+      # that survives there has not really been forgotten. The delete trigger keeps FTS in
+      # sync; if it fails, the error must reach the caller so no success receipt is sent.
+      await db.execute(
+          "DELETE FROM server_messages WHERE user_id = ? AND LOWER(content) LIKE ? ESCAPE '\\'",
+          (user_id, f"%{_like_escape(kw_lower)}%"),
+      )
       # Also scrub or clear user_summaries so the forgotten keyword never re-enters prompt context (F-07)
       async with db.execute("SELECT summary FROM user_summaries WHERE user_id = ?", (user_id,)) as cur:
         srow = await cur.fetchone()
