@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 
 from . import evolution, guard, memory, scoring
+from .output_filter import filter_outgoing
 from .cache import BoundedDict
 from .config import ANGEL_TZ, logger
 from .persona import _local_hour_hint
@@ -222,8 +223,9 @@ class AutonomyEngine:
         if not text:
           continue
 
+        body, allowed = build_ambient_payload(uid, text)
         try:
-          await channel.send(f"<@{uid}> {text[:1900]}", allowed_mentions=discord_allowed())
+          await channel.send(body, allowed_mentions=allowed)
         except Exception as exc:
           logger.warning("autonomy send failed in %s: %s", channel_id, exc)
           continue
@@ -263,6 +265,24 @@ class AutonomyEngine:
         await asyncio.sleep(TICK_SECONDS)
     finally:
       self._running = False
+
+
+def build_ambient_payload(uid: int, text: str):
+  """Filter the model text, then mention only the intended member.
+
+  The model writes free text, so it can fabricate `<@id>` and ping a stranger under the bot's
+  identity. `filter_outgoing` neutralises mass, role and user mentions and redacts secrets;
+  the single real mention is the prefix, and AllowedMentions names that one id so even a
+  surviving shape cannot ping anyone else.
+  """
+  import discord
+
+  cleaned = filter_outgoing(text or "", "none")
+  body = f"<@{uid}> {cleaned[:1800]}".strip()
+  allowed = discord.AllowedMentions(
+      everyone=False, roles=False, users=[discord.Object(id=uid)], replied_user=False
+  )
+  return body, allowed
 
 
 def discord_allowed():
