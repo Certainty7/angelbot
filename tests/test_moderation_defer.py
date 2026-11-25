@@ -74,7 +74,12 @@ class _Interaction:
             id=7, owner_id=1, default_role=types.SimpleNamespace(id=2), me=types.SimpleNamespace(id=3)
         )
         self.user = types.SimpleNamespace(id=10, mention="<@10>", guild_permissions=types.SimpleNamespace(administrator=False))
-        self.channel = types.SimpleNamespace(id=11, mention="#general", edit=None)
+        self.channel = types.SimpleNamespace(
+            id=11,
+            mention="#general",
+            edit=None,
+            permissions_for=lambda member: types.SimpleNamespace(manage_channels=True),
+        )
 
     @property
     def deferred(self):
@@ -128,6 +133,9 @@ class _Channel:
         self.interaction = interaction
         self.id = 11
         self.mention = "#general"
+
+    def permissions_for(self, member):
+        return types.SimpleNamespace(manage_channels=True)
 
     def overwrites_for(self, role):
         return types.SimpleNamespace(send_messages=True)
