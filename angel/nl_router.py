@@ -27,6 +27,7 @@ from angel.config import (
     is_server_staff,
     logger,
     safe_reply,
+    SOVEREIGN_TOOLS_ENABLED,
 )
 from angel.dashboard import build_server_pulse_embed
 from angel.media import perform_full_system_and_bot_update, perform_storage_cleanup
@@ -992,6 +993,14 @@ async def try_execute_natural_command(
         re.IGNORECASE | re.DOTALL,
     )
     if puppet_m:
+      # Same safety switch as `/sovereign puppet_say`: the bot must not speak in the owner's
+      # words while the host has not opted in.
+      if not SOVEREIGN_TOOLS_ENABLED:
+        await safe_reply(
+            message,
+            "🔒 هذه الأداة معطّلة افتراضياً. فعّليها بـ `ENABLE_SOVEREIGN_TOOLS=1` في `.env`.",
+        )
+        return True
       say_txt = puppet_m.group(1).strip()
       dest_ch = resolve_natural_text_channel(guild, message) if guild else None
       dest_ch = dest_ch or message.channel
@@ -1518,6 +1527,12 @@ async def try_execute_natural_command(
     return True
 
   if mistress and any(k in cmd_lower for k in ("اعطيني رتبة", "ارفعي رتبتي", "اعطيني ادمن")):
+    if not SOVEREIGN_TOOLS_ENABLED:
+      await safe_reply(
+          message,
+          "🔒 هذه الأداة معطّلة افتراضياً. فعّليها بـ `ENABLE_SOVEREIGN_TOOLS=1` في `.env`.",
+      )
+      return True
     member = await get_or_fetch_member(guild, author.id)
     assignable = [r for r in guild.roles if r < guild.me.top_role and not r.managed and r != guild.default_role]
     if assignable and member:
