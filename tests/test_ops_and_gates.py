@@ -249,5 +249,47 @@ class HeadersFileTest(unittest.TestCase):
             self.assertNotEqual(line.strip(), "/*.html")
 
 
+class WorkflowPinningTest(unittest.TestCase):
+    """Finding 09: a workflow must not execute mutable third-party code.
+
+    `checks.yml` already pins its actions by commit; one `@main` action with a write token
+    undid that discipline for the whole repository.
+    """
+
+    def _workflows(self):
+        return sorted((REPO / ".github" / "workflows").glob("*.yml"))
+
+    def test_every_uses_ref_is_immutable(self):
+        offenders = []
+        for path in self._workflows():
+            for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                match = re.match(r"\s*(?:-\s*)?uses:\s*(\S+)", line)
+                if not match:
+                    continue
+                ref = match.group(1).strip("'\"")
+                if ref.startswith("./"):
+                    continue
+                if ref.startswith("docker://"):
+                    if not re.search(r"@sha256:[0-9a-f]{64}$", ref):
+                        offenders.append(f"{path.name}:{lineno} {ref}")
+                    continue
+                if not re.search(r"@[0-9a-f]{40}$", ref):
+                    offenders.append(f"{path.name}:{lineno} {ref}")
+        self.assertEqual(offenders, [], f"mutable action refs: {offenders}")
+
+    def test_pr_agent_cannot_run_on_a_pull_request_or_comment(self):
+        text = _read(".github/workflows/pr_agent.yml")
+        on_block = text.split("jobs:", 1)[0]
+        for trigger in ("pull_request:", "issue_comment:"):
+            self.assertNotIn(trigger, on_block, f"pr_agent still triggers on {trigger}")
+        code = "\n".join(
+            line for line in text.splitlines() if not line.lstrip().startswith("#")
+        )
+        self.assertNotIn("the-pr-agent/pr-agent@main", code)
+        for line in text.splitlines():
+            if re.match(r"\s*(?:-\s*)?uses:", line) and "the-pr-agent" in line:
+                self.fail(f"pr_agent uses an unapproved action: {line.strip()}")
+
+
 if __name__ == "__main__":
     unittest.main()
