@@ -89,7 +89,9 @@ def late_binding_free():
     """
     offenders = []
     for root, dirs, files in os.walk(ROOT):
-        dirs[:] = [d for d in dirs if d not in {"venv", ".git", "__pycache__", "node_modules", "tests"}]
+        # A dotted directory is never ours: `.venv` holds dependencies whose own
+        # `globals()` calls are not late binding in this codebase.
+        dirs[:] = [d for d in dirs if not d.startswith(".") and d not in {"venv", "node_modules", "tests"}]
         for name in sorted(files):
             if name.endswith(".py"):
                 offenders.extend(_late_binding_offences(os.path.join(root, name)))
@@ -435,7 +437,7 @@ def undefined_globals():
             paths.append(full)
             continue
         for dirpath, dirnames, filenames in os.walk(full):
-            dirnames[:] = [d for d in dirnames if d not in {"__pycache__", "venv", ".git"}]
+            dirnames[:] = [d for d in dirnames if not d.startswith(".") and d != "venv"]
             paths.extend(os.path.join(dirpath, f) for f in sorted(filenames) if f.endswith(".py"))
     offenders = []
     for path in paths:
@@ -489,7 +491,7 @@ def no_shell_subprocess():
             paths.append(full)
             continue
         for dirpath, dirnames, filenames in os.walk(full):
-            dirnames[:] = [d for d in dirnames if d not in {"__pycache__", "venv", ".git"}]
+            dirnames[:] = [d for d in dirnames if not d.startswith(".") and d != "venv"]
             paths.extend(os.path.join(dirpath, f) for f in sorted(filenames) if f.endswith(".py"))
 
     offenders = []

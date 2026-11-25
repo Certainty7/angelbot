@@ -182,6 +182,31 @@ class ToolingGatesTest(unittest.TestCase):
             with self.assertRaises(SyntaxError):
                 gate_checks._late_binding_offences(str(broken))
 
+    def test_late_binding_gate_ignores_the_virtualenv(self):
+        """A dependency's own `globals().get` is not our late binding (gate false positive)."""
+        sys.path.insert(0, str(REPO / "tools"))
+        try:
+            import gate_checks
+        finally:
+            sys.path.pop(0)
+        with tempfile.TemporaryDirectory() as tmp:
+            site = Path(tmp) / ".venv" / "lib" / "python3.12" / "site-packages"
+            site.mkdir(parents=True)
+            (site / "dependency.py").write_text(
+                "def f():\n    return globals().get('x')\n", encoding="utf-8")
+            (Path(tmp) / "clean.py").write_text("x = 1\n", encoding="utf-8")
+            old_root = gate_checks.ROOT
+            gate_checks.ROOT = tmp
+            try:
+                gate_checks.late_binding_free()  # must not raise
+                offender = Path(tmp) / "angel" / "bad.py"
+                offender.parent.mkdir()
+                offender.write_text("def f():\n    return globals().get('x')\n", encoding="utf-8")
+                with self.assertRaises(AssertionError):
+                    gate_checks.late_binding_free()
+            finally:
+                gate_checks.ROOT = old_root
+
     def test_shell_gate_catches_keyword_and_sh_c(self):
         sys.path.insert(0, str(REPO / "tools"))
         try:
