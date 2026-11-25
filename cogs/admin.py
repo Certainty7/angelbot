@@ -59,11 +59,17 @@ class Admin(commands.Cog):
       actor = confirm_message.author
       if not (is_mistress(actor) or getattr(actor.guild_permissions, "ban_members", False)):
         return "🚫 ما نفذت الحظر: صلاحيتك تغيّرت."
-      ok, deny = can_moderate_member(actor, member, interaction.guild)
+      target = interaction.guild.get_member(member.id)
+      if target is None:
+        try:
+          target = await interaction.guild.fetch_member(member.id)
+        except discord.HTTPException:
+          return "⚠️ العضو لم يعد موجوداً."
+      ok, deny = can_moderate_member(actor, target, interaction.guild)
       if not ok:
         return deny
       try:
-        await member.ban(reason=f"By {actor}: {reason}", delete_message_days=delete_days)
+        await target.ban(reason=f"By {actor}: {reason}", delete_message_days=delete_days)
       except discord.HTTPException:
         return "⚠️ فشل الحظر، لم يُنفَّذ شيء."
       await self.bot.send_modlog(interaction.guild, "🔨 حظر عضو", desc, color=discord.Color.red().value)
