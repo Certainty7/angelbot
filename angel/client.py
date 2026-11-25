@@ -18,6 +18,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 
 from angel import archive, autonomy, evolution, guard, memory, persona_notes, sendqueue
+from angel.work_queue import BoundedWorkQueue
 from angel.brain import AIServiceError, AngelBrainService
 from angel.config import (
     KEEP_RECENT_MESSAGES,
@@ -86,6 +87,9 @@ class AngelDiscordBot(commands.Bot):
     self.active_chat_window: Dict[Tuple[int, int], float] = cooldown_map()
     self.social_url_cooldowns: Dict[int, float] = cooldown_map()
     self._bg_tasks: Set[asyncio.Task] = set()
+    # One bounded queue for archive and member-index writes: a blocked database must not turn
+    # every message into a waiting task, and shutdown must drain instead of cancelling (C-010).
+    self.work_queue = BoundedWorkQueue("archive", capacity=256)
     # Interaction state: silence map, recent speakers (for autonomy), audit timers
     self.silent_cache: Dict[int, set] = BoundedDict(5000)
     self.autonomy_guilds: set = set()
@@ -107,6 +111,7 @@ class AngelDiscordBot(commands.Bot):
 
   async def setup_hook(self):
     await self.db.initialize()
+    await self.work_queue.start()
     self.harem_cache.clear()
     self.harem_cache.update(await self.db.get_all_harem_members() or {})
     self.stickies_cache.clear()
@@ -184,6 +189,14 @@ class AngelDiscordBot(commands.Bot):
       if pending:
         await asyncio.gather(*pending, return_exceptions=True)
     finally:
+      # Drain accepted archive work before the database closes; the queue reports what it
+      # could not finish instead of cancelling it silently.
+      try:
+        unsent = await self.work_queue.drain(timeout=10.0)
+        if unsent:
+          logger.warning(f"shutdown: {len(unsent)} archive job(s) not persisted: {unsent}")
+      except Exception as drain_err:  # noqa: BLE001 - shutdown must continue
+        logger.warning(f"archive drain notice: {type(drain_err).__name__}: {drain_err}")
       try:
         await close_shared_http_session()
       finally:
