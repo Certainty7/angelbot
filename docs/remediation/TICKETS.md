@@ -26,12 +26,14 @@ Evidence and fix sketches live there; this file tracks order and status only.
 
 ### 04 · 4. Cancellation can leave a partial database transaction for another request to commit
 
-- **Status:** todo
+- **Status:** done (#18)
+- **Evidence:** `_connect()` rolls back a transaction that a cancellation left open, so the next request cannot commit a partial write; `tests/test_database_integrity.py` drives a cancelled write and asserts every row is unchanged and the following write commits only its own data.
 - **Done when:** cancellation propagates, no transaction remains open, all user data is unchanged, and a later write commits none of the cancelled operation.
 
 ### 05 · 5. `/memory forget` can report success while the text remains searchable
 
-- **Status:** todo
+- **Status:** done (#19)
+- **Evidence:** a failed archive delete returns failure, the success receipt is suppressed and the user is told the text may still be searchable; `tests/test_memory_forget_receipt.py` breaks the delete and asserts no success line plus no searchable token after a reindex.
 - **Done when:** a broken archive delete raises/returns failure, no success receipt is sent, and a later reindex cannot expose the token.
 
 ### 06 · 6. DM and guild conversation memory leak across contexts
