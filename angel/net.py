@@ -15,6 +15,7 @@ the DNS-rebinding window between a pre-flight lookup and the real connection.
 
 import asyncio
 import ipaddress
+import os
 import re
 import socket
 import weakref
@@ -60,6 +61,24 @@ def get_media_download_semaphore() -> asyncio.Semaphore:
 
 _MAX_REDIRECT_HOPS = 4
 _ALLOWED_SCHEMES = frozenset({"http", "https"})
+
+# Finding 15: an HLS manifest is a second request the URL validator never sees — FFmpeg reads
+# the playlist and then fetches whatever segment and key URLs it names, including loopback.
+# Progressive media is always allowed; a manifest needs an explicitly trusted host.
+_HLS_SUFFIXES = (".m3u8", ".m3u")
+HLS_ALLOWED_HOSTS = frozenset(
+    host.strip().lower().rstrip(".")
+    for host in (os.getenv("ANGEL_HLS_HOSTS") or "").split(",")
+    if host.strip()
+)
+
+
+def is_hls_manifest_url(url: str) -> bool:
+  """True for a playlist FFmpeg would parse and follow into further requests."""
+  parsed = _safe_parse_url(url)
+  if parsed is None:
+    return False
+  return (parsed.path or "").lower().endswith(_HLS_SUFFIXES)
 _SENSITIVE_REDIRECT_HEADERS = frozenset({"authorization", "cookie", "proxy-authorization"})
 
 _NAT64_NET = ipaddress.IPv6Network("64:ff9b::/96")
@@ -544,6 +563,11 @@ async def validate_extracted_stream_url(
     raise PermissionError(f"Rejected unsafe extracted stream_url: {stream_url!r}")
   if allowed_domains is not None and not is_allowed_hostname(stream_url, allowed_domains):
     raise PermissionError(f"Rejected disallowed stream host: {stream_url!r}")
+  if is_hls_manifest_url(stream_url) and not is_allowed_hostname(stream_url, HLS_ALLOWED_HOSTS):
+    raise PermissionError(
+        "Rejected HLS manifest from an untrusted host: "
+        f"{stream_url!r} (set ANGEL_HLS_HOSTS to trust a source)"
+    )
   parsed = urlparse(stream_url)
   host = (parsed.hostname or "").lower()
   port = parsed.port or (443 if parsed.scheme.lower() == "https" else 80)
