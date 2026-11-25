@@ -7,10 +7,9 @@ WebP files at 18.4 MP each peaked at 281 MiB of allocations.
 
 from __future__ import annotations
 
+import asyncio
 import io
 import threading
-
-import pytest
 
 from angel import media
 from angel.net import SharedByteBudget
@@ -67,8 +66,7 @@ def test_a_12_megapixel_image_is_still_accepted(monkeypatch):
     assert opened[0].converted is True
 
 
-@pytest.mark.asyncio
-async def test_normalization_runs_one_at_a_time(monkeypatch):
+def test_normalization_runs_one_at_a_time(monkeypatch):
     _patch_open(monkeypatch, lambda: _FakeImage((100, 100), delay=0.05))
     state = {"now": 0, "peak": 0}
     lock = threading.Lock()
@@ -88,40 +86,42 @@ async def test_normalization_runs_one_at_a_time(monkeypatch):
     monkeypatch.setattr(_FakeImage, "__enter__", counting_enter)
     monkeypatch.setattr(_FakeImage, "__exit__", counting_exit)
 
-    await media.asyncio.gather(*(media._normalize_image_bytes(WEBP_HEADER) for _ in range(4)))
+    async def _run():
+        return await media.asyncio.gather(
+            *(media._normalize_image_bytes(WEBP_HEADER) for _ in range(4))
+        )
+
+    asyncio.run(_run())
 
     assert state["peak"] == 1, "normalization must hold the image semaphore"
 
 
-@pytest.mark.asyncio
-async def test_budget_swaps_the_compressed_claim_for_the_normalized_size(monkeypatch):
+def test_budget_swaps_the_compressed_claim_for_the_normalized_size(monkeypatch):
     payload = b"x" * 700
     monkeypatch.setattr(media, "_normalize_image_bytes_sync", lambda _data: payload)
     budget = SharedByteBudget(1000)
     budget.claim(len(WEBP_HEADER))  # the download already claimed the compressed bytes
 
-    out = await media._normalize_image_bytes(WEBP_HEADER, budget=budget)
+    out = asyncio.run(media._normalize_image_bytes(WEBP_HEADER, budget=budget))
 
     assert out == payload
     assert budget.remaining == 300  # 1000 - 700, not 1000 - 700 - 400
 
 
-@pytest.mark.asyncio
-async def test_budget_exhaustion_drops_the_image_instead_of_overcommitting(monkeypatch):
+def test_budget_exhaustion_drops_the_image_instead_of_overcommitting(monkeypatch):
     monkeypatch.setattr(media, "_normalize_image_bytes_sync", lambda _data: b"x" * 700)
     budget = SharedByteBudget(400)
     budget.claim(400)
 
-    assert await media._normalize_image_bytes(WEBP_HEADER, budget=budget) is None
+    assert asyncio.run(media._normalize_image_bytes(WEBP_HEADER, budget=budget)) is None
     assert budget.remaining == 0
 
 
-@pytest.mark.asyncio
-async def test_shrinking_normalization_returns_bytes_to_the_budget(monkeypatch):
+def test_shrinking_normalization_returns_bytes_to_the_budget(monkeypatch):
     monkeypatch.setattr(media, "_normalize_image_bytes_sync", lambda _data: b"x" * 100)
     budget = SharedByteBudget(1000)
     budget.claim(len(WEBP_HEADER))
 
-    await media._normalize_image_bytes(WEBP_HEADER, budget=budget)
+    asyncio.run(media._normalize_image_bytes(WEBP_HEADER, budget=budget))
 
     assert budget.remaining == 900
