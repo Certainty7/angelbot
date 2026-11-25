@@ -73,8 +73,9 @@ Evidence and fix sketches live there; this file tracks order and status only.
 
 ### 12 · 12. Killing yt-dlp leaves its child processes alive
 
-- **Status:** todo
+- **Status:** done (#33)
 - **Done when:** parent and child both exit after timeout/cancellation on Windows and Linux CI.
+- **Evidence:** `subprocess_session_kwargs()` + `terminate_process_tree()` in `angel/downloader.py` (`start_new_session` on POSIX, `killpg(SIGKILL)` refusing to signal a shared group, argv `taskkill /T /F` on Windows); both reap paths use it; red proof: `proc.kill()` leaves the grandchild alive (2 tests red), group kill passes all 5 in `tests/test_process_tree.py`.
 
 ### 13 · 13. Slow moderation actions can succeed after the interaction deadline
 
