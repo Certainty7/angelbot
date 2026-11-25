@@ -407,6 +407,7 @@ class BotDatabase:
                 )
             """)
       await db.execute("CREATE INDEX IF NOT EXISTS idx_srv_msg_guild ON server_messages (guild_id, created_at)")
+      await db.execute("CREATE INDEX IF NOT EXISTS idx_srv_msg_created ON server_messages (created_at)")
       await db.execute("CREATE INDEX IF NOT EXISTS idx_srv_msg_user ON server_messages (user_id, created_at)")
       await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_srv_msg_mid ON server_messages (message_id)")
       await db.execute("""
@@ -621,7 +622,7 @@ class BotDatabase:
     - messages: the `MESSAGES_RETAINED_PER_USER` most recent chat lines per member, which
       is already far beyond the 10-line summary window the prompt uses.
     """
-    from datetime import datetime, timezone
+    from datetime import datetime, timedelta, timezone
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     async with db.execute("SELECT value FROM state WHERE key = 'retention_day'") as cur:
@@ -630,6 +631,13 @@ class BotDatabase:
       return
     try:
       await db.execute("DELETE FROM dm_logs WHERE created_at < datetime('now', '-30 days')")
+      # The published promise is one rolling year of the archive. Pruning lives here, once a
+      # day, instead of riding a 1-in-500 insert counter: a bulk backfill could otherwise keep
+      # rows far past the window until the counter happened to fire (finding 20d).
+      await db.execute(
+          "DELETE FROM server_messages WHERE created_at < ?",
+          ((datetime.now(timezone.utc) - timedelta(days=365)).isoformat(timespec="seconds"),),
+      )
       await db.execute(
           f"""
           DELETE FROM messages
@@ -1803,6 +1811,7 @@ class BotDatabase:
             " content TEXT NOT NULL, created_at TEXT NOT NULL, message_id TEXT);"
             "CREATE INDEX IF NOT EXISTS idx_srv_msg_guild ON server_messages (guild_id, created_at);"
             "CREATE INDEX IF NOT EXISTS idx_srv_msg_user ON server_messages (user_id, created_at);"
+      "CREATE INDEX IF NOT EXISTS idx_srv_msg_created ON server_messages (created_at);"
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_srv_msg_mid ON server_messages (message_id);"
             # The insert below carries the opt-out predicate, so the preferences table must
             # exist even when this tool is the first thing to touch the file.
@@ -1824,14 +1833,7 @@ class BotDatabase:
            str(message_id) if message_id else None, user_id),
       )
       await db.commit()
-      self._server_log_writes = getattr(self, "_server_log_writes", 0) + 1
-      if self._server_log_writes % 500 == 0:
-        # A year, not a month: the backfilled history is what the nightly miner learns from.
-        await db.execute(
-            "DELETE FROM server_messages WHERE created_at < ?",
-            ((datetime.now(timezone.utc) - timedelta(days=365)).isoformat(timespec="seconds"),),
-        )
-        await db.commit()
+      # Pruning is the daily retention pass's job (finding 20d); this path only writes.
 
   async def get_facts_by_keys(self, user_id: int, keys: List[str], limit: int = 12) -> List[Dict[str, Any]]:
     """Exact fact_key recall: a question about "شغلك" must find the stored `job` fact."""
