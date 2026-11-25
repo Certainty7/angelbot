@@ -1077,6 +1077,24 @@ async def extract_instagram_direct_mp4(clean_ig_url: str) -> Tuple[Optional[byte
   return media_bytes, cap
 
 
+def cap_retained_photos(items: Dict[int, Tuple[bytes, str]], cap: int, budget: SharedByteBudget) -> Dict[int, Tuple[bytes, str]]:
+  """Keep retained photo payloads under `cap`, releasing every dropped claim.
+
+  The cap has to be applied *after* the re-quote retry as well: retried slides are appended to
+  the set that was already trimmed, so one pass at the start leaves the job over its ceiling
+  with the claims still taken (C-007 follow-up, finding 19a).
+  """
+  total = sum(len(b) for b, _ in items.values())
+  for idx in sorted(items):
+    if total <= cap:
+      break
+    payload = items[idx][0]
+    total -= len(payload)
+    budget.release(len(payload))
+    items.pop(idx)
+  return items
+
+
 async def extract_tiktok_media_items(
     resolved_url: str, max_bytes: int = 10 * 1024 * 1024
 ) -> Tuple[List[Tuple[bytes, str]], Optional[str], Optional[str]]:
@@ -1148,6 +1166,7 @@ async def extract_tiktok_media_items(
         for r in await asyncio.gather(*(_retry_slide(p, i, u) for p, (i, u) in enumerate(missing)), return_exceptions=True):
           if isinstance(r, tuple) and len(r) == 3:
             got[r[0]] = (r[1], r[2])
+    got = cap_retained_photos(got, 25 * 1024 * 1024, job_budget)
     seen_h: Set[str] = set()
     out_files: List[Tuple[bytes, str]] = []
     for idx in sorted(got):
