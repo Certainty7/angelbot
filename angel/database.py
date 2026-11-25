@@ -139,18 +139,20 @@ class BotDatabase:
       await db.execute("""
                 CREATE TABLE IF NOT EXISTS messages (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    channel_id INTEGER NOT NULL DEFAULT 0,
                     user_id INTEGER NOT NULL,
                     role TEXT NOT NULL,
                     content TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-      await db.execute("CREATE INDEX IF NOT EXISTS idx_user_messages ON messages (user_id, id ASC)")
       await db.execute("""
                 CREATE TABLE IF NOT EXISTS user_summaries (
-                    user_id INTEGER PRIMARY KEY,
+                    channel_id INTEGER NOT NULL DEFAULT 0,
+                    user_id INTEGER NOT NULL,
                     summary TEXT NOT NULL,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (channel_id, user_id)
                 )
             """)
       await db.execute("""
@@ -580,6 +582,37 @@ class BotDatabase:
       await db.execute("DROP TABLE IF EXISTS server_messages_fts")
       self._fts_rebuild_needed = True
       await db.execute("PRAGMA user_version = 3")
+      version = 3
+    if version < 4:
+      # Rolling memory used to be per member, so a DM line could be quoted into a guild
+      # prompt. Legacy rows carry no channel and cannot be attributed, so they are discarded
+      # rather than guessed at (audit finding 06).
+      async with db.execute("PRAGMA table_info(user_summaries)") as cur:
+        summary_cols = {row[1] for row in await cur.fetchall()}
+      if "channel_id" not in summary_cols:
+        await db.execute("ALTER TABLE user_summaries RENAME TO user_summaries_legacy")
+        await db.execute("""
+                    CREATE TABLE user_summaries (
+                        channel_id INTEGER NOT NULL DEFAULT 0,
+                        user_id INTEGER NOT NULL,
+                        summary TEXT NOT NULL,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY (channel_id, user_id)
+                    )
+                """)
+        await db.execute("DROP TABLE user_summaries_legacy")
+      async with db.execute("PRAGMA table_info(messages)") as cur:
+        message_cols = {row[1] for row in await cur.fetchall()}
+      if "channel_id" not in message_cols:
+        await db.execute(
+            "ALTER TABLE messages ADD COLUMN channel_id INTEGER NOT NULL DEFAULT 0"
+        )
+      await db.execute("DELETE FROM messages")
+      await db.execute("DROP INDEX IF EXISTS idx_user_messages")
+      await db.execute(
+          "CREATE INDEX IF NOT EXISTS idx_channel_user_messages ON messages (channel_id, user_id, id ASC)"
+      )
+      await db.execute("PRAGMA user_version = 4")
 
   async def _apply_retention(self, db) -> None:
     """Documented caps, applied at most once per UTC day instead of on every boot.
@@ -602,7 +635,7 @@ class BotDatabase:
           DELETE FROM messages
           WHERE id NOT IN (
               SELECT id FROM (
-                  SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) AS rn
+                  SELECT id, ROW_NUMBER() OVER (PARTITION BY channel_id, user_id ORDER BY id DESC) AS rn
                   FROM messages
               ) WHERE rn <= {self.MESSAGES_RETAINED_PER_USER}
           )
@@ -698,23 +731,30 @@ class BotDatabase:
           "DELETE FROM server_messages WHERE user_id = ? AND LOWER(content) LIKE ? ESCAPE '\\'",
           (user_id, f"%{_like_escape(kw_lower)}%"),
       )
-      # Also scrub or clear user_summaries so the forgotten keyword never re-enters prompt context (F-07)
-      async with db.execute("SELECT summary FROM user_summaries WHERE user_id = ?", (user_id,)) as cur:
-        srow = await cur.fetchone()
-        if srow and srow[0]:
-          old_sum = srow[0]
-          if kw_lower in old_sum.lower():
-            kept_parts = [
-                p.strip() for p in re.split(r"[.\n،!؟]+", old_sum)
-                if p.strip() and kw_lower not in p.lower()
-            ]
-            if kept_parts:
-              await db.execute(
-                  "UPDATE user_summaries SET summary = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?",
-                  ("، ".join(kept_parts) + ".", user_id),
-              )
-            else:
-              await db.execute("DELETE FROM user_summaries WHERE user_id = ?", (user_id,))
+      # Also scrub or clear user_summaries so the forgotten keyword never re-enters prompt
+      # context (F-07). Forgetting is a privacy erase, so it covers every conversation.
+      async with db.execute(
+          "SELECT channel_id, summary FROM user_summaries WHERE user_id = ?", (user_id,)
+      ) as cur:
+        rows = await cur.fetchall()
+      for channel_id, old_sum in rows:
+        if not old_sum or kw_lower not in old_sum.lower():
+          continue
+        kept_parts = [
+            p.strip() for p in re.split(r"[.\n،!؟]+", old_sum)
+            if p.strip() and kw_lower not in p.lower()
+        ]
+        if kept_parts:
+          await db.execute(
+              "UPDATE user_summaries SET summary = ?, updated_at = CURRENT_TIMESTAMP "
+              "WHERE channel_id = ? AND user_id = ?",
+              ("، ".join(kept_parts) + ".", channel_id, user_id),
+          )
+        else:
+          await db.execute(
+              "DELETE FROM user_summaries WHERE channel_id = ? AND user_id = ?",
+              (channel_id, user_id),
+          )
       # Facts and the dossier are what actually reach the prompt; a keyword that survives
       # there keeps being recalled after the user asked to forget it.
       await db.execute(
@@ -992,45 +1032,59 @@ class BotDatabase:
         return {r["user_id"]: dict(r) for r in rows}
 
   # --- AI Memory ---
-  async def check_and_expire_old_session(self, user_id: int, timeout_hours: int) -> bool:
+  async def check_and_expire_old_session(self, channel_id: int, user_id: int, timeout_hours: int) -> bool:
     async with self._connect() as db:
-      async with db.execute("SELECT MAX(created_at) FROM messages WHERE user_id = ?", (user_id,)) as cursor:
+      async with db.execute(
+          "SELECT MAX(created_at) FROM messages WHERE channel_id = ? AND user_id = ?",
+          (channel_id, user_id),
+      ) as cursor:
         row = await cursor.fetchone()
         if not row or not row[0]:
           return False
         last_time = datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
         if datetime.now(timezone.utc) - last_time > timedelta(hours=timeout_hours):
-          await db.execute("DELETE FROM messages WHERE user_id = ?", (user_id,))
-          await db.execute("DELETE FROM user_summaries WHERE user_id = ?", (user_id,))
+          await db.execute(
+              "DELETE FROM messages WHERE channel_id = ? AND user_id = ?", (channel_id, user_id)
+          )
+          await db.execute(
+              "DELETE FROM user_summaries WHERE channel_id = ? AND user_id = ?",
+              (channel_id, user_id),
+          )
           await db.commit()
           return True
     return False
 
-  async def add_exchange(self, user_id: int, user_msg: str, model_reply: str):
+  async def add_exchange(self, channel_id: int, user_id: int, user_msg: str, model_reply: str):
     async with self._connect() as db:
       # opt_out is evaluated in the statement: `/data delete` racing an in-flight reply used
       # to re-insert the member it had just erased (P-004).
       for role, text in (("user", user_msg), ("model", model_reply)):
         await db.execute(
-            "INSERT INTO messages (user_id, role, content) "
-            "SELECT ?, ?, ? WHERE NOT EXISTS ("
+            "INSERT INTO messages (channel_id, user_id, role, content) "
+            "SELECT ?, ?, ?, ? WHERE NOT EXISTS ("
             "SELECT 1 FROM user_preferences WHERE user_id = ? AND opt_out = 1)",
-            (user_id, role, text, user_id),
+            (channel_id, user_id, role, text, user_id),
         )
       await db.commit()
 
-  async def get_context_data(self, user_id: int) -> Tuple[Optional[str], List[Dict[str, str]]]:
+  async def get_context_data(self, channel_id: int, user_id: int) -> Tuple[Optional[str], List[Dict[str, str]]]:
     async with self._connect() as db:
       db.row_factory = aiosqlite.Row
-      async with db.execute("SELECT summary FROM user_summaries WHERE user_id = ?", (user_id,)) as cur_sum:
+      async with db.execute(
+          "SELECT summary FROM user_summaries WHERE channel_id = ? AND user_id = ?",
+          (channel_id, user_id),
+      ) as cur_sum:
         sum_row = await cur_sum.fetchone()
         summary = sum_row["summary"] if sum_row else None
-      async with db.execute("SELECT id, role, content FROM messages WHERE user_id = ? ORDER BY id ASC", (user_id,)) as cur_msg:
+      async with db.execute(
+          "SELECT id, role, content FROM messages WHERE channel_id = ? AND user_id = ? ORDER BY id ASC",
+          (channel_id, user_id),
+      ) as cur_msg:
         rows = await cur_msg.fetchall()
         messages = [{"id": r["id"], "role": r["role"], "content": r["content"]} for r in rows]
       return summary, messages
 
-  async def apply_summary_and_prune(self, user_id: int, new_summary: str, max_id_to_delete: int):
+  async def apply_summary_and_prune(self, channel_id: int, user_id: int, new_summary: str, max_id_to_delete: int):
     """Store a background summary. The opt-out guard covers the race where `/data delete`
     ran while `_background_summarize_user` was awaiting the model: the summary must not
     re-create rows for a member who just erased their data."""
@@ -1042,25 +1096,32 @@ class BotDatabase:
           return
       await db.execute(
           """
-                INSERT INTO user_summaries (user_id, summary, updated_at)
-                VALUES (?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT(user_id) DO UPDATE SET summary = excluded.summary, updated_at = CURRENT_TIMESTAMP
+                INSERT INTO user_summaries (channel_id, user_id, summary, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(channel_id, user_id) DO UPDATE SET summary = excluded.summary, updated_at = CURRENT_TIMESTAMP
                 """,
-          (user_id, new_summary),
+          (channel_id, user_id, new_summary),
       )
-      await db.execute("DELETE FROM messages WHERE user_id = ? AND id <= ?", (user_id, max_id_to_delete))
+      await db.execute(
+          "DELETE FROM messages WHERE channel_id = ? AND user_id = ? AND id <= ?",
+          (channel_id, user_id, max_id_to_delete),
+      )
       await db.commit()
 
-  async def clear_user_memory(self, user_id: int):
-    """Erase what Angel remembers about a user, not just the rolling chat window.
+  async def clear_user_memory(self, channel_id: int, user_id: int):
+    """Erase what Angel remembers about one conversation, not the whole member.
 
     The old version kept `user_profile` and `user_dossier`, so "forget me" was false: the
     facts kept being re-injected into every later prompt. Explicitly pinned preferences stay
-    (the user asked to remember those on purpose).
+    (the user asked to remember those on purpose) and so do other conversations.
     """
     async with self._connect() as db:
-      await db.execute("DELETE FROM messages WHERE user_id = ?", (user_id,))
-      await db.execute("DELETE FROM user_summaries WHERE user_id = ?", (user_id,))
+      await db.execute(
+          "DELETE FROM messages WHERE channel_id = ? AND user_id = ?", (channel_id, user_id)
+      )
+      await db.execute(
+          "DELETE FROM user_summaries WHERE channel_id = ? AND user_id = ?", (channel_id, user_id)
+      )
       await db.execute("DELETE FROM user_profile WHERE user_id = ?", (user_id,))
       await db.execute("DELETE FROM user_dossier WHERE user_id = ?", (user_id,))
       await db.commit()
@@ -2114,7 +2175,7 @@ class BotDatabase:
           DELETE FROM messages
           WHERE id NOT IN (
               SELECT id FROM (
-                  SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) AS rn
+                  SELECT id, ROW_NUMBER() OVER (PARTITION BY channel_id, user_id ORDER BY id DESC) AS rn
                   FROM messages
               ) WHERE rn <= {self.MESSAGES_RETAINED_PER_USER}
           )
