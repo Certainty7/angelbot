@@ -25,13 +25,18 @@ MAX_BYTES = 1_048_576
 
 
 def _blobs() -> list[tuple[str, bytes]]:
+    """Every distinct blob reachable from any ref, keyed by object id.
+
+    Keying by path would scan only one version of each file — the newest blob git happens to
+    list first — and a token that a later commit deleted would never be seen.
+    """
     out = subprocess.run(
         ["git", "rev-list", "--objects", "--all"], capture_output=True, text=True, check=True
     ).stdout
-    seen: dict[str, bytes] = {}
+    blobs: dict[str, tuple[str, bytes]] = {}
     for line in out.splitlines():
         sha, _, path = line.partition(" ")
-        if not path or path in ALLOW or path in seen:
+        if not path or path in ALLOW or sha in blobs:
             continue
         size = subprocess.run(
             ["git", "cat-file", "-s", sha], capture_output=True, text=True, check=True
@@ -39,8 +44,8 @@ def _blobs() -> list[tuple[str, bytes]]:
         if int(size) > MAX_BYTES:
             continue
         data = subprocess.run(["git", "cat-file", "-p", sha], capture_output=True, check=True).stdout
-        seen[path] = data
-    return list(seen.items())
+        blobs[sha] = (path, data)
+    return list(blobs.values())
 
 
 def scan(files: list[tuple[str, bytes]]) -> list[str]:
