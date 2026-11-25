@@ -6,6 +6,15 @@
   ],
   "releases": [
     {
+      "version": "1.1.0",
+      "date": "2026-11-25",
+      "summary": {
+        "en": "Release notes land in Task 6.",
+        "ar": "Release notes land in Task 6."
+      },
+      "sections": []
+    },
+    {
       "version": "1.0.5",
       "date": "2026-11-20",
       "summary": {

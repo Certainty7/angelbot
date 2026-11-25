@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0 — 2026-11-25
+
+Release notes land in Task 6.
+
 ## 1.0.5 — 2026-11-20
 
 Recovery and security-hardening pass against an independent 35-finding audit, plus everything

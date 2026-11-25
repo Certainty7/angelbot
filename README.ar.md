@@ -6,7 +6,7 @@
 
 [**الموقع**](https://angel.aetherisnode.cloud/) · [English](README.md)
 
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![discord.py](https://img.shields.io/badge/discord.py-2.7.1-5865F2?logo=discord&logoColor=white)](https://discordpy.readthedocs.io/) [![SQLite](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/fts5.html) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Release](https://img.shields.io/badge/release-v1.0.4-D4AF37)](https://github.com/Certainty7/angelbot/releases/tag/v1.0.4)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![discord.py](https://img.shields.io/badge/discord.py-2.7.1-5865F2?logo=discord&logoColor=white)](https://discordpy.readthedocs.io/) [![SQLite](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/fts5.html) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Release](https://img.shields.io/badge/release-v1.1.0-D4AF37)](https://github.com/Certainty7/angelbot/releases/tag/v1.1.0)
 
 [نظرة عامة](#نظرة-عامة) · [المزايا](#المزايا) · [البنية](#البنية) · [البدء السريع](#البدء-السريع) · [الإعدادات](#الإعدادات) · [الأوامر](#الأوامر) · [النشر](#النشر) · [الاختبار](#الاختبار) · [الأمان](#الأمان) · [المساهمة](#المساهمة)
 
@@ -114,8 +114,8 @@ python tools/selftest.py
 يجب أن ينتهي تشغيل بوابة الفحص بـ `50/50 checks passed`. تستورد البوابة كل وحدة، وتبني قاعدة بيانات
 مؤقتة، وتفحص المخطط ومشغّلات FTS، وتمتحن مسارات الذاكرة والأرشيف، وتحسب الأوامر المسجلة، وتشغّل حالات
 فلتر المخرجات. وهي لا تتصل بديسكورد ولا بمزوّد نماذج. أما مسار الاختبار الكامل فهو: `pytest -q`
-(56 اختبارًا و322 subtest)، و`tools/selftest.py` (50/50)، وفحوص الأمان والاستدعاء، واختبارات الموقع
-(67 اختبار Playwright).
+والحزمة الكاملة على كل دفع (شارة `Checks`)، و`tools/selftest.py` (50/50)، وفحوص الأمان والاستدعاء،
+واختبارات الموقع. ويُسجَّل العدد عند كل إصدار في `CHANGELOG`.
 
 ### التشغيل
 
@@ -334,7 +334,7 @@ journalctl -u angelbot -n 30 --no-pager
 
 ## الحالة
 
-يعمل أنجل في الإنتاج على خادم واحد. الإصدار الحالي **v1.0.4** (2026-11-19)؛ والمستودع عام ومفتوح
+يعمل أنجل في الإنتاج على خادم واحد. الإصدار الحالي **v1.1.0** (2026-11-25)؛ والمستودع عام ومفتوح
 المصدر، والبلاغات وطلبات السحب مرحّب بها وتُراجَع على قدر الاستطاعة.
 
 ## المساهمة

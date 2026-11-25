@@ -6,7 +6,7 @@
 
 [**Website**](https://angel.aetherisnode.cloud/en/) · [العربية](README.ar.md)
 
-[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![discord.py](https://img.shields.io/badge/discord.py-2.7.1-5865F2?logo=discord&logoColor=white)](https://discordpy.readthedocs.io/) [![SQLite](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/fts5.html) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Release](https://img.shields.io/badge/release-v1.0.4-D4AF37)](https://github.com/Certainty7/angelbot/releases/tag/v1.0.4)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![discord.py](https://img.shields.io/badge/discord.py-2.7.1-5865F2?logo=discord&logoColor=white)](https://discordpy.readthedocs.io/) [![SQLite](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/fts5.html) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) [![Release](https://img.shields.io/badge/release-v1.1.0-D4AF37)](https://github.com/Certainty7/angelbot/releases/tag/v1.1.0)
 
 [Overview](#overview) · [Features](#features) · [Architecture](#architecture) · [Quick start](#quick-start) · [Configuration](#configuration) · [Commands](#commands) · [Deployment](#deployment) · [Testing](#testing) · [Security](#security) · [Contributing](#contributing)
 
@@ -130,8 +130,9 @@ python tools/selftest.py
 The gate should end with `50/50 checks passed`. It imports every module, builds a temporary
 database, checks the schema and the FTS triggers, exercises the memory and archive paths, counts
 the registered commands and runs the output-filter cases. It does not contact Discord or a model
-provider. The full test story is: `pytest -q` (182 tests plus 322 subtests), `tools/selftest.py`
-(50/50), the security and recall probes, and the website suite (67 Playwright tests).
+provider. The full test story is: the suite on every push (see the `Checks` badge), `tools/selftest.py`
+(50/50), the security and recall probes, and the website suite. Release notes record the count at the
+ tag.
 
 ### Run
 
@@ -382,7 +383,7 @@ The authoritative list, with severity and the test that protects each fix, is
 
 ## Status
 
-Angel runs in production on a single server. The current release is **v1.0.4** (2026-11-19); the
+Angel runs in production on a single server. The current release is **v1.1.0** (2026-11-25); the
 repository is public and open source, and issues and pull requests are welcome and reviewed on a
 best-effort basis.
 
