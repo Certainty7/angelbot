@@ -374,47 +374,62 @@ def _read_file_sync(path: str) -> bytes:
 def _decode_snapsave_eval(h: str, u: int, n: str, t: int, e: int) -> str:
   """
   Pure-Python decoder for SnapSave's obfuscated `eval(function(h,u,n,t,e,r){...})` response.
+
+  Every field is attacker-controlled, so the decoder has a contract: it raises
+  `ValueError` instead of doing unbounded work. `h` and `n` are capped at 64 KiB,
+  the alphabet must be unique, `e` must index it, and one `str.translate` pass
+  replaces the per-character `str.replace` loop that made the cost quadratic.
   """
+  MAX_FIELD = 64 * 1024
+  MAX_OUTPUT = 2 * 1024 * 1024
+  MAX_OFFSET = 1_000_000
   alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/"
 
-  def _base_convert(d_str: str, from_base: int, to_base: int) -> str:
-    h_chars = alphabet[:from_base]
-    i_chars = alphabet[:to_base]
-    val = 0
-    for idx, ch in enumerate(reversed(d_str)):
-      pos = h_chars.find(ch)
-      if pos != -1:
-        val += pos * (from_base ** idx)
-    if val == 0:
-      return "0"
-    out = []
-    while val > 0:
-      out.append(i_chars[val % to_base])
-      val //= to_base
-    return "".join(reversed(out))
+  if not isinstance(h, str) or not isinstance(n, str):
+    raise ValueError("snapsave payload fields must be strings")
+  if len(h) > MAX_FIELD or len(n) > MAX_FIELD:
+    raise ValueError("snapsave payload exceeds the 64 KiB field cap")
+  if len(n) < 2 or len(n) > 128:
+    raise ValueError("snapsave alphabet has an unsupported length")
+  if len(set(n)) != len(n):
+    raise ValueError("snapsave alphabet characters must be unique")
+  if not (0 <= u <= MAX_OFFSET):
+    raise ValueError("snapsave offset out of range")
+  if not (0 <= t <= 0x10FFFF):
+    raise ValueError("snapsave code offset out of range")
+  if not (2 <= e < len(n)):
+    raise ValueError("snapsave base must index the alphabet")
 
-  res = []
-  i = 0
-  h_len = len(h)
-  n_len = len(n)
+  table = {ord(ch): str(idx) for idx, ch in enumerate(n)}
   sep_char = n[e]
-  while i < h_len:
-    s_buf = []
-    while i < h_len and h[i] != sep_char:
-      s_buf.append(h[i])
-      i += 1
-    i += 1
-    s_str = "".join(s_buf)
-    if not s_str:
+
+  res: List[str] = []
+  total = 0
+  for token in h.split(sep_char):
+    if not token:
       continue
-    for j in range(n_len):
-      s_str = s_str.replace(n[j], str(j))
-    try:
-      code_val = int(_base_convert(s_str, e, 10)) - t
-      if 0 <= code_val <= 0x10FFFF:
-        res.append(chr(code_val))
-    except Exception:
+    digits = token.translate(table)
+    # base-`e` digits, most significant first; the value only grows as we scan, so a
+    # token that is already past every valid code point can stop early.
+    val = 0
+    for ch in digits:
+      pos = alphabet.find(ch)
+      if pos == -1 or pos >= e:
+        val = -1
+        break
+      val = val * e + pos
+      if val - u > 0x10FFFF:
+        val = -1
+        break
+    if val < 0:
       continue
+    code_val = val - u
+    if 0 <= code_val <= 0x10FFFF:
+      res.append(chr(code_val))
+      total += 1
+      if total > MAX_OUTPUT:
+        raise ValueError("snapsave decoded output exceeds the 2 MiB cap")
+
   raw_latin1 = "".join(res)
   try:
     decoded_utf8 = raw_latin1.encode("latin-1").decode("utf-8")
@@ -469,13 +484,17 @@ async def _fetch_snapsave_instagram_slides(
             body_txt,
         )
         if eval_m:
-          decoded_html = _decode_snapsave_eval(
-              eval_m.group(1),
-              int(eval_m.group(2)),
-              eval_m.group(3),
-              int(eval_m.group(4)),
-              int(eval_m.group(5)),
-          )
+          try:
+            decoded_html = _decode_snapsave_eval(
+                eval_m.group(1),
+                int(eval_m.group(2)),
+                eval_m.group(3),
+                int(eval_m.group(4)),
+                int(eval_m.group(5)),
+            )
+          except ValueError:
+            # Malformed or oversized payload: fail closed instead of parsing the envelope.
+            return []
         elif body_txt.lstrip().startswith("{"):
           try:
             j_obj = json_mod.loads(body_txt)
