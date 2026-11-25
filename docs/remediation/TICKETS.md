@@ -48,8 +48,9 @@ Evidence and fix sketches live there; this file tracks order and status only.
 
 ### 08 · 8. Natural-language owner tools bypass `ENABLE_SOVEREIGN_TOOLS`
 
-- **Status:** todo
+- **Status:** done (#25)
 - **Done when:** both NL branches refuse while the flag is false and still work for the owner when it is true.
+- **Evidence:** self-role and puppet-say check the flag before acting; outbound DMs left ungated as a separate policy gap; `tests/test_sovereign_tools_nl.py` (4 tests).
 
 ### 09 · 9. PR-Agent runs mutable third-party code with write credentials
 
