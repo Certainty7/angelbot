@@ -11,7 +11,7 @@ import sqlite3
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 MAIN_CHANNEL = int(os.getenv("MAIN_CHANNEL_ID", "0"))
 MAIN_LIMIT = int(os.getenv("BACKFILL_MAIN_LIMIT", "10000"))
@@ -104,6 +104,11 @@ def insert_message(db: sqlite3.Connection, guild_id: int, channel_id: int, user_
     snowflake or an opted-out member as saved work: a capped run stopped early while real rows
     were still missing (finding 20b). `rowcount` is the honest number.
     """
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=365)).isoformat(timespec="seconds")
+    if str(created_at) < cutoff:
+        # Nothing older than the retention window enters the archive, so a direct backfill
+        # cannot outlive the promise the runtime makes (finding 20d).
+        return 0
     cur = db.execute(
         "INSERT INTO server_messages "
         "(guild_id, channel_id, user_id, display_name, content, created_at, message_id) "
