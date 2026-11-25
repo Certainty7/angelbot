@@ -36,8 +36,9 @@ Evidence and fix sketches live there; this file tracks order and status only.
 
 ### 06 · 6. DM and guild conversation memory leak across contexts
 
-- **Status:** todo
+- **Status:** done (#21)
 - **Done when:** guild-A and DM sentinels are absent from guild-B prompts, and `/memory view`, `/memory clear` and `/memory forget` have documented current-context behavior.
+- **Evidence:** v4 migration keys `messages`/`user_summaries` by `(channel_id, user_id)`, retention follows the conversation, `/memory forget` stays user-wide; `tests/test_memory_channel_scope.py` (6 tests).
 
 ### 07 · 7. Natural-language snipe bypasses the staff-only slash permission
 
