@@ -13,6 +13,8 @@ plain YouTube media pages.
 import asyncio
 import json
 import os
+import signal
+import subprocess
 import sys
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
@@ -102,6 +104,56 @@ async def _read_bounded_pipe(stream, max_bytes: int, *, fail_on_overflow: bool) 
   return bytes(buf)
 
 
+def subprocess_session_kwargs() -> Dict[str, Any]:
+  """Give the extractor its own session/process group on POSIX.
+
+  A group signal only reaches helpers spawned by yt-dlp if the extractor leads its own
+  group: in the bot's group `killpg` would take the bot down too.
+  """
+  return {"start_new_session": True} if os.name == "posix" else {}
+
+
+def _windows_taskkill_argv(pid: int) -> List[str]:
+  """argv-based tree kill: no shell, no ctypes, no command-string assembly."""
+  return ["taskkill", "/PID", str(pid), "/T", "/F"]
+
+
+def terminate_process_tree(proc: asyncio.subprocess.Process) -> None:
+  """Signal the extractor *and* its descendants; callers reap with `proc.wait()`.
+
+  Synchronous by design: the timeout/cancellation path may already be running inside a
+  cancelled task, where any `await` would raise before the kill is delivered.
+  """
+  if proc.returncode is not None:
+    return
+  if os.name == "posix":
+    try:
+      group = os.getpgid(proc.pid)
+    except ProcessLookupError:
+      group = None
+    if group is not None and group != os.getpgid(0):
+      try:
+        os.killpg(group, signal.SIGKILL)
+        return
+      except (ProcessLookupError, PermissionError):
+        pass
+  else:
+    try:
+      # Short and bounded: ~20 ms, and it must land even under cancellation.
+      subprocess.run(
+          _windows_taskkill_argv(proc.pid),
+          capture_output=True,
+          check=False,
+          timeout=10,
+      )
+    except (OSError, subprocess.TimeoutExpired):
+      pass
+  try:
+    proc.kill()
+  except ProcessLookupError:
+    pass
+
+
 async def read_bounded_subprocess_stdout(
     proc: asyncio.subprocess.Process,
     max_bytes: int = MAX_YTDLP_STDOUT_BYTES,
@@ -136,10 +188,7 @@ async def read_bounded_subprocess_stdout(
   finally:
     # One reap path for timeout, cancellation and overflow.
     if proc.returncode is None:
-      try:
-        proc.kill()
-      except ProcessLookupError:
-        pass
+      terminate_process_tree(proc)
       # Do not await inside a cancelled task: hand the reap to the loop.
       try:
         asyncio.get_running_loop().create_task(proc.wait())
@@ -163,6 +212,7 @@ async def run_ytdlp_json(
         *argv,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        **subprocess_session_kwargs(),
     )
     try:
       out = await read_bounded_subprocess_stdout(proc, timeout=timeout)
@@ -170,10 +220,7 @@ async def run_ytdlp_json(
       return None
     finally:
       if proc.returncode is None:
-        try:
-          proc.kill()
-        except ProcessLookupError:
-          pass
+        terminate_process_tree(proc)
         try:
           asyncio.get_running_loop().create_task(proc.wait())
         except RuntimeError:
@@ -198,5 +245,7 @@ __all__ = [
     "_is_safe_cookie_target",
     "build_ytdlp_json_argv",
     "read_bounded_subprocess_stdout",
+    "subprocess_session_kwargs",
+    "terminate_process_tree",
     "run_ytdlp_json",
 ]
