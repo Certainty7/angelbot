@@ -42,8 +42,9 @@ Evidence and fix sketches live there; this file tracks order and status only.
 
 ### 07 · 7. Natural-language snipe bypasses the staff-only slash permission
 
-- **Status:** todo
+- **Status:** done (#23)
 - **Done when:** an unprivileged member receives no cache content and a staff member with effective `manage_messages` still receives it.
+- **Evidence:** one `has_effective_perm` helper backs both the slash decorator and the two NL branches; `tests/test_snipe_authorization.py` (6 tests).
 
 ### 08 · 8. Natural-language owner tools bypass `ENABLE_SOVEREIGN_TOOLS`
 
