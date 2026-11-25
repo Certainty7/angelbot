@@ -17,9 +17,11 @@ import re
 import subprocess
 from pathlib import Path
 
+from tools import dbpath
+
 REPO = Path(__file__).resolve().parent.parent
 LOG = REPO / "tools" / "metrics.log"
-DB = REPO / "chat_history.db"
+DB = Path(dbpath.resolve())
 
 AI_REPLY = re.compile(r"ai-reply ms=([0-9.]+) model=(\S+) usd=([0-9.]+) cmd=(\S+) user=(\S+)")
 AI_GUARD = re.compile(r"ai-guard reason=([\w-]+)")

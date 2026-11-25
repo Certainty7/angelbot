@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import ast
 import sqlite3
+
+from tools import dbpath
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -102,7 +104,7 @@ def scan_imports() -> dict[str, list[str]]:
 
 
 def scan_tables() -> list[tuple[str, int]]:
-    db = REPO / "chat_history.db"
+    db = Path(dbpath.resolve())
     if not db.exists():
         return []
     con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
