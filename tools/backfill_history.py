@@ -93,6 +93,24 @@ def ensure_schema(db: sqlite3.Connection) -> None:
     db.commit()
 
 
+def insert_message(db: sqlite3.Connection, guild_id: int, channel_id: int, user_id: int,
+                   display_name: str, content: str, created_at: str, message_id: str) -> int:
+    """Insert one archived message and return how many rows the statement actually wrote.
+
+    `INSERT OR IGNORE` reports nothing to the caller, so the old counter treated a duplicate
+    snowflake or an opted-out member as saved work: a capped run stopped early while real rows
+    were still missing (finding 20b). `rowcount` is the honest number.
+    """
+    cur = db.execute(
+        "INSERT OR IGNORE INTO server_messages "
+        "(guild_id, channel_id, user_id, display_name, content, created_at, message_id) "
+        "SELECT ?,?,?,?,?,?,? WHERE NOT EXISTS ("
+        "SELECT 1 FROM user_preferences WHERE user_id = ? AND opt_out = 1)",
+        (guild_id, channel_id, user_id, display_name, content, created_at, message_id, user_id),
+    )
+    return cur.rowcount
+
+
 def main() -> None:
     tok = token()
     db = sqlite3.connect(database_path())
@@ -122,20 +140,18 @@ def main() -> None:
                     continue
                 created = datetime.fromisoformat(m["timestamp"].replace("Z", "+00:00")).astimezone(timezone.utc)
                 try:
-                    # message_id makes a backfilled line and the live archive one row, not two.
-                    # The opt-out predicate means a member who ran /data delete is never
-                    # re-imported by a later run (C-005).
-                    db.execute(
-                        "INSERT OR IGNORE INTO server_messages "
-                        "(guild_id, channel_id, user_id, display_name, content, created_at, message_id) "
-                        "SELECT ?,?,?,?,?,?,? WHERE NOT EXISTS ("
-                        "SELECT 1 FROM user_preferences WHERE user_id = ? AND opt_out = 1)",
-                        (int(guild["id"]), int(ch["id"]), int(author["id"]),
-                         (author.get("global_name") or author.get("username") or "")[:80],
-                         m["content"].strip()[:1500], created.isoformat(timespec="seconds"),
-                         str(m.get("id") or "") or None, int(author["id"])),
+                    # message_id makes a backfilled line and the live archive one row, not two;
+                    # the opt-out predicate keeps /data delete final (C-005).
+                    written = insert_message(
+                        db, int(guild["id"]), int(ch["id"]), int(author["id"]),
+                        (author.get("global_name") or author.get("username") or "")[:80],
+                        m["content"].strip()[:1500], created.isoformat(timespec="seconds"),
+                        str(m.get("id") or "") or None,
                     )
-                    saved += 1
+                    if written:
+                        saved += 1
+                    else:
+                        skipped += 1
                 except sqlite3.Error:
                     skipped += 1
             db.commit()
