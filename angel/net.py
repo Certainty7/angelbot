@@ -494,8 +494,15 @@ async def safe_fetch_response(    url: str,
     headers: Optional[dict] = None,
     session=None,
     budget: Optional[SharedByteBudget] = None,
+    timeout=None,
 ) -> Tuple[str, int, str, Optional[bytes]]:
-  """GET with manual redirects; returns (final_url, status, content_type, body)."""
+  """GET with manual redirects; returns (final_url, status, content_type, body).
+
+  `timeout` is an aiohttp timeout applied to each hop. Every untrusted URL — anything
+  that arrived inside a third-party response — must go through here: aiohttp resolves
+  IP literals itself and follows redirects, so a direct `session.get` can reach
+  loopback or metadata addresses.
+  """
   sess = await _safe_session_or_shared(session)
   current_url = url
   req_headers = dict(headers) if headers else None
@@ -505,7 +512,9 @@ async def safe_fetch_response(    url: str,
       raise PermissionError(f"Blocked invalid/unsafe URL: {current_url!r}")
     if allowed_domains is not None and not is_allowed_hostname(current_url, allowed_domains):
       raise PermissionError(f"Blocked disallowed host: {current_url!r}")
-    async with sess.get(current_url, headers=req_headers, allow_redirects=False) as resp:
+    async with sess.get(
+        current_url, headers=req_headers, allow_redirects=False, timeout=timeout
+    ) as resp:
       if resp.status in {301, 302, 303, 307, 308}:
         loc = resp.headers.get("Location")
         if not loc:

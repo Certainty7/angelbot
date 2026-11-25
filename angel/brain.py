@@ -16,7 +16,7 @@ from . import cost
 from .config import (ARABIC_GIF_KEYWORDS, GEMINI_API_KEYS, GIF_ACTION_ENDPOINT, GIF_USER_AGENT, IMAGE_GEN_MODELS,
                      SUPPORTED_GIF_ACTIONS, YURI_ANIME_WHITELIST, _safe_gc_collect, is_mistress,
                      is_romantic_gif, logger)
-from .net import get_shared_http_session, read_bounded_stream
+from .net import get_shared_http_session, read_bounded_stream, safe_fetch_response
 from .persona import (PROBE_PATTERNS, build_angel_system_prompt, normalize_arabic_text,
                       sanitize_untrusted_context)
 from .quota import QuotaGuard
@@ -339,7 +339,7 @@ class AngelBrainService:
     t0 = time.monotonic()
     try:
       session = await get_shared_http_session()
-      async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+      async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=10), allow_redirects=False) as resp:
           ms = int((time.monotonic() - t0) * 1000)
           if resp.status == 200:
             data = await resp.json()
@@ -584,7 +584,10 @@ class AngelBrainService:
     """GET JSON with the descriptive UA these APIs require (a bare bot UA gets 403)."""
     session = await get_shared_http_session()
     async with session.get(
-        url, headers={"User-Agent": GIF_USER_AGENT}, timeout=aiohttp.ClientTimeout(total=timeout)
+        url,
+        headers={"User-Agent": GIF_USER_AGENT},
+        timeout=aiohttp.ClientTimeout(total=timeout),
+        allow_redirects=False,
     ) as resp:
       if resp.status != 200:
         return None
@@ -693,14 +696,16 @@ class AngelBrainService:
     dl_timeout = aiohttp.ClientTimeout(total=3.5)
     for gif_url in chosen_pool[:3]:
       try:
-        async with session.get(
-            gif_url, headers={"User-Agent": GIF_USER_AGENT}, timeout=dl_timeout
-        ) as resp:
-          if resp.status == 200:
-            gif_bytes = await read_bounded_stream(resp, max_bytes=3 * 1024 * 1024, min_bytes=500)
-            if gif_bytes:
-              self._recent_gif_urls.append(gif_url)
-              return gif_bytes, gif_url
+        _final, status, _ctype, gif_bytes = await safe_fetch_response(
+            gif_url,
+            headers={"User-Agent": GIF_USER_AGENT},
+            max_bytes=3 * 1024 * 1024,
+            session=session,
+            timeout=dl_timeout,
+        )
+        if status == 200 and gif_bytes and len(gif_bytes) >= 500:
+          self._recent_gif_urls.append(gif_url)
+          return gif_bytes, gif_url
       except Exception:
         continue
 
