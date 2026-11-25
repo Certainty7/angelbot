@@ -169,6 +169,7 @@ class _Bot:
     def __init__(self, db):
         self.db = db
         self.mods = []
+        self.pending_confirm = {}
 
     async def send_modlog(self, guild, title, desc, color=None):
         self.mods.append((title, desc))
@@ -178,6 +179,7 @@ def _cog(log, interaction, actor_fail=False, guild_fail=False):
     db = _DB(log, interaction)
     bot = _Bot(db)
     cog = Admin(bot)
+    interaction.client = bot
     return cog, bot
 
 
@@ -239,9 +241,16 @@ class DeferOrderTest(unittest.TestCase):
             "unlock_cmd": "set_permissions",
             "slowmode_cmd": "edit",
         }
+        # Finding 14 gates the irreversible surfaces: they acknowledge, queue, and mutate only
+        # after the typed confirmation — so the first interaction must show no mutation at all.
+        gated = {"ban_cmd", "clear_warnings_cmd"}
         for name, mutation in cases.items():
             with self.subTest(command=name):
                 log, interaction, actor, bot = self._run_command(name)
+                if name in gated:
+                    self.assertNotIn(mutation, log, f"{name}: mutated before confirmation")
+                    self.assertEqual(log, ["followup"], f"{name}: order was {log}")
+                    continue
                 self.assertEqual(log[:2], [mutation, "followup"], f"{name}: order was {log}")
                 witness = actor.deferred_when_called
                 if witness is None:

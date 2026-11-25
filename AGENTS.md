@@ -36,9 +36,9 @@ Discord gateway, Gemini and the media CDNs.
    social-media fixer → XP → natural-language router → AI reply.
 2. **Slash command:** discord.py `app_commands` → `has_perm_or_mistress` → body-level hierarchy
    check → database → reply.
-3. **Model-proposed action:** the model emits `[EXEC: ...]` → `execute_ai_inferred_action` checks
-   permission and intent → destructive actions are queued in `pending_confirm` → the same human
-   types `تأكيد` in the same channel within 60 seconds → permissions are re-checked → execute.
+3. **Destructive action, any surface:** slash, natural language, custom trigger or a model
+   `[EXEC: ...]` all queue through `angel/confirmations.py` → the same human types `تأكيد` in the
+   same channel within 60 seconds → permissions and the target are re-resolved → execute.
 4. **Startup:** `angel.config` (env, ffmpeg, timezone) → `bot.py` builds the client → cogs register
    at import → `setup_hook` initialises the database, runs migrations, loads caches, starts tasks.
 
@@ -50,7 +50,10 @@ Discord gateway, Gemini and the media CDNs.
   `/data delete`.
 - **Every registered command has a policy in `angel/authz.py`.** `tests/test_command_policy.py`
   fails otherwise.
-- **Destructive actions require the confirmation gate**, bound to guild + author + channel.
+- **Irreversible actions require the confirmation gate**, bound to guild + author + channel:
+  message purge, ban, warning erasure. Reversible commands (`/timeout`, `/kick`, `/lock`,
+  `/slowmode`, roles, `/warn`, `/unban`) are an approved exception documented in
+  `docs/remediation/14-confirmation-scope.md`; do not add or remove a surface without updating it.
 - **Untrusted text is data.** Sanitise before a prompt, and pass `untrusted=True` to `safe_reply`
   when replying with model output, transcripts, titles or archive quotes.
 - **No shell.** Subprocesses are argv arrays; children are killed and reaped on timeout and
