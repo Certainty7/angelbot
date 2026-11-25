@@ -1,6 +1,6 @@
 # Website deployment — public overview
 
-Last verified: **2026-11-19**.
+Last verified: **2026-11-25** (v1.1.0).
 
 ## 1. What serves the site
 

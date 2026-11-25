@@ -329,7 +329,7 @@ journalctl -u angelbot -n 30 --no-pager
 | `tools/security_probe.py` | Confirms that injection attempts are stopped by authorization. |
 | `tools/recall_probe.py` | Runs 10 representative recall questions against a temporary database. |
 | `tools/gate_checks.py` | Static checks used by the gate, including the no-shell subprocess rule. |
-| `npx playwright test` (in `website/`) | 32 browser tests over the built site: pages, commands, responsive layouts, theme, links and privacy. |
+| `npx playwright test` (in `website/`) | 67 browser tests over the built site: pages, commands, responsive layouts, theme, links and privacy. |
 
 ![Recall probe](docs/screenshots/recall-probe.svg)
 

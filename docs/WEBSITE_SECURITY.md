@@ -1,6 +1,6 @@
 # Website security — what is enforced on the live host
 
-Last verified: **2026-11-19** against `https://angel.aetherisnode.cloud`.
+Last verified: **2026-11-25** against `https://angel.aetherisnode.cloud` (v1.1.0).
 
 The Angel site is served by a **managed static host** from this repository's `master`
 branch. The previous GitHub Pages origin applied no custom response headers; that limitation

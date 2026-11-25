@@ -13,8 +13,8 @@ things a reader cannot verify by eye — the version and the secrets.
 - A secret scanner walks the working tree and every blob in the history for Discord, Google, OpenAI,
   AWS, GitHub and private-key shapes. It runs as its own CI step, and a base64 run of letters is not
   reported as a key.
-- Hard-coded test counts are gone from both READMEs: they claimed 182/322 tests and 67 browser tests
-  where the truth was 367 and 32, and they rot on every commit. This file records the count at the tag.
+- Hard-coded test counts are gone from both READMEs: they claimed 182 tests and 322 subtests where
+  the truth is 367 and 339, and they rot on every commit. This file records the count at the tag.
 
 ### Figures that cannot go stale
 
@@ -38,7 +38,7 @@ things a reader cannot verify by eye — the version and the secrets.
 
 - `pytest -q`: 367 tests and 339 subtests, one warning (a third-party `discord.py` deprecation).
 - `tools/selftest.py`: 50/50 checks.
-- `npx playwright test`: 32 browser tests over the built site.
+- `npx playwright test`: 67 browser tests over the built site.
 
 ## 1.0.5 — 2026-11-20
 

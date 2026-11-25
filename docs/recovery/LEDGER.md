@@ -1,4 +1,7 @@
-# RECOVERY LEDGER — AngelBot v1.0.4 stabilization
+# RECOVERY LEDGER — stabilisation through v1.0.5 (closed 2026-11-25)
+
+> Historical record. The v1.0.4 audit findings listed here were closed across v1.0.5 and v1.1.0;
+> the live remediation index is `docs/remediation/TICKETS.md`.
 
 Every historical finding from `angelbot_v1_0_4_independent_audit_2026-11-20.md` is listed with its
 current status. Status vocabulary:
