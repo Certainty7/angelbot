@@ -96,7 +96,17 @@ class BotDatabase:
     async with self._lock:
       db = await self._ensure_conn()
       db.row_factory = aiosqlite.Row
-      yield db
+      try:
+        yield db
+      except BaseException:
+        # Every query shares this one connection, so a write interrupted mid-transaction
+        # would be committed by whatever runs next. Roll it back before releasing the lock.
+        if db.in_transaction:
+          try:
+            await db.rollback()
+          except Exception as exc:
+            logger.warning("database rollback failed: %s: %s", type(exc).__name__, exc)
+        raise
 
   async def close(self):
     async with self._lock:
