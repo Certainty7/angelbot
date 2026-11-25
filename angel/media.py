@@ -1090,6 +1090,22 @@ async def extract_instagram_direct_mp4(clean_ig_url: str) -> Tuple[Optional[byte
   return media_bytes, cap
 
 
+def is_gif_payload(data: Optional[bytes], content_type: Optional[str]) -> bool:
+  """True only when the payload really is a GIF file.
+
+  A 200 with a body over 500 bytes is not proof of a GIF: CDNs answer with HTML error pages and
+  SVGs behind image endpoints. The magic bytes are the primary check; a declared content type
+  that contradicts them rejects the payload even when the header says GIF (finding 19d).
+  """
+  if not data or len(data) < 16:
+    return False
+  if not data.startswith((b"GIF87a", b"GIF89a")):
+    return False
+  if content_type and "gif" not in content_type.lower():
+    return False
+  return True
+
+
 def cap_retained_photos(items: Dict[int, Tuple[bytes, str]], cap: int, budget: SharedByteBudget) -> Dict[int, Tuple[bytes, str]]:
   """Keep retained photo payloads under `cap`, releasing every dropped claim.
 
