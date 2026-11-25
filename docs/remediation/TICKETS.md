@@ -113,16 +113,19 @@ Evidence and fix sketches live there; this file tracks order and status only.
 
 ### 18 · 18. Secondary send paths bypass mention and secret filtering
 
-- **Status:** todo
+- **Status:** done (#44)
+- **Evidence:** `angel/autonomy.py` (`build_ambient_payload`), `cogs/music.py` (`AllowedMentions.none()`), `tests/test_secondary_send_filtering.py` (6 tests)
 - **Done when:** fake foreign mentions and secret shapes are absent, while the intended autonomy target can still be mentioned.
 
 ### 19 · 19. Media budgets and type checks are not enforced end to end
 
-- **Status:** todo
+- **Status:** done (#45, #46, #47, #48)
+- **Evidence:** `angel/media.py` (`cap_retained_photos`, `is_gif_payload`, `_mp4_transcode_argv`), `angel/brain.py` (`load_gif_candidate`), `angel/net.py` (single-buffer read), `tests/test_tiktok_retry_cap.py`, `tests/test_bounded_read_peak.py`, `tests/test_ffmpeg_output_cap.py`, `tests/test_gif_type_guard.py`
 - **Done when:** each focused test enforces its numeric/type boundary and the full suite still passes.
 
 ### 20 · 20. Operator tools and backfills can produce false or incomplete evidence
 
-- **Status:** todo
+- **Status:** done (#49, #50, #51, #52)
+- **Evidence:** `tools/metrics.py`, `tools/audit_map.py`, `tools/recall_probe.py` (`tools.dbpath.resolve`), `tools/backfill_history.py` + `tools/fetch_all_history.py` (`insert_message` returns `rowcount`, legacy index dropped, 365-day window), `angel/database.py` (retention prune + `idx_srv_msg_created`), `tests/test_tool_db_path.py`, `tests/test_backfill_count.py`, `tests/test_archive_identity.py`, `tests/test_archive_retention.py`
 - **Done when:** configured-path tools read the sentinel DB, backfills reach the requested number of real rows, distinct snowflakes survive, and 366-day-old rows are pruned.
 
