@@ -85,7 +85,8 @@ Evidence and fix sketches live there; this file tracks order and status only.
 
 ### 14 · 14. Destructive action surfaces do not share the required confirmation gate
 
-- **Status:** todo
+- **Status:** done (#37)
+- **Evidence:** `angel/confirmations.py` is the single primitive (`queue_confirmation`, `queue_slash_confirmation`, `take_confirmation`). Gated surfaces: `/purge`, `/ban`, `/clear_warnings`, the direct natural-language commands, custom triggers whose action is `ban`/`purge`, and the model `[EXEC]` path. Reversible commands (`/timeout`, `/kick`, `/lock`, `/slowmode`, roles, `/warn`, `/unban`) are the approved exception recorded in `docs/remediation/14-confirmation-scope.md`. Red proof: pre-fix `cogs/admin.py` + `angel/nl_router.py` fail 12 of the 13 new tests; the gate passes 13 + 2 subtests. Suite 304 passed + 336 subtests; selftest 50/50.
 - **Done when:** each destructive surface either queues the same typed, expiring, channel-bound confirmation or has an approved documented exception.
 
 ## Should-fix
