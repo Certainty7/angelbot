@@ -671,7 +671,7 @@ async def on_message(message: discord.Message):
 
     async with message.channel.typing():
       try:
-        reply, gif_bytes, gif_url, img_bytes, _ = await bot.handle_conversation(
+        turn = await bot.handle_conversation(
             message.author,
             prompt,
             media_items=media_items,
@@ -679,35 +679,12 @@ async def on_message(message: discord.Message):
             message_Context=message,
         )
 
-        if message.guild:
+        # Generation is separate from recording: `deliver_turn` sends every chunk and file
+        # first and commits memory, ambient state and the owner forward only when Discord
+        # accepted all of it (C-011).
+        delivered = await bot.deliver_turn(message, turn)
+        if delivered and message.guild:
           bot.active_chat_window[(message.channel.id, message.author.id)] = time.monotonic()
-          _angel_uid = bot.user.id if bot.user else 0
-          bot.recent_channel_msgs[message.channel.id].append((_angel_uid, f"Angel: {reply[:120]}"))
-
-        if is_dm and SOVEREIGN_TOOLS_ENABLED and not _opted_out:
-          await bot.forward_dm_to_mistress(message, reply)
-
-        # Media-only replies (an image or GIF with no prose) are delivered; a reply
-        # with neither text nor media stays silent instead of a fake fallback line.
-        delivery = plan_reply_delivery(reply, gif_bytes, gif_url, img_bytes)
-        if delivery is None:
-          return
-        first_chunk, rest_chunks, has_files, use_gif_url = delivery
-        files_to_send = []
-        if has_files:
-          if img_bytes:
-            files_to_send.append(discord.File(io.BytesIO(img_bytes), filename="angel_art.png"))
-          if gif_bytes:
-            files_to_send.append(discord.File(io.BytesIO(gif_bytes), filename="angel_reaction.gif"))
-
-        gif_embed = None
-        if use_gif_url:
-          gif_embed = discord.Embed(color=0xD4AF37 if (is_mistress(message.author) or harem_t) else 0x2B2D31)
-          gif_embed.set_image(url=gif_url)
-
-        await safe_reply(message, content=first_chunk, embed=gif_embed, files=files_to_send, untrusted=True)
-        for chunk in rest_chunks:
-          await message.channel.send(content=chunk, allowed_mentions=discord.AllowedMentions.none())
 
       except AI_ERRORS as err:
         await safe_reply(message, f"⚠️ {err}")

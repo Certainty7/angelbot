@@ -44,9 +44,10 @@ class AiChat(commands.Cog):
         if downloaded:
           media_items.append(downloaded)
 
-      reply, gif_bytes, gif_url, img_bytes, _ = await self.bot.handle_conversation(
+      turn = await self.bot.handle_conversation(
           interaction.user, message, media_items=media_items, cmd="chat"
       )
+      reply, gif_bytes, gif_url, img_bytes = turn.text, turn.gif_bytes, turn.gif_url, turn.image_bytes
 
       # An image-only or GIF-only reply is valid and must be delivered (the old early
       # return dropped generated media because the prose was empty).
@@ -78,6 +79,9 @@ class AiChat(commands.Cog):
         await interaction.followup.send(
             content=chunk, allowed_mentions=discord.AllowedMentions.none()
         )
+
+      # Only now that every chunk is accepted does the turn reach the database.
+      await self.bot.commit_turn(turn)
     except AI_ERRORS as err:
       logger.warning("chat AI error: %s: %s", type(err).__name__, err)
       await interaction.followup.send("⚠️ تعذر إكمال الطلب الآن.", ephemeral=True)

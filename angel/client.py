@@ -5,11 +5,13 @@ subclass that imports what it needs from the package, so bot.py only constructs 
 cogs.
 """
 import asyncio
+import io
 import os
 import random
 import time
 from collections import Counter, deque
 from .cache import BoundedDefaultDict, BoundedDict, WeakLockMap, channel_buffer, cooldown_map
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -24,10 +26,12 @@ from angel.config import (
     KEEP_RECENT_MESSAGES,
     MISTRESS_INT_ID,
     SESSION_TIMEOUT_HOURS,
+    SOVEREIGN_TOOLS_ENABLED,
     SUMMARIZE_THRESHOLD,
     _safe_gc_collect,
     is_mistress,
     logger,
+    safe_reply,
 )
 from angel.database import BotDatabase
 from angel.images import parse_ai_special_tags
@@ -37,7 +41,32 @@ from angel.nl_router import execute_ai_inferred_action
 from angel.output_filter import filter_outgoing
 from angel.persona import humanize as persona_humanize, humanize_reply, reply_directives, detect_reply_rhythm, trim_emoji
 from angel.quota import QuotaGuard
+from angel.text import plan_reply_delivery
 from angel.ui import GiveawayJoinView, TicketCloseView, TicketPanelView
+
+@dataclass
+class ConversationTurn:
+  """A generated reply plus everything needed to record it *after* Discord accepts it.
+
+  Generation and persistence are separate steps on purpose: the old flow wrote rolling
+  memory inside `handle_conversation`, so an HTTP 500 on the send left the database holding
+  a reply the user never received (audit finding 11).
+  """
+
+  text: str
+  gif_bytes: Optional[bytes] = None
+  gif_url: Optional[str] = None
+  image_bytes: Optional[bytes] = None
+  session_expired: bool = False
+  channel_id: int = 0
+  user_id: int = 0
+  prompt: str = ""
+  exec_cmds: List[str] = field(default_factory=list)
+  opt_out: bool = False
+  is_dm: bool = False
+  message_context: Optional[discord.Message] = None
+  context_len: int = 0
+
 
 class AngelDiscordBot(commands.Bot):
 
@@ -559,27 +588,11 @@ class AngelDiscordBot(commands.Bot):
       clean_reply = humanize_reply(clean_reply)
       clean_reply = trim_emoji(persona_humanize(clean_reply, self.settings), 1)
 
-      action_status = "none"
-      if exec_cmds and message_Context and message_Context.guild:
-        statuses = []
-        for cmd_str in exec_cmds:
-          statuses.append(await execute_ai_inferred_action(self, message_Context, cmd_str))
-        if "queued" in statuses:
-          action_status = "queued"
-        elif "failed" in statuses:
-          action_status = "failed"
-        elif "executed" in statuses:
-          action_status = "executed"
-        elif "blocked" in statuses:
-          action_status = "blocked"
-      # The model's prose is generated before the action gate runs; never let it claim an
-      # execution that was queued, blocked or failed. Also strips cheap unsafe classes.
+      action_status = "pending" if (exec_cmds and message_Context and message_Context.guild) else "none"
+      # The model's prose is generated before the action gate runs, so a claim cannot be
+      # verified yet: `pending` replaces it with a promise instead of a false success. The
+      # actions themselves run in `commit_turn`, after the reply is delivered.
       clean_reply = filter_outgoing(clean_reply, action_status=action_status)
-
-      if not prefs.get("opt_out"):
-        await self.db.add_exchange(channel_id, user.id, prompt or "[صورة]", clean_reply)
-        if message_Context and message_Context.guild:
-          self.angel_last_spoke[message_Context.channel.id] = time.monotonic()
 
       is_female_tier = is_mistress(user) or harem_title is not None
       gif_bytes: Optional[bytes] = None
@@ -596,13 +609,106 @@ class AngelDiscordBot(commands.Bot):
         except Exception as img_err:
           logger.warning(f"Image generation error: {img_err}")
 
-      # Non-blocking background summarization with strong task reference so GC never drops it
-      if len(messages) + 2 >= SUMMARIZE_THRESHOLD:
-        bg_t = asyncio.create_task(self._background_summarize_user(user.id, channel_id))
-        self._bg_tasks.add(bg_t)
-        bg_t.add_done_callback(self._bg_tasks.discard)
+      # Nothing is persisted here: the caller commits the turn only after every chunk and
+      # file is delivered, so a failed send cannot leave memory holding an unseen reply.
+      return ConversationTurn(
+          text=clean_reply,
+          gif_bytes=gif_bytes,
+          gif_url=gif_url,
+          image_bytes=gen_image_bytes,
+          session_expired=session_expired,
+          channel_id=channel_id,
+          user_id=user.id,
+          prompt=prompt or "",
+          exec_cmds=list(exec_cmds or []),
+          opt_out=bool(prefs.get("opt_out")),
+          is_dm=bool(message_Context is not None and message_Context.guild is None),
+          message_context=message_Context,
+          context_len=len(messages),
+      )
 
-      return clean_reply, gif_bytes, gif_url, gen_image_bytes, session_expired
+  async def commit_turn(self, turn: ConversationTurn) -> str:
+    """Record a delivered turn: actions, rolling memory, ambient state, owner forward.
+
+    Called only when the caller knows every chunk and file arrived. Returns the aggregate
+    action status so callers can log what actually happened.
+    """
+    action_status = "none"
+    context = turn.message_context
+    if turn.exec_cmds and context is not None and context.guild is not None:
+      statuses = []
+      for cmd_str in turn.exec_cmds:
+        try:
+          statuses.append(await execute_ai_inferred_action(self, context, cmd_str))
+        except Exception as act_err:  # noqa: BLE001 - a failed action must not lose the turn
+          logger.warning(f"inferred action failed: {type(act_err).__name__}: {act_err}")
+          statuses.append("failed")
+      for candidate in ("queued", "failed", "executed", "blocked"):
+        if candidate in statuses:
+          action_status = candidate
+          break
+
+    if not turn.opt_out:
+      await self.db.add_exchange(turn.channel_id, turn.user_id, turn.prompt or "[صورة]", turn.text)
+
+    if context is not None and context.guild is not None:
+      self.angel_last_spoke[context.channel.id] = time.monotonic()
+      bot_id = self.user.id if self.user else 0
+      buffer = self.recent_channel_msgs.setdefault(context.channel.id, deque(maxlen=40))
+      buffer.append((bot_id, f"Angel: {turn.text[:120]}"))
+
+    if turn.is_dm and SOVEREIGN_TOOLS_ENABLED and not turn.opt_out and context is not None:
+      try:
+        await self.forward_dm_to_mistress(context, turn.text)
+      except Exception as fwd_err:  # noqa: BLE001 - the reply was delivered already
+        logger.warning(f"dm forward failed: {type(fwd_err).__name__}: {fwd_err}")
+
+    if turn.context_len + 2 >= SUMMARIZE_THRESHOLD:
+      bg_t = asyncio.create_task(self._background_summarize_user(turn.user_id, turn.channel_id))
+      self._bg_tasks.add(bg_t)
+      bg_t.add_done_callback(self._bg_tasks.discard)
+
+    return action_status
+
+  async def deliver_turn(self, message: discord.Message, turn: ConversationTurn) -> bool:
+    """Send every chunk and file, then commit. A failure anywhere commits nothing."""
+    delivery = plan_reply_delivery(turn.text, turn.gif_bytes, turn.gif_url, turn.image_bytes)
+    if delivery is None:
+      return False
+    first_chunk, rest_chunks, has_files, use_gif_url = delivery
+
+    files_to_send: List[discord.File] = []
+    if has_files:
+      if turn.image_bytes:
+        files_to_send.append(discord.File(io.BytesIO(turn.image_bytes), filename="angel_art.png"))
+      if turn.gif_bytes:
+        files_to_send.append(discord.File(io.BytesIO(turn.gif_bytes), filename="angel_reaction.gif"))
+
+    gif_embed = None
+    if use_gif_url and turn.gif_url:
+      gif_embed = discord.Embed(color=0x2B2D31)
+      gif_embed.set_image(url=turn.gif_url)
+
+    sent = await safe_reply(
+        message, content=first_chunk, embed=gif_embed, files=files_to_send, untrusted=True
+    )
+    if sent is None:
+      logger.warning("delivery failed: first chunk not accepted; turn not persisted")
+      return False
+    for chunk in rest_chunks:
+      try:
+        await message.channel.send(
+            content=chunk, allowed_mentions=discord.AllowedMentions.none()
+        )
+      except Exception as chunk_err:  # noqa: BLE001 - partial delivery must not be recorded
+        logger.warning(
+            f"delivery failed mid-turn: {type(chunk_err).__name__}: {chunk_err}; "
+            f"turn not persisted"
+        )
+        return False
+
+    await self.commit_turn(turn)
+    return True
 
   async def _background_summarize_user(self, user_id: int, channel_id: int):
     try:
