@@ -32,7 +32,7 @@ class OptOutTest(unittest.TestCase):
         async def _run(db):
             await db.delete_all_user_data(42)
             await db.add_xp(1, 42, 100)
-            await db.add_exchange(42, "hello", "hi")
+            await db.add_exchange(1, 42, "hello", "hi")
             await db.touch_user_index(1, 42, "member", "topic")
             await db.log_ambient(1, 2, 42, "ambient line")
             await db.log_server_message(1, 2, 42, "member", "archived line")
@@ -60,7 +60,7 @@ class DeletionTest(unittest.TestCase):
     def test_every_personal_store_is_erased(self):
         async def _run(db):
             await db.add_xp(1, 42, 500)
-            await db.add_exchange(42, "private line", "reply")
+            await db.add_exchange(1, 42, "private line", "reply")
             await db.touch_user_index(1, 42, "member", "topic")
             await db.log_ambient(1, 2, 42, "ambient line")
             await db.log_server_message(1, 2, 42, "member", "archived line")
@@ -138,7 +138,7 @@ class PostOptOutWriteTest(unittest.TestCase):
             afk = await db.set_afk(1, 42, "busy")
             # The race the review described: the summary started before the deletion
             # and commits after it.
-            await db.apply_summary_and_prune(42, "member loves coffee", 50)
+            await db.apply_summary_and_prune(1, 42, "member loves coffee", 50)
             counts = await db.count_user_data(42)
             return rep, afk, counts
 
@@ -152,7 +152,7 @@ class PostOptOutWriteTest(unittest.TestCase):
         async def _run(db):
             rep = await db.add_rep(1, 7)
             afk = await db.set_afk(1, 7, "busy")
-            await db.apply_summary_and_prune(7, "summary", 0)
+            await db.apply_summary_and_prune(1, 7, "summary", 0)
             counts = await db.count_user_data(7)
             return rep, afk, counts
 

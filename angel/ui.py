@@ -239,7 +239,7 @@ class AngelControlCenterView(discord.ui.View):
   @discord.ui.button(label="🧠 خزنة الذاكرة", style=discord.ButtonStyle.secondary)
   async def memory_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
     await _safe_interaction_defer(interaction, ephemeral=True)
-    summary, _ = await self.bot.db.get_context_data(interaction.user.id)
+    summary, _ = await self.bot.db.get_context_data(interaction.channel_id, interaction.user.id)
     prefs = await self.bot.db.get_user_prefs(interaction.user.id)
     embed = discord.Embed(title="🧠 خزنة الذاكرة (Memory Vault)", color=0x2B2D31)
     embed.add_field(
