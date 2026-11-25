@@ -605,7 +605,7 @@ def _gallery():
             body = media_bytes(slide.get("same_as") or slide["url"], slide["name"])
             is_video = slide["name"].endswith(".mp4")
             routes[slide["url"]] = (body, "video/mp4" if is_video else "image/jpeg", 200)
-            want.append({"name": slide["name"], "digest": hashlib.md5(body).hexdigest()})
+            want.append({"name": slide["name"], "digest": hashlib.md5(body, usedforsecurity=False).hexdigest()})
         # `extra_routes` exist but must NOT reach the output: the duplicate placeholders the
         # resolver has to drop (and then repair) are served here.
         for extra in case.get("extra_routes", []):
@@ -624,7 +624,7 @@ def _gallery():
             files, fallback, _caption = await media.process_social_media_url_multi(case["url"])
         finally:
             media.get_shared_http_session, media.yt_dlp = real_session, real_ytdlp
-        got = [{"name": fname, "digest": hashlib.md5(body).hexdigest()} for body, fname in files]
+        got = [{"name": fname, "digest": hashlib.md5(body, usedforsecurity=False).hexdigest()} for body, fname in files]
         assert got == want, f"{case['case']}: got {got} want {want}"
         assert fallback == case["expect"]["fallback"], f"{case['case']}: fallback {fallback!r}"
         want_log = case["expect"].get("log")

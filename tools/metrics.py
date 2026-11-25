@@ -13,6 +13,7 @@ import datetime as dt
 import json
 import math
 import os
+import tempfile
 import re
 import subprocess
 from pathlib import Path
@@ -178,7 +179,7 @@ def main() -> None:
     lines = journal_24h()
     db_size = DB.stat().st_size if DB.exists() else 0
     stage = REPO / "stage"
-    legacy_stage = Path("/tmp/angelbot_audio")
+    legacy_stage = Path(tempfile.gettempdir()) / "angelbot_audio"
     record = {
         "ts": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "rss_mb": rss_mb(),
