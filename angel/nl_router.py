@@ -14,6 +14,15 @@ from typing import Dict, Optional, Tuple
 import discord
 
 from angel import guard
+from angel.confirmations import (
+    CANCELLED,
+    CONFIRMED,
+    EXPIRED,
+    WRONG_CHANNEL,
+    confirmation_prompt,
+    queue_confirmation,
+    take_confirmation,
+)
 from angel.config import (
     can_assign_role,
     can_create_action_trigger,
@@ -90,6 +99,17 @@ _CANCEL_WORDS = ("الغاء", "إلغاء", "كنسل", "cancel")
 
 class _ActionBlocked(Exception):
   """A hierarchy or resolution check refused the action; nothing was executed."""
+
+
+async def _fresh_target(guild, member_id: int):
+  """Re-resolve the target when the confirmation arrives, so a stale snapshot cannot act."""
+  member = guild.get_member(member_id)
+  if member is not None:
+    return member
+  try:
+    return await guild.fetch_member(member_id)
+  except discord.HTTPException:
+    return None
 
 
 async def resolve_natural_target_member(
@@ -552,9 +572,31 @@ async def try_execute_custom_action_trigger(bot, message: discord.Message) -> bo
       return True
 
     if act == "ban" and target_member:
-      await target_member.ban(reason=f"Trigger ({matched_cfg['phrase']}) by {author}")
-      await safe_reply(message, custom_reply or angel_spontaneous_confirm(author, "ban", f"🔨 تم حظر {target_member.mention}."))
-      await bot.send_modlog(guild, "🔨 حظر عبر اختصار", f"**العضو:** {target_member.mention}\n**بواسطة:** {author.mention}", color=discord.Color.red().value)
+      async def _run_trigger_ban(confirm_message, _tid=target_member.id, _reply=custom_reply, bot=bot):
+        actor = confirm_message.author
+        if not (is_mistress(actor) or getattr(actor.guild_permissions, "ban_members", False)):
+          return "🚫 ما نفذت الحظر: صلاحيتك تغيّرت."
+        target = await _fresh_target(guild, _tid)
+        if target is None:
+          return "⚠️ العضو لم يعد موجوداً."
+        ok_mod, deny_mod = can_moderate_member(actor, target, guild)
+        if not ok_mod:
+          return deny_mod
+        try:
+          await target.ban(reason=f"Trigger ({matched_cfg['phrase']}) by {actor} (confirmed)")
+        except Exception:
+          return "⚠️ لا أستطيع حظر هذا العضو (رتبته أعلى من رتبتي)."
+        await bot.send_modlog(guild, "🔨 حظر عبر اختصار", f"**العضو:** {target.mention}\n**بواسطة:** {actor.mention}", color=discord.Color.red().value)
+        return _reply or angel_spontaneous_confirm(actor, "ban", f"🔨 تم حظر {target.mention}.")
+
+      await safe_reply(message, queue_confirmation(
+          bot,
+          guild_id=guild.id,
+          author_id=author.id,
+          channel_id=message.channel.id,
+          summary=f"حظر {target_member.mention} عبر الاختصار «{matched_cfg['phrase']}»",
+          run=_run_trigger_ban,
+      ))
       return True
 
     if act == "timeout" and target_member:
@@ -580,8 +622,24 @@ async def try_execute_custom_action_trigger(bot, message: discord.Message) -> bo
       return True
 
     if act == "purge":
-      deleted = await message.channel.purge(limit=max(1, min(100, pval)) + 1)
-      await message.channel.send(custom_reply or f"🧹 تم مسح **{max(1, len(deleted)-1)}** رسالة.", delete_after=5)
+      async def _run_trigger_purge(confirm_message, _limit=max(1, min(100, pval)), _reply=custom_reply, bot=bot):
+        actor = confirm_message.author
+        if not (is_mistress(actor) or getattr(actor.guild_permissions, "manage_messages", False)):
+          return "🚫 ما نفذت المسح: صلاحيتك تغيّرت."
+        try:
+          deleted = await confirm_message.channel.purge(limit=_limit + 1)
+        except Exception:
+          return "⚠️ أحتاج لصلاحية `Manage Messages` في هذه القناة."
+        return _reply or f"🧹 تم مسح **{max(1, len(deleted)-1)}** رسالة."
+
+      await safe_reply(message, queue_confirmation(
+          bot,
+          guild_id=guild.id,
+          author_id=author.id,
+          channel_id=message.channel.id,
+          summary=f"مسح {max(1, min(100, pval))} رسالة عبر الاختصار «{matched_cfg['phrase']}»",
+          run=_run_trigger_purge,
+      ))
       return True
 
     if act == "lock":
@@ -665,20 +723,29 @@ async def try_execute_natural_command(
 
   cmd_lower = normalize_arabic_text(cmd_body.lower())
 
-  # 0. A destructive [EXEC] proposed by the model is waiting for this human's confirmation.
+  # 0. A destructive action is waiting for this human's confirmation (finding 14).
   confirm_key = (guild.id, author.id) if guild else None
-  if confirm_key and confirm_key in bot.pending_confirm:
-    pending = bot.pending_confirm[confirm_key]
-    pending_ts = pending.get("ts")
-    if pending_ts is None or time.monotonic() - pending_ts > _CONFIRM_TTL:
-      bot.pending_confirm.pop(confirm_key, None)
-    elif pending.get("channel_id") and pending["channel_id"] != message.channel.id:
-      # A confirmation typed in another channel is not consent for this one (C-013).
-      bot.pending_confirm.pop(confirm_key, None)
+  if confirm_key:
+    verdict, pending = take_confirmation(
+        bot,
+        guild_id=guild.id,
+        author_id=author.id,
+        channel_id=message.channel.id,
+        text=cmd_lower,
+    )
+    if verdict == WRONG_CHANNEL:
       await safe_reply(message, "⚠️ التأكيد لازم يكون في نفس القناة اللي طُلب فيها الإجراء. ألغيته.")
       return True
-    elif cmd_lower in _CONFIRM_WORDS:
-      bot.pending_confirm.pop(confirm_key, None)
+    if verdict == CONFIRMED:
+      run = (pending or {}).get("run")
+      if run is not None:
+        try:
+          outcome_text = await run(message)
+        except Exception as exc:  # noqa: BLE001 - a confirmed action must report, not crash
+          logger.warning("confirmed action failed: %s: %s", type(exc).__name__, exc)
+          outcome_text = "⚠️ تعذر تنفيذ الإجراء المؤكد. راجعي السجل."
+        await safe_reply(message, outcome_text)
+        return True
       # Re-resolve the confirmer's CURRENT membership: the retained requester snapshot
       # keeps its old role list, so a moderator who lost the role inside the window
       # would otherwise still execute (CWE-863). The fresh confirmation message carries
@@ -701,8 +768,10 @@ async def try_execute_natural_command(
       else:
         await safe_reply(message, "⚠️ تعذر تنفيذ الإجراء المؤكد. راجعي السجل.")
       return True
-    elif cmd_lower in _CANCEL_WORDS:
-      bot.pending_confirm.pop(confirm_key, None)
+    if verdict == EXPIRED:
+      await safe_reply(message, "⌛ انتهت مهلة التأكيد، ما نفذت شيئاً. أطلبي الإجراء من جديد.")
+      return True
+    if verdict == CANCELLED:
       await safe_reply(message, "✅ ألغيت الإجراء المعلّق.")
       return True
 
@@ -1631,8 +1700,21 @@ async def try_execute_natural_command(
     if not (mistress or author.guild_permissions.moderate_members):
       await safe_reply(message, "⚡ لا تملك صلاحية مسح الإنذارات.")
       return True
-    cnt = await bot.db.clear_warnings(guild.id, target_member.id)
-    await safe_reply(message, angel_spontaneous_confirm(author, "clear_warnings", f"✅ مسحت **{cnt}** إنذارات من سجل {target_member.mention}."))
+    async def _run_clear(confirm_message, _tid=target_member.id, _mention=target_member.mention, bot=bot):
+      actor = confirm_message.author
+      if not (is_mistress(actor) or getattr(actor.guild_permissions, "moderate_members", False)):
+        return "🚫 ما نفذت المسح: صلاحيتك تغيّرت."
+      cnt = await bot.db.clear_warnings(guild.id, _tid)
+      return angel_spontaneous_confirm(actor, "clear_warnings", f"✅ مسحت **{cnt}** إنذارات من سجل {_mention}.")
+
+    await safe_reply(message, queue_confirmation(
+        bot,
+        guild_id=guild.id,
+        author_id=author.id,
+        channel_id=message.channel.id,
+        summary=f"مسح إنذارات {target_member.mention}",
+        run=_run_clear,
+    ))
     return True
 
   if target_member and any(k in cmd_lower for k in ("كم انذار", "وريني انذارات", "سجل انذارات", "تحذيرات ")):
@@ -1768,12 +1850,31 @@ async def try_execute_natural_command(
     if not ok_mod:
       await safe_reply(message, deny_mod)
       return True
-    try:
-      await strict_mod_target.ban(reason=f"Order by {author}")
-      await safe_reply(message, angel_spontaneous_confirm(author, "ban", f"🔨 حظرت {strict_mod_target.display_name} نهائياً."))
-      await bot.send_modlog(guild, "🔨 حظر عضو", f"**العضو:** {strict_mod_target.mention}\n**بواسطة:** {author.mention}", color=discord.Color.red().value)
-    except Exception:
-      await safe_reply(message, "⚠️ لا أستطيع حظر هذا العضو (رتبته أعلى من رتبتي).")
+    async def _run_ban(confirm_message, _tid=strict_mod_target.id, _name=strict_mod_target.display_name, bot=bot):
+      actor = confirm_message.author
+      if not (is_mistress(actor) or getattr(actor.guild_permissions, "ban_members", False)):
+        return "🚫 ما نفذت الحظر: صلاحيتك تغيّرت."
+      target = await _fresh_target(guild, _tid)
+      if target is None:
+        return "⚠️ العضو لم يعد موجوداً."
+      ok_mod, deny_mod = can_moderate_member(actor, target, guild)
+      if not ok_mod:
+        return deny_mod
+      try:
+        await target.ban(reason=f"Order by {actor} (confirmed)")
+      except Exception:
+        return "⚠️ لا أستطيع حظر هذا العضو (رتبته أعلى من رتبتي)."
+      await bot.send_modlog(guild, "🔨 حظر عضو", f"**العضو:** {target.mention}\n**بواسطة:** {actor.mention}", color=discord.Color.red().value)
+      return angel_spontaneous_confirm(actor, "ban", f"🔨 حظرت {_name} نهائياً.")
+
+    await safe_reply(message, queue_confirmation(
+        bot,
+        guild_id=guild.id,
+        author_id=author.id,
+        channel_id=message.channel.id,
+        summary=f"حظر {strict_mod_target.mention} نهائياً",
+        run=_run_ban,
+    ))
     return True
 
   # 19. Purge / Delete Messages (General, User-specific, or Bot-only)
@@ -1794,16 +1895,27 @@ async def try_execute_natural_command(
       check_fn = lambda m: m.author.id == target_member.id
     else:
       check_fn = lambda m: True
-    try:
-      deleted = await message.channel.purge(limit=amount + 1, check=check_fn)
-      count_del = max(1, len(deleted) - (0 if (target_member or bots_only) else 1))
-      await message.channel.send(
-          angel_spontaneous_confirm(author, "purge", f"🧹 مسحت **{count_del}** رسالة."),
-          delete_after=4,
-      )
-      await bot.send_modlog(guild, "🧹 مسح رسائل", f"**العدد:** `{count_del}` في {message.channel.mention}\n**بواسطة:** {author.mention}")
-    except Exception:
-      await safe_reply(message, "⚠️ أحتاج لصلاحية `Manage Messages` في هذه القناة.")
+    async def _run_purge(confirm_message, _amount=amount, _check=check_fn, _keep=0 if (target_member or bots_only) else 1, bot=bot):
+      actor = confirm_message.author
+      if not (is_mistress(actor) or getattr(actor.guild_permissions, "manage_messages", False)):
+        return "🚫 ما نفذت المسح: صلاحيتك تغيّرت."
+      try:
+        deleted = await confirm_message.channel.purge(limit=_amount + 1, check=_check)
+      except Exception:
+        return "⚠️ أحتاج لصلاحية `Manage Messages` في هذه القناة."
+      count_del = max(1, len(deleted) - _keep)
+      await bot.send_modlog(guild, "🧹 مسح رسائل", f"**العدد:** `{count_del}` في {confirm_message.channel.mention}\n**بواسطة:** {actor.mention}")
+      return angel_spontaneous_confirm(actor, "purge", f"🧹 مسحت **{count_del}** رسالة.")
+
+    scope = " من عضو محدد" if target_member else (" للبوتات" if bots_only else "")
+    await safe_reply(message, queue_confirmation(
+        bot,
+        guild_id=guild.id,
+        author_id=author.id,
+        channel_id=message.channel.id,
+        summary=f"مسح حتى {amount} رسالة{scope}",
+        run=_run_purge,
+    ))
     return True
 
   # 20. Lock / Unlock / Hide / Unhide / Slowmode / Poll / Giveaway / Ticket / Announce

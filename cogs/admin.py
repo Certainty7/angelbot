@@ -9,6 +9,7 @@ from discord import app_commands
 from discord.ext import commands
 
 from angel.config import can_assign_role, can_moderate_member, has_perm_or_mistress, is_mistress
+from angel.confirmations import queue_slash_confirmation
 from angel.interactions import run_moderation_action
 
 
@@ -53,13 +54,28 @@ class Admin(commands.Cog):
       await interaction.response.send_message(why, ephemeral=True)
       return
     desc = f"**العضو:** {member.mention}\n**السبب:** {reason}"
-    embed = discord.Embed(title="🔨 تم حظر العضو", description=desc, color=discord.Color.red().value)
-    await run_moderation_action(
-        interaction,
-        lambda: member.ban(reason=f"By {interaction.user}: {reason}", delete_message_days=delete_days),
-        embed=embed,
-        modlog=lambda: self.bot.send_modlog(interaction.guild, "🔨 حظر عضو", desc, color=discord.Color.red().value),
-    )
+
+    async def _run(confirm_message):
+      actor = confirm_message.author
+      if not (is_mistress(actor) or getattr(actor.guild_permissions, "ban_members", False)):
+        return "🚫 ما نفذت الحظر: صلاحيتك تغيّرت."
+      target = interaction.guild.get_member(member.id)
+      if target is None:
+        try:
+          target = await interaction.guild.fetch_member(member.id)
+        except discord.HTTPException:
+          return "⚠️ العضو لم يعد موجوداً."
+      ok, deny = can_moderate_member(actor, target, interaction.guild)
+      if not ok:
+        return deny
+      try:
+        await target.ban(reason=f"By {actor}: {reason}", delete_message_days=delete_days)
+      except discord.HTTPException:
+        return "⚠️ فشل الحظر، لم يُنفَّذ شيء."
+      await self.bot.send_modlog(interaction.guild, "🔨 حظر عضو", desc, color=discord.Color.red().value)
+      return f"🔨 تم حظر {member.mention}."
+
+    await queue_slash_confirmation(interaction, summary=f"حظر {member.mention} — {reason}", run=_run)
 
 
   @app_commands.command(name="unban", description="فك الحظر عن مستخدم عبر معرفه")
@@ -128,11 +144,18 @@ class Admin(commands.Cog):
       amount: app_commands.Range[int, 1, 100],
       member: Optional[discord.Member] = None,
   ):
-    await interaction.response.defer(ephemeral=True)
     check_fn = (lambda m: m.author.id == member.id) if member else (lambda m: True)
-    deleted = await interaction.channel.purge(limit=amount, check=check_fn)
-    await interaction.followup.send(f"🧹 تم مسح **{len(deleted)}** رسالة.", ephemeral=True)
-    await self.bot.send_modlog(interaction.guild, "🧹 مسح رسائل", f"تم مسح `{len(deleted)}` رسالة في {interaction.channel.mention}.")
+
+    async def _run(confirm_message):
+      actor = confirm_message.author
+      if not (is_mistress(actor) or getattr(actor.guild_permissions, "manage_messages", False)):
+        return "🚫 ما نفذت المسح: صلاحيتك تغيّرت."
+      deleted = await confirm_message.channel.purge(limit=amount, check=check_fn)
+      await self.bot.send_modlog(confirm_message.guild, "🧹 مسح رسائل", f"تم مسح `{len(deleted)}` رسالة في {confirm_message.channel.mention}.")
+      return f"🧹 تم مسح **{len(deleted)}** رسالة."
+
+    target = f" ({member.mention})" if member else ""
+    await queue_slash_confirmation(interaction, summary=f"مسح {amount} رسالة{target}", run=_run)
 
 
   @app_commands.command(name="warn", description="توجيه إنذار لعضو")
@@ -189,12 +212,15 @@ class Admin(commands.Cog):
     if not allowed:
       await interaction.response.send_message(why, ephemeral=True)
       return
-    await run_moderation_action(
-        interaction,
-        lambda: self.bot.db.clear_warnings(interaction.guild.id, member.id),
-        content=lambda count: f"✅ تم مسح **{count}** إنذار لـ {member.mention}.",
-        modlog=lambda: self.bot.send_modlog(interaction.guild, "🧽 مسح إنذارات", f"**العضو:** {member.mention}"),
-    )
+    async def _run(confirm_message):
+      actor = confirm_message.author
+      if not (is_mistress(actor) or getattr(actor.guild_permissions, "moderate_members", False)):
+        return "🚫 ما نفذت المسح: صلاحيتك تغيّرت."
+      count = await self.bot.db.clear_warnings(interaction.guild.id, member.id)
+      await self.bot.send_modlog(interaction.guild, "🧽 مسح إنذارات", f"**العضو:** {member.mention}")
+      return f"✅ تم مسح **{count}** إنذار لـ {member.mention}."
+
+    await queue_slash_confirmation(interaction, summary=f"مسح إنذارات {member.mention}", run=_run)
 
 
   @app_commands.command(name="lock", description="قفل القناة")
