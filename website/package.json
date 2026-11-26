@@ -12,7 +12,7 @@
     "test:e2e": "NODE_PATH=node_modules playwright test"
   },
   "dependencies": {
-    "@astrojs/sitemap": "3.7.5",
+    "@astrojs/sitemap": "3.7.6",
     "astro": "7.4.12"
   },
   "devDependencies": {
